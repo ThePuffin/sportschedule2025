@@ -1,0 +1,54 @@
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateGameDto {
+  @ApiProperty()
+  uniqueId: string;
+
+  @ApiProperty()
+  awayTeamId: string;
+
+  @ApiProperty()
+  awayTeamShort: string;
+
+  @ApiProperty()
+  awayTeam: string;
+
+  @ApiProperty()
+  homeTeamId: string;
+
+  @ApiProperty()
+  homeTeamShort: string;
+
+  @ApiProperty()
+  homeTeam: string;
+
+  @ApiProperty()
+  divisionName: string;
+
+  @ApiProperty()
+  arenaName: string;
+
+  @ApiProperty()
+  gameDate: string;
+
+  @ApiProperty()
+  teamSelectedId: string;
+
+  @ApiProperty()
+  show: string;
+
+  @ApiProperty()
+  selectedTeam: string;
+
+  @ApiProperty()
+  league: string;
+
+  @ApiProperty()
+  venueTimezone: string;
+
+  @ApiProperty()
+  timeStart: string;
+
+  @ApiProperty({ default: new Date() })
+  updateDate: string;
+}
