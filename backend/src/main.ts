@@ -5,6 +5,8 @@ const PORT = parseInt(process.env.PORT, 10) || 3000;
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Enable CORS with default options (allows all origins)
+  app.enableCors();
   app.use(helmet());
   await app.listen(PORT);
 }
