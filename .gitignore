@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# environment variables
+.env
+.env.*
+!.env.example
+
+## IDE rules
+.tmp
+.idea
+.swp
+.vscode
+
+## OS metadata rules
+.DS_Store
+Thumbs.db
+
+# docker
+docker-compose.override.yml
