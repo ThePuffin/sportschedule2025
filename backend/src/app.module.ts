@@ -7,7 +7,7 @@ import { TeamModule } from './teams/teams.module';
 import { GameModule } from './games/games.module';
 
 const databaseUri =
-  process?.env?.DATABASE_URI || 'mongodb://localhost/sportSchedule';
+  process?.env?.DATABASE_URI || 'mongodb://localhost:27017/sportSchedule';
 const dbName = process?.env?.DATABASE_NAME || 'sportSchedule';
 const username = process?.env?.DATABASE_USER || '';
 const password = process?.env?.DATABASE_PASS || '';

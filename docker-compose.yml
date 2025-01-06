@@ -5,6 +5,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.frontend
+    container_name: reactnative-app-container
     ports:
       - '8081:8081'
     volumes:
@@ -15,21 +16,27 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.backend
+    container_name: nestjs-app-container
+    environment:
+      - DATABASE_URI=mongodb://mongodb:27017/sportSchedule
+      - DATABASE_NAME=sportSchedule
+      - DATABASE_USER=
+      - DATABASE_PASS=
     ports:
       - '3000:3000'
     volumes:
       - ./backend:/usr/src/app
     command: ['npm', 'run', 'start:backend']
     depends_on:
-      - db
+      - mongodb
 
-  db:
+  mongodb:
     image: mongo:latest
-    ports:
-      - '27017:27017'
+    container_name: mongo-container
+    # ports:
+    #   - '27017:27017'
     volumes:
       - mongo-data:/data/db
 
 volumes:
   mongo-data:
-

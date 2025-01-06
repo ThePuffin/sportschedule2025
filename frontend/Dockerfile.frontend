@@ -1,0 +1,19 @@
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+
+COPY ./package.json ./
+
+RUN npm install
+
+COPY . .
+
+# Install necessary tools for iOS and Android
+RUN apk add --no-cache bash git openjdk8
+RUN npm install -g @react-native-community/cli @react-native-community/cli-platform-ios @react-native-community/cli-platform-android
+
+# Expose necessary ports
+EXPOSE 8081
+
+# Command to start the React Native application
+CMD ["npx", "react-native", "start", "--terminal", "bash"]
