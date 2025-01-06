@@ -1,19 +1,35 @@
-FROM node:18-alpine
+# Use the official Node.js image.
+FROM node:latest
 
-WORKDIR /usr/src/app
+# Set environment variables for npm global install
+ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
+ENV PATH=/home/node/.npm-global/bin:$PATH
 
-COPY ./package.json ./
+# Install global dependencies
+RUN npm i --unsafe-perm -g npm@latest expo-cli@latest @expo/ngrok@latest
 
-RUN npm install
+# Install additional dependencies
+RUN apt-get update && apt-get install -y qemu-user-static
 
-COPY . .
+# Create and set permissions for the app directory
+RUN mkdir /opt/my-app && chown root:root /opt/my-app
+WORKDIR /opt/my-app
+ENV PATH=/opt/my-app/.bin:$PATH
 
-# Install necessary tools for iOS and Android
-RUN apk add --no-cache bash git openjdk8
-RUN npm install -g @react-native-community/cli @react-native-community/cli-platform-ios @react-native-community/cli-platform-android
+# Switch to root user to install dependencies
+USER root
 
-# Expose necessary ports
+# Copy dependency manifests
+COPY package.json package-lock.json ./
+
+# Install dependencies
+RUN npm ci --unsafe-perm || (cat npm-debug.log && exit 1)
+
+# Copy the rest of the application code
+COPY . /opt/my-app/
+
+# Expose the port the app runs on
 EXPOSE 8081
 
-# Command to start the React Native application
-CMD ["npx", "react-native", "start", "--terminal", "bash"]
+# Start the expo server
+CMD ["npx", "expo", "start", "--tunnel"]
