@@ -10,7 +10,8 @@ services:
       - '8081:8081'
     volumes:
       - ./frontend:/usr/src/app
-    command: ['npx', 'expo', 'start', '--tunnel']
+    # command: ['npx', 'expo', 'start', '--tunnel']
+    command: tail -f /dev/null
 
   backend:
     build:
@@ -26,7 +27,8 @@ services:
       - '3000:3000'
     volumes:
       - ./backend:/usr/src/app
-    command: ['npm', 'run', 'start:backend']
+    command: tail -f /dev/null
+    # command: ['npm', 'run', 'start:backend']
     depends_on:
       - mongodb
 
