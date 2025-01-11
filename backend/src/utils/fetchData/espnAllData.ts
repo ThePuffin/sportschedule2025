@@ -195,6 +195,7 @@ const getEachTeamSchedule = async ({ id, abbrev, value, leagueName }) => {
           league: leagueName,
           venueTimezone,
           timeStart,
+          startTimeUTC: date,
         };
       });
     }

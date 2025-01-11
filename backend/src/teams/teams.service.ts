@@ -49,7 +49,7 @@ export class TeamService {
   }
 
   async findAll(): Promise<Team[]> {
-    const allTeams = await this.teamModel.find().exec();
+    const allTeams = await this.teamModel.find().sort({ label: 1 }).exec();
     if (!allTeams?.length) {
       return this.getTeams();
     }

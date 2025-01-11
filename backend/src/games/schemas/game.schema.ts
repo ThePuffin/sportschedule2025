@@ -53,6 +53,9 @@ export class Game {
   @Prop()
   timeStart: string;
 
+  @Prop()
+  startTimeUTC: string;
+
   @Prop({ default: new Date() })
   updateDate: string;
 }

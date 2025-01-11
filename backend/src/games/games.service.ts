@@ -68,7 +68,10 @@ export class GameService {
   }
 
   async findAll(): Promise<Game[]> {
-    const allGames = await this.gameModel.find().exec();
+    const allGames = await this.gameModel
+      .find()
+      .sort({ startTimeUTC: 1 })
+      .exec();
     if (Object.keys(allGames).length === 0 || allGames?.length === 0) {
       return this.getAllGames();
     }
@@ -83,7 +86,10 @@ export class GameService {
 
   async findByTeam(teamSelectedId: string) {
     const filter = { teamSelectedId: teamSelectedId };
-    const game = await this.gameModel.find(filter).exec();
+    const game = await this.gameModel
+      .find(filter)
+      .sort({ startTimeUTC: 1 })
+      .exec();
     return game;
   }
 

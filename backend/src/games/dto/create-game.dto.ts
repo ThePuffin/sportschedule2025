@@ -49,6 +49,9 @@ export class CreateGameDto {
   @ApiProperty()
   timeStart: string;
 
+  @ApiProperty()
+  startTimeUTC: string
+
   @ApiProperty({ default: new Date() })
   updateDate: string;
 }

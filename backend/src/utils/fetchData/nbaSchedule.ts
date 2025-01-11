@@ -50,15 +50,14 @@ export const filterGamesByTeam = (team, value) => {
       );
       if (filterGame.length) {
         const gameDateRead = readableDate(new Date(gameDate));
-        const { arenaName, homeTeam, awayTeam } = filterGame[0];
+        const { arenaName, homeTeam, awayTeam, gameDateTimeUTC } =
+          filterGame[0];
         const awayAbbrev =
           inverseTeamTricodeMap[awayTeam.teamTricode] || awayTeam.teamTricode;
         const homeAbbrev =
           inverseTeamTricodeMap[homeTeam.teamTricode] || homeTeam.teamTricode;
 
-        const dateString = '2025-04-13T13:00:00Z';
-        const date = new Date(dateString);
-
+        const date = new Date(gameDateTimeUTC);
         const hourStart = date.getHours();
         const minStart = date.getMinutes();
 
@@ -78,6 +77,7 @@ export const filterGamesByTeam = (team, value) => {
           league: League.NBA,
           venueTimezone,
           timeStart: `${hourStart}:${minStart}`,
+          startTimeUTC: date,
         };
       }
     })

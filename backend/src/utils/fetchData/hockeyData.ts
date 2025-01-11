@@ -105,8 +105,10 @@ export class HockeyData {
           venueUTCOffset,
         } = game;
 
+        const now = new Date();
         const timeStart = getHourGame(startTimeUTC, venueUTCOffset);
-
+        if (new Date(startTimeUTC) < now) return;
+        
         return {
           uniqueId: `${value}-${gameDate}-1`,
           awayTeamId: awayTeam.abbrev,
@@ -123,6 +125,7 @@ export class HockeyData {
           league: leagueName,
           venueTimezone: venueTimezone,
           timeStart,
+          startTimeUTC,
         };
       });
 
