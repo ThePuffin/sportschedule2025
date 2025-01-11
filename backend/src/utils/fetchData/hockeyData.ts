@@ -25,36 +25,32 @@ export class HockeyData {
         return team;
       });
 
-      const activeTeams = allTeams
-        .toSorted((a: TeamNHL, b: TeamNHL) =>
-          a.placeName?.default > b.placeName?.default ? 1 : -1,
-        )
-        .map((team: TeamNHL) => {
-          const {
-            teamAbbrev,
-            teamName,
-            teamLogo,
-            divisionName,
-            teamCommonName,
-            conferenceName,
-          } = team;
-          const teamID = teamAbbrev.default;
-          const uniqueId = `${leagueName}-${teamID}`;
+      const activeTeams = allTeams.map((team: TeamNHL) => {
+        const {
+          teamAbbrev,
+          teamName,
+          teamLogo,
+          divisionName,
+          teamCommonName,
+          conferenceName,
+        } = team;
+        const teamID = teamAbbrev.default;
+        const uniqueId = `${leagueName}-${teamID}`;
 
-          return {
-            uniqueId,
-            value: uniqueId,
-            id: teamID,
-            abbrev: teamID,
-            label: teamName?.default,
-            teamLogo: teamLogo,
-            teamCommonName: teamCommonName.default,
-            conferenceName,
-            divisionName,
-            league: leagueName,
-            updateDate: new Date().toDateString(),
-          };
-        });
+        return {
+          uniqueId,
+          value: uniqueId,
+          id: teamID,
+          abbrev: teamID,
+          label: teamName?.default,
+          teamLogo: teamLogo,
+          teamCommonName: teamCommonName.default,
+          conferenceName,
+          divisionName,
+          league: leagueName,
+          updateDate: new Date().toDateString(),
+        };
+      });
 
       return activeTeams;
     } catch (error) {
@@ -98,7 +94,6 @@ export class HockeyData {
 
         games = [];
       }
-      const now = new Date();
       let gamesData: GameFormatted[] = games.map((game: NHLGameAPI) => {
         const {
           awayTeam,
@@ -112,7 +107,6 @@ export class HockeyData {
 
         const timeStart = getHourGame(startTimeUTC, venueUTCOffset);
 
-        if (new Date(gameDate) < now) return;
         return {
           uniqueId: `${value}-${gameDate}-1`,
           awayTeamId: awayTeam.abbrev,

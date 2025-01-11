@@ -33,11 +33,13 @@ export class GameService {
 
   async getLeagueGames(league): Promise<any> {
     const teams = await this.teamService.findByLeague(league);
+    let currentGames = {};
     if (league === League.NHL) {
       const hockeyData = new HockeyData();
-      return await hockeyData.getNhlSchedule(teams);
+      currentGames = await hockeyData.getNhlSchedule(teams);
+    } else {
+      currentGames = await getTeamsSchedule(teams, league);
     }
-    const currentGames = await getTeamsSchedule(teams, league);
 
     for (const team in currentGames) {
       const games = currentGames[team];
@@ -52,7 +54,7 @@ export class GameService {
     return currentGames;
   }
 
-  async getAllGames(): Promise<any> {
+  async getAllGames(): Promise<Game[]> {
     let currentGames = {};
 
     const leagues = [League.NFL, League.NBA, League.MLB, League.NHL];
@@ -62,11 +64,15 @@ export class GameService {
         ...(await this.getLeagueGames(league)),
       };
     }
-    return currentGames;
+    return this.gameModel.find().exec();
   }
 
   async findAll(): Promise<Game[]> {
-    return this.gameModel.find().exec();
+    const allGames = await this.gameModel.find().exec();
+    if (Object.keys(allGames).length === 0 || allGames?.length === 0) {
+      return this.getAllGames();
+    }
+    return allGames;
   }
 
   async findOne(uniqueId: string) {
