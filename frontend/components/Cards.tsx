@@ -1,6 +1,4 @@
 import React from 'react';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 
 import { Card } from '@rneui/base';
 import { View, Image, Text } from 'react-native';
@@ -9,7 +7,7 @@ export default function Cards({ data }) {
   const { homeTeam, awayTeam, arenaName, timeStart } = data;
   console.log(homeTeam, awayTeam, 'ici');
   return (
-    <ThemedView>
+    <div>
       <Card containerStyle={{}} wrapperStyle={{}}>
         <Card.Title>
           {timeStart} @ {arenaName}
@@ -40,6 +38,6 @@ export default function Cards({ data }) {
           <Text>{awayTeam}</Text>
         </View>
       </Card>
-    </ThemedView>
+    </div>
   );
 }

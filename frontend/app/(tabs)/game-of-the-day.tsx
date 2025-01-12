@@ -330,12 +330,16 @@ export default function gameOfTheDay() {
   }, []);
 
   return (
-    <ThemedView>
-      <Collapsible title="click me">
-        <ThemedText>click</ThemedText>
-      </Collapsible>
-      <ScrollView>{makeCards()}</ScrollView>
-    </ThemedView>
+    <>
+      <ScrollView>
+        <ThemedView>
+          <Collapsible title="click me">
+            <ThemedText>click</ThemedText>
+          </Collapsible>
+          {makeCards()}
+        </ThemedView>
+      </ScrollView>
+    </>
   );
 }
 
