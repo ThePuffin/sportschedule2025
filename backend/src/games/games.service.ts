@@ -95,8 +95,8 @@ export class GameService {
 
   async findByDate(gameDate: string) {
     const filter = { gameDate: gameDate };
-    const game = await this.gameModel.find(filter).exec();
-    return game;
+    const games = await this.gameModel.find(filter).exec();
+    return [...new Map(games.map((game) => [game.homeTeam, game])).values()];
   }
 
   update(uniqueId: string, updateGameDto: UpdateGameDto) {
