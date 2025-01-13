@@ -5,7 +5,6 @@ import { View, Image, Text } from 'react-native';
 
 export default function Cards({ data }) {
   const { homeTeam, awayTeam, arenaName, timeStart } = data;
-  console.log(homeTeam, awayTeam, 'ici');
   return (
     <div>
       <Card containerStyle={{}} wrapperStyle={{}}>
