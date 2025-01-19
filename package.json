@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node index.js",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:frontend": "npx react-native start",
     "start:backend": "nest start"
   },
@@ -32,6 +32,7 @@
     "@react-native-community/cli-platform-android": "latest",
     "@react-native-community/cli-platform-ios": "latest",
     "@types/node": "^22.10.5",
+    "concurrently": "^9.1.2",
     "typescript": "^5.1.3"
   }
 }
