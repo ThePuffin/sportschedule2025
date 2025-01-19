@@ -1,67 +1,94 @@
-import { Image, StyleSheet, Platform } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
+import { Collapsible } from '@/components/Collapsible';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet } from 'react-native';
 
+import Cards from '../../components/Cards';
 
-export default function HomeScreen() {
+interface GameFormatted {
+  _id: string;
+  _v: number;
+  uniqueId: string;
+  awayTeamId: string;
+  awayTeam: string;
+  awayTeamShort: string;
+  homeTeamId: string;
+  homeTeam: string;
+  homeTeamShort: string;
+  arenaName: string;
+  gameDate: string;
+  teamSelectedId: string;
+  show: boolean;
+  selectedTeam: boolean;
+  league: string;
+  updateDate?: Date;
+  venueTimezone?: string;
+  timeStart?: string;
+  startTimeUTC?: string;
+}
+
+const getGamesFromApi = async (): Promise<GameFormatted[]> => {
+  const now = new Date();
+  const YYYYMMDD = now.toISOString().split('T')[0];
+
+  try {
+    const response = await fetch(`http://localhost:3000/games/date/${YYYYMMDD}`);
+    const todayGames = await response.json();
+
+    return todayGames;
+  } catch (error) {
+    console.error(error);
+    return;
+  }
+};
+
+export default function GameofTheDay() {
+  const [games, setGames] = useState<GameFormatted[]>([]);
+  const makeCards = () => {
+    if (!games) {
+      return <ThemedText>There are no games today</ThemedText>;
+    }
+    if (games.length) {
+      return games.map((game) => {
+        const gameId = game?._id || Math.random();
+        return <Cards key={gameId} data={game} />;
+      });
+    }
+    return <ThemedText>Wait for it ....</ThemedText>;
+  };
+
+  useEffect(() => {
+    async function fetchGames() {
+      const gamesData = await getGamesFromApi();
+      setGames(gamesData);
+    }
+    fetchGames();
+  }, []);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={<Image source={require('@/assets/images/partial-react-logo.png')} style={styles.reactLogo} />}
-    >
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome world!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes. Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Game of the day</ThemedText>
-        <ThemedText>Tap the Game of the day tab to learn more about what's included in this starter app.</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <>
+      <ScrollView>
+        <ThemedView>
+          <Collapsible title="click me">
+            <ThemedText>click</ThemedText>
+          </Collapsible>
+          {makeCards()}
+        </ThemedView>
+      </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  headerImage: {
+    color: '#808080',
+    bottom: -90,
+    left: -35,
+    position: 'absolute',
+  },
   titleContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
   },
 });
