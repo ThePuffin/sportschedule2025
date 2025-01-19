@@ -22,14 +22,14 @@ USER root
 # Copy dependency manifests
 COPY package.json package-lock.json ./
 
-# Install dependencies with --legacy-peer-deps flag
+# Install dependencies
 RUN npm ci --unsafe-perm --legacy-peer-deps || (cat npm-debug.log && exit 1)
 
 # Copy the rest of the application code
-COPY . .
+COPY . /opt/my-app/
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE 8081
 
-# Define the command to run the app
-CMD ["npm", "start"]
+# Start the expo server
+CMD ["npx", "expo", "start", "--tunnel"]
