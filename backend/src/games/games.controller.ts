@@ -1,11 +1,12 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Patch,
   Post,
-  Delete,
-  Body,
-  Param,
+  Query,
 } from '@nestjs/common';
 import { GameService } from './games.service';
 import { UpdateGameDto } from './dto/update-game.dto';
