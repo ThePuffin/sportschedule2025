@@ -1,13 +1,13 @@
-import { Model } from 'mongoose';
-import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Game } from './schemas/game.schema';
-import { League } from '../utils/enum';
-import { CreateGameDto } from './dto/create-game.dto';
-import { UpdateGameDto } from './dto/update-game.dto';
-import { HockeyData } from '../utils/fetchData/hockeyData';
-import { getTeamsSchedule } from '../utils/fetchData/espnAllData';
-import { TeamService } from '../teams/teams.service';
+import { Injectable } from '@nestjs/common'
+import { InjectModel } from '@nestjs/mongoose'
+import { Model } from 'mongoose'
+import { TeamService } from '../teams/teams.service'
+import { League } from '../utils/enum'
+import { getTeamsSchedule } from '../utils/fetchData/espnAllData'
+import { HockeyData } from '../utils/fetchData/hockeyData'
+import { CreateGameDto } from './dto/create-game.dto'
+import { UpdateGameDto } from './dto/update-game.dto'
+import { Game } from './schemas/game.schema'
 
 @Injectable()
 export class GameService {
@@ -91,6 +91,28 @@ export class GameService {
       .sort({ startTimeUTC: 1 })
       .exec();
     return game;
+  }
+
+  async filterGames(startDate, endDate, teamSelectedId) {
+    const filter: any = {};
+
+    if (startDate) {
+      filter.gameDate = { $gte: startDate };
+    }
+
+    if (endDate) {
+      filter.gameDate = { ...filter.gameDate, $lte: endDate };
+    }
+
+    if (teamSelectedId) {
+      filter.teamSelectedId = teamSelectedId;
+    }
+
+    const games = await this.gameModel
+      .find(filter)
+      .sort({ startTimeUTC: 1 })
+      .exec();
+    return games;
   }
 
   async findByDate(gameDate: string) {
