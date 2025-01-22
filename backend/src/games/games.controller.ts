@@ -23,6 +23,15 @@ export class GamesController {
   findByTeam(@Param('teamSelectedId') teamSelectedId: string) {
     return this.GameService.findByTeam(teamSelectedId);
   }
+  
+  @Get('/filter')
+  async filterGames(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('teamSelectedId') teamSelectedId: string,
+  ): Promise<any[]> {
+    return this.GameService.filterGames(startDate, endDate, teamSelectedId);
+  }
 
   @Get('/date/:gameDate')
   findByDate(@Param('gameDate') gameDate: string) {
