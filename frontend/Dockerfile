@@ -23,7 +23,7 @@ USER root
 COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN npm ci --unsafe-perm --legacy-peer-deps || (cat npm-debug.log && exit 1)
+RUN npm ci --unsafe-perm --legacy-peer-deps
 
 # Copy the rest of the application code
 COPY . /opt/my-app/
