@@ -124,12 +124,23 @@ export class GameService {
       .find(filter)
       .sort({ startTimeUTC: 1 })
       .exec();
+
     return games;
   }
 
   async findByDate(gameDate: string) {
     const filter = { gameDate: gameDate };
-    const games = await this.gameModel.find(filter).exec();
+    const games = await this.gameModel
+      .find(filter)
+      .sort({ startTimeUTC: 1 })
+      .exec();
+
+    if (!games.length) {
+      const allGames = await this.findAll();
+      return allGames.filter((game) => game.gameDate === gameDate);
+    }
+
+    // avoid dupplicate games
     return [...new Map(games.map((game) => [game.homeTeam, game])).values()];
   }
 

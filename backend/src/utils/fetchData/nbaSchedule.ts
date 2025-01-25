@@ -56,10 +56,11 @@ export const filterGamesByTeam = (team, value, leagueLogos) => {
           inverseTeamTricodeMap[awayTeam.teamTricode] || awayTeam.teamTricode;
         const homeAbbrev =
           inverseTeamTricodeMap[homeTeam.teamTricode] || homeTeam.teamTricode;
+        console.log(gameDateTimeUTC);
 
         const date = new Date(gameDateTimeUTC);
-        const hourStart = date.getHours();
-        const minStart = date.getMinutes();
+        const hourStart = String(date.getHours()).padStart(2, '0');
+        const minStart = String(date.getMinutes()).padStart(2, '0');
 
         return {
           uniqueId: `${value}-${gameDateRead}-1`,
@@ -79,7 +80,7 @@ export const filterGamesByTeam = (team, value, leagueLogos) => {
           league: League.NBA,
           venueTimezone,
           timeStart: `${hourStart}:${minStart}`,
-          startTimeUTC: date,
+          startTimeUTC: gameDateTimeUTC,
         };
       }
     })
