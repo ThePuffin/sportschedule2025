@@ -1,13 +1,14 @@
-import { Injectable } from '@nestjs/common'
-import { InjectModel } from '@nestjs/mongoose'
-import { Model } from 'mongoose'
-import { TeamService } from '../teams/teams.service'
-import { League } from '../utils/enum'
-import { getTeamsSchedule } from '../utils/fetchData/espnAllData'
-import { HockeyData } from '../utils/fetchData/hockeyData'
-import { CreateGameDto } from './dto/create-game.dto'
-import { UpdateGameDto } from './dto/update-game.dto'
-import { Game } from './schemas/game.schema'
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { TeamService } from '../teams/teams.service';
+import { League } from '../utils/enum';
+import { getTeamsSchedule } from '../utils/fetchData/espnAllData';
+import { HockeyData } from '../utils/fetchData/hockeyData';
+import { CreateGameDto } from './dto/create-game.dto';
+import { UpdateGameDto } from './dto/update-game.dto';
+import { Game } from './schemas/game.schema';
+import { TeamType } from '../utils/interface/team';
 
 @Injectable()
 export class GameService {
@@ -15,6 +16,15 @@ export class GameService {
     @InjectModel(Game.name) public gameModel: Model<Game>,
     private readonly teamService: TeamService,
   ) {}
+
+  async getTeamsLogo(teams: TeamType[]): Promise<{ [key: string]: string }> {
+    const logos = {};
+    teams.forEach(({ abbrev, teamLogo }) => {
+      logos[abbrev] = teamLogo;
+    });
+
+    return logos;
+  }
 
   async create(gameDto: CreateGameDto | UpdateGameDto): Promise<Game> {
     const { uniqueId } = gameDto;
@@ -34,11 +44,13 @@ export class GameService {
   async getLeagueGames(league): Promise<any> {
     const teams = await this.teamService.findByLeague(league);
     let currentGames = {};
+    const leagueLogos = await this.getTeamsLogo(teams);
+
     if (league === League.NHL) {
       const hockeyData = new HockeyData();
-      currentGames = await hockeyData.getNhlSchedule(teams);
+      currentGames = await hockeyData.getNhlSchedule(teams, leagueLogos);
     } else {
-      currentGames = await getTeamsSchedule(teams, league);
+      currentGames = await getTeamsSchedule(teams, league, leagueLogos);
     }
 
     for (const team in currentGames) {
@@ -47,7 +59,7 @@ export class GameService {
         try {
           await this.create(game);
         } catch (error) {
-          console.log({ error });
+          console.error({ error });
         }
       }
     }

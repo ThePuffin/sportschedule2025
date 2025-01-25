@@ -18,6 +18,9 @@ export class Game {
   awayTeam: string;
 
   @Prop()
+  awayTeamLogo: string;
+
+  @Prop()
   homeTeamId: string;
 
   @Prop()
@@ -25,6 +28,9 @@ export class Game {
 
   @Prop()
   homeTeam: string;
+
+  @Prop()
+  homeTeamLogo: string;
 
   @Prop()
   divisionName: string;

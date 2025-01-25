@@ -11,6 +11,9 @@ export class CreateGameDto {
   awayTeamShort: string;
 
   @ApiProperty()
+  awayTeamLogo: string;
+
+  @ApiProperty()
   awayTeam: string;
 
   @ApiProperty()
@@ -21,6 +24,9 @@ export class CreateGameDto {
 
   @ApiProperty()
   homeTeam: string;
+
+  @ApiProperty()
+  homeTeamLogo: string;
 
   @ApiProperty()
   divisionName: string;
@@ -50,7 +56,7 @@ export class CreateGameDto {
   timeStart: string;
 
   @ApiProperty()
-  startTimeUTC: string
+  startTimeUTC: string;
 
   @ApiProperty({ default: new Date() })
   updateDate: string;

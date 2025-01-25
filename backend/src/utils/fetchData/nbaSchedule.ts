@@ -21,7 +21,7 @@ export const clearNbaSchedule = () => {
   gameDates = [];
 };
 
-export const filterGamesByTeam = (team, value) => {
+export const filterGamesByTeam = (team, value, leagueLogos) => {
   const teamTricodeMap = {
     GS: 'GSW',
     NO: 'NOP',
@@ -67,9 +67,11 @@ export const filterGamesByTeam = (team, value) => {
           awayTeamId: awayAbbrev,
           awayTeam: `${awayTeam.teamCity} ${awayTeam.teamName}`,
           awayTeamShort: awayAbbrev,
+          awayTeamLogo: leagueLogos[awayAbbrev],
           homeTeam: `${homeTeam.teamCity} ${homeTeam.teamName}`,
           homeTeamId: homeAbbrev,
           homeTeamShort: homeAbbrev,
+          homeTeamLogo: leagueLogos[homeAbbrev],
           gameDate: gameDateRead,
           teamSelectedId: value,
           show: homeAbbrev === team,

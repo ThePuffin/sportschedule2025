@@ -115,7 +115,11 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
   }
 };
 
-export const getTeamsSchedule = async (activeTeams, leagueName) => {
+export const getTeamsSchedule = async (
+  activeTeams,
+  leagueName,
+  leagueLogos,
+) => {
   const allGames = {};
   if (leagueName === League.NBA) {
     await getNBASchedule();
@@ -128,15 +132,22 @@ export const getTeamsSchedule = async (activeTeams, leagueName) => {
         abbrev,
         value,
         leagueName,
+        leagueLogos,
       });
     }),
   );
   clearNbaSchedule();
-  console.log(`updated ${leagueName}`);
+  console.info(`updated ${leagueName}`);
   return allGames;
 };
 
-const getEachTeamSchedule = async ({ id, abbrev, value, leagueName }) => {
+const getEachTeamSchedule = async ({
+  id,
+  abbrev,
+  value,
+  leagueName,
+  leagueLogos,
+}) => {
   try {
     let games;
     try {
@@ -148,15 +159,15 @@ const getEachTeamSchedule = async ({ id, abbrev, value, leagueName }) => {
         fetchGames?.events?.length && fetchGames.events[0]
           ? fetchGames.events
           : [];
-      console.log('yes', value);
+      console.info('yes', value);
     } catch (error) {
-      console.log('no', value, error);
+      console.info('no', value, error);
       games = [];
     }
     let gamesData = [];
     if (!games.length) {
       if (leagueName === League.NBA) {
-        gamesData = filterGamesByTeam(abbrev, value);
+        gamesData = filterGamesByTeam(abbrev, value, leagueLogos);
       }
     } else {
       let number = 0;
@@ -185,9 +196,11 @@ const getEachTeamSchedule = async ({ id, abbrev, value, leagueName }) => {
           awayTeamId: awayTeam.team.abbreviation,
           awayTeam: awayTeam.team.displayName,
           awayTeamShort: awayTeam.team.abbreviation,
+          awayTeamLogo: leagueLogos[awayTeam.team.abbreviation],
           homeTeam: homeTeam.team.displayName,
           homeTeamId: homeTeam.team.abbreviation,
           homeTeamShort: homeTeam.team.abbreviation,
+          homeTeamLogo: leagueLogos[homeTeam.team.abbreviation],
           gameDate: gameDate,
           teamSelectedId: value,
           show: homeTeam.team.abbreviation === abbrev,
@@ -203,7 +216,7 @@ const getEachTeamSchedule = async ({ id, abbrev, value, leagueName }) => {
     gamesData = gamesData.filter((game) => game !== undefined && game !== null);
     return gamesData;
   } catch (error) {
-    console.log('Error fetching data', error);
+    console.error('Error fetching data', error);
     return {};
   }
 };

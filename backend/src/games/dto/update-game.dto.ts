@@ -14,6 +14,9 @@ export class UpdateGameDto {
   awayTeam: string;
 
   @ApiProperty()
+  awayTeamLogo: string;
+
+  @ApiProperty()
   homeTeamId: string;
 
   @ApiProperty()
@@ -21,6 +24,9 @@ export class UpdateGameDto {
 
   @ApiProperty()
   homeTeam: string;
+
+  @ApiProperty()
+  homeTeamLogo: string;
 
   @ApiProperty()
   divisionName: string;

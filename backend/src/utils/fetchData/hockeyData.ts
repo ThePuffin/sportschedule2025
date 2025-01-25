@@ -59,13 +59,17 @@ export class HockeyData {
     }
   }
 
-  getNhlSchedule = async (activeTeams) => {
+  getNhlSchedule = async (activeTeams, leagueLogos) => {
     const allGames = {};
 
     await Promise.all(
       activeTeams.map(async ({ id, value }) => {
         const leagueID = `${leagueName}-${id}`;
-        allGames[leagueID] = await this.getNhlTeamSchedule(id, value);
+        allGames[leagueID] = await this.getNhlTeamSchedule(
+          id,
+          value,
+          leagueLogos,
+        );
       }),
     );
 
@@ -75,11 +79,15 @@ export class HockeyData {
       }
     }
 
-    console.log('updated NHL');
+    console.info('updated NHL');
     return allGames;
   };
 
-  getNhlTeamSchedule = async (id: string, value: string) => {
+  getNhlTeamSchedule = async (
+    id: string,
+    value: string,
+    leagueLogos: { string },
+  ) => {
     try {
       let games: NHLGameAPI[];
       try {
@@ -88,9 +96,9 @@ export class HockeyData {
         );
         const fetchGames = await fetchedGames.json();
         games = await fetchGames.games;
-        console.log('yes', value);
+        console.info('yes', value);
       } catch (error) {
-        console.log('no', value);
+        console.info('no', value);
 
         games = [];
       }
@@ -108,15 +116,17 @@ export class HockeyData {
         const now = new Date();
         const timeStart = getHourGame(startTimeUTC, venueUTCOffset);
         if (new Date(startTimeUTC) < now) return;
-        
+
         return {
           uniqueId: `${value}-${gameDate}-1`,
           awayTeamId: awayTeam.abbrev,
           awayTeam: awayTeam.placeName.default,
-          homeTeam: homeTeam.placeName.default,
           awayTeamShort: awayTeam.abbrev,
+          awayTeamLogo: leagueLogos[awayTeam.abbrev],
+          homeTeam: homeTeam.placeName.default,
           homeTeamId: homeTeam.abbrev,
           homeTeamShort: homeTeam.abbrev,
+          homeTeamLogo: leagueLogos[homeTeam.abbrev],
           arenaName: venue?.default || '',
           gameDate: gameDate,
           teamSelectedId: value,
