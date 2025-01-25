@@ -4,7 +4,7 @@ import { Card } from '@rneui/base';
 import { View, Image, Text } from 'react-native';
 
 export default function Cards({ data }) {
-  const { homeTeam, awayTeam, arenaName, timeStart } = data;
+  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo } = data;
   return (
     <div>
       <Card containerStyle={{}} wrapperStyle={{}}>
@@ -23,7 +23,7 @@ export default function Cards({ data }) {
             style={{ width: '50%', height: 50 }}
             resizeMode="contain"
             source={{
-              uri: 'https://avatars0.githubusercontent.com/u/32242596?s=460&u=1ea285743fc4b083f95d6ee0be2e7bb8dcfc676e&v=4',
+              uri: homeTeamLogo,
             }}
           />
           <Text>vs</Text>
@@ -31,7 +31,7 @@ export default function Cards({ data }) {
             style={{ width: '50%', height: 50 }}
             resizeMode="contain"
             source={{
-              uri: 'https://avatars0.githubusercontent.com/u/32242596?s=460&u=1ea285743fc4b083f95d6ee0be2e7bb8dcfc676e&v=4',
+              uri: awayTeamLogo,
             }}
           />
           <Text>{awayTeam}</Text>
