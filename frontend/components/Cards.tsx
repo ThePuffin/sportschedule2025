@@ -3,15 +3,30 @@ import React from 'react';
 import { Card } from '@rneui/base';
 import { View, Image, Text } from 'react-native';
 
-export default function Cards({ data }) {
-  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo } = data;
-  return (
-    <div>
-      <Card containerStyle={{}} wrapperStyle={{}}>
+export default function Cards({ data, showDate }) {
+  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, gameDate } = data;
+
+  const displayTitle = () => {
+    if (arenaName && arenaName !== '') {
+      if (showDate) {
+        return (
+          <Card.Title>
+            <em>{gameDate}</em> {timeStart} @ {arenaName}
+          </Card.Title>
+        );
+      }
+      return (
         <Card.Title>
           {timeStart} @ {arenaName}
         </Card.Title>
-        <Card.Divider />
+      );
+    }
+    return <Card.Title>{gameDate}</Card.Title>;
+  };
+
+  const displayContent = () => {
+    if (homeTeam && awayTeam) {
+      return (
         <View
           style={{
             position: 'relative',
@@ -36,6 +51,24 @@ export default function Cards({ data }) {
           />
           <Text>{awayTeam}</Text>
         </View>
+      );
+    }
+    return (
+      <View
+        style={{
+          position: 'relative',
+          alignItems: 'center',
+        }}
+      ></View>
+    );
+  };
+
+  return (
+    <div>
+      <Card containerStyle={{}} wrapperStyle={{}}>
+        <Card.Title>{displayTitle()}</Card.Title>
+        <Card.Divider />
+        {displayContent()}
       </Card>
     </div>
   );
