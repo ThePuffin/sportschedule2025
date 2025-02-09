@@ -99,15 +99,14 @@ export class GameService {
   }
 
   async findByTeam(teamSelectedId: string) {
-    const filter = { teamSelectedId: teamSelectedId };
-    const game = await this.gameModel
-      .find(filter)
-      .sort({ startTimeUTC: 1 })
-      .exec();
-    return game;
+    return this.filterGames({ teamSelectedIds: teamSelectedId });
   }
 
-  async filterGames(startDate, endDate, teamSelectedIds) {
+  async filterGames({
+    startDate = undefined,
+    endDate = undefined,
+    teamSelectedIds,
+  }) {
     const filter: any = {};
 
     if (startDate) {

@@ -31,7 +31,7 @@ export class GamesController {
     @Query('endDate') endDate: string,
     @Query('teamSelectedIds') teamSelectedIds: string,
   ): Promise<any> {
-    return this.GameService.filterGames(startDate, endDate, teamSelectedIds);
+    return this.GameService.filterGames({startDate, endDate, teamSelectedIds});
   }
 
   @Get('/date/:gameDate')

@@ -56,7 +56,6 @@ export const filterGamesByTeam = (team, value, leagueLogos) => {
           inverseTeamTricodeMap[awayTeam.teamTricode] || awayTeam.teamTricode;
         const homeAbbrev =
           inverseTeamTricodeMap[homeTeam.teamTricode] || homeTeam.teamTricode;
-        console.log(gameDateTimeUTC);
 
         const date = new Date(gameDateTimeUTC);
         const hourStart = String(date.getHours()).padStart(2, '0');
