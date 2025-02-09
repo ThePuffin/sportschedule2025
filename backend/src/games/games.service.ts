@@ -9,6 +9,8 @@ import { CreateGameDto } from './dto/create-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { Game } from './schemas/game.schema';
 import { TeamType } from '../utils/interface/team';
+import { readableDate } from '../utils/date';
+const mongoose = require('mongoose');
 
 @Injectable()
 export class GameService {
@@ -105,19 +107,26 @@ export class GameService {
     return game;
   }
 
-  async filterGames(startDate, endDate, teamSelectedId) {
+  async filterGames(startDate, endDate, teamSelectedIds) {
     const filter: any = {};
 
     if (startDate) {
       filter.gameDate = { $gte: startDate };
+    } else {
+      startDate = readableDate(new Date());
     }
 
     if (endDate) {
       filter.gameDate = { ...filter.gameDate, $lte: endDate };
+    } else {
+      endDate = readableDate(new Date());
     }
 
-    if (teamSelectedId) {
-      filter.teamSelectedId = teamSelectedId;
+    if (teamSelectedIds && teamSelectedIds.length > 0) {
+      const teamSelected = teamSelectedIds
+        .split(',')
+        .map((item) => item.trim());
+      filter.teamSelectedId = { $in: teamSelected };
     }
 
     const games = await this.gameModel
@@ -125,7 +134,66 @@ export class GameService {
       .sort({ startTimeUTC: 1 })
       .exec();
 
-    return games;
+    const gamesByDay = {};
+    if (games.length) {
+      const uniqueTeamSelectedIds = games.reduce((accumulator, currentItem) => {
+        if (!accumulator.includes(currentItem.teamSelectedId)) {
+          accumulator.push(currentItem.teamSelectedId);
+        }
+        return accumulator;
+      }, []);
+      const dates = games.map((game) => new Date(game.gameDate));
+      let minDate = new Date(Math.min(...dates.map((date) => date.getTime())));
+      let maxDate = new Date(Math.max(...dates.map((date) => date.getTime())));
+      minDate = new Date(startDate) > minDate ? minDate : new Date(startDate);
+      maxDate = new Date(endDate) < maxDate ? maxDate : new Date(endDate);
+
+      for (let date = minDate; date <= maxDate; ) {
+        const currentDate = readableDate(date);
+        const gamesOfDay = [];
+        uniqueTeamSelectedIds.forEach((teamSelectedId) => {
+          const gameOfDay = games.filter(
+            (game) =>
+              game.gameDate === currentDate &&
+              game.teamSelectedId === teamSelectedId,
+          );
+          if (!gameOfDay.length) {
+            gamesOfDay.push(
+              new this.gameModel({
+                _id: new mongoose.Types.ObjectId().toString(),
+                uniqueId: teamSelectedId + currentDate,
+                awayTeamId: '',
+                awayTeamShort: '',
+                awayTeam: '',
+                homeTeamId: '',
+                homeTeamShort: '',
+                homeTeam: '',
+                arenaName: '',
+                gameDate: currentDate,
+                teamSelectedId: teamSelectedId,
+                show: 'false',
+                selectedTeam: 'false',
+                league: '',
+                venueTimezone: '',
+                timeStart: '',
+                startTimeUTC: '',
+                updateDate: '',
+                __v: 0,
+                awayTeamLogo: '',
+                homeTeamLogo: '',
+              }),
+            );
+          } else {
+            gamesOfDay.push(...gameOfDay);
+          }
+        });
+
+        gamesByDay[currentDate] = gamesOfDay;
+        date = new Date(date.setDate(date.getDate() + 1));
+      }
+    }
+
+    return gamesByDay;
   }
 
   async findByDate(gameDate: string) {
