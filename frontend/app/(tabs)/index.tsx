@@ -1,7 +1,8 @@
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText'
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { League } from '../../constants/enum.ts';
+import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
 
 interface GameFormatted {
@@ -50,6 +51,9 @@ export default function GameofTheDay() {
     .sort();
 
   const displayContent = () => {
+    if (!games || games.length === 0) {
+      return <ThemedText>No data available</ThemedText>
+    }
     return leagues.map((league, i) => {
       let gamesFiltred = [...games];
       if (league !== League.ALL) {
