@@ -1,5 +1,5 @@
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText'
+import { ThemedText } from '@/components/ThemedText';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { League } from '../../constants/enum';
@@ -52,7 +52,7 @@ export default function GameofTheDay() {
 
   const displayContent = () => {
     if (!games || games.length === 0) {
-      return <ThemedText>No data available</ThemedText>
+      return <ThemedText>No data available</ThemedText>;
     }
     return leagues.map((league, i) => {
       let gamesFiltred = [...games];

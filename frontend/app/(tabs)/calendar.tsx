@@ -1,11 +1,21 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { readableDate } from '../../utils/date';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import Cards from '../../components/Cards';
+import Selector from '../../components/Selector';
 
-const teams = ['NHL-NJD', 'NBA-PHX'];
+const teamsSelected = ['NHL-NJD', 'NBA-PHX'];
+
+const getTeamsFromApi = async (): Promise<Team[]> => {
+  try {
+    const response = await fetch(`http://localhost:3000/teams`);
+    return await response.json();
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 const getGamesFromApi = async (): Promise<GameFormatted[]> => {
   const now = new Date();
@@ -14,11 +24,11 @@ const getGamesFromApi = async (): Promise<GameFormatted[]> => {
 
   try {
     const response = await fetch(
-      `http://localhost:3000/games/filter?startDate=${startDate}&endDate=${endDate}&teamSelectedIds=${teams.join(',')}`
+      `http://localhost:3000/games/filter?startDate=${startDate}&endDate=${endDate}&teamSelectedIds=${teamsSelected.join(
+        ','
+      )}`
     );
-    const games = await response.json();
-
-    return games;
+    return await response.json();
   } catch (error) {
     console.error(error);
     return;
@@ -27,8 +37,19 @@ const getGamesFromApi = async (): Promise<GameFormatted[]> => {
 
 export default function Calendar() {
   const [games, setGames] = useState<GameFormatted[]>([]);
+  const [teams, setTeams] = useState<TeamDocument[]>([]);
+  const i = 0;
 
-  const displayContent = () => {
+  const displayTeamSelector = () => {
+    if (teams.length) {
+      return teamsSelected.map((teamSelectedId, i) => {
+        const data = { i, activeTeams: teams, teamsSelectedIds: teams, teamSelectedId };
+        return <Selector key={teamSelectedId} data={data} />;
+      });
+    }
+  };
+
+  const displayGamesCards = () => {
     const days = Object.keys(games);
     if (days.length) {
       return days.map((day) => {
@@ -41,18 +62,22 @@ export default function Calendar() {
   };
 
   useEffect(() => {
+    async function fetchTeams() {
+      const teamsData = await getTeamsFromApi();
+      setTeams(teamsData);
+    }
     async function fetchGames() {
       const gamesData = await getGamesFromApi();
-      console.log({ gamesData });
-
       setGames(gamesData);
     }
+    fetchTeams();
     fetchGames();
   }, []);
   return (
     <ScrollView>
       <ThemedView>
-        <ThemedView>{displayContent()}</ThemedView>
+        <ThemedView>{displayTeamSelector()}</ThemedView>
+        <ThemedView>{displayGamesCards()}</ThemedView>
       </ThemedView>
     </ScrollView>
   );
