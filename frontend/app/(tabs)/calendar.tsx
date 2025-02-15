@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import Cards from '../../components/Cards';
 import Selector from '../../components/Selector';
 
-const teamsSelected = ['NHL-NJD', 'NBA-PHX'];
+const teamsSelected = ['NHL-NJD', 'NBA-PHX', 'NBA-ATL'];
 
 const getTeamsFromApi = async (): Promise<Team[]> => {
   try {
@@ -28,7 +28,9 @@ const getGamesFromApi = async (): Promise<GameFormatted[]> => {
         ','
       )}`
     );
-    return await response.json();
+    const games = await response.json();
+    console.log(games);
+    return games;
   } catch (error) {
     console.error(error);
     return;
@@ -44,18 +46,31 @@ export default function Calendar() {
     if (teams.length) {
       return teamsSelected.map((teamSelectedId, i) => {
         const data = { i, activeTeams: teams, teamsSelectedIds: teams, teamSelectedId };
-        return <Selector key={teamSelectedId} data={data} />;
+        return (
+          <td key={teamSelectedId}>
+            <ThemedView>
+              <Selector data={data} />
+              {displayGamesCards(teamSelectedId)}
+            </ThemedView>
+          </td>
+        );
       });
     }
   };
 
-  const displayGamesCards = () => {
+  const displayGamesCards = (teamSelectedId) => {
     const days = Object.keys(games);
     if (days.length) {
       return days.map((day) => {
-        const game = games[day][0];
+        const game = games[day].find((game) => game.teamSelectedId === teamSelectedId);
         const gameId = game?._id || Math.random();
-        return <Cards key={gameId} data={game} showDate={true} />;
+        return (
+          <td key={gameId}>
+            <ThemedView>
+              <Cards data={game} showDate={true} />
+            </ThemedView>
+          </td>
+        );
       });
     }
     return <ThemedText>page in progress</ThemedText>;
@@ -75,10 +90,11 @@ export default function Calendar() {
   }, []);
   return (
     <ScrollView>
-      <ThemedView>
-        <ThemedView>{displayTeamSelector()}</ThemedView>
-        <ThemedView>{displayGamesCards()}</ThemedView>
-      </ThemedView>
+      <table style={{ tableLayout: 'fixed', width: '100%' }}>
+        <tbody>
+          <tr>{displayTeamSelector()}</tr>
+        </tbody>
+      </table>
     </ScrollView>
   );
 }
