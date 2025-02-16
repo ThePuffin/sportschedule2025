@@ -65,8 +65,21 @@ export default function Cards({ data, showDate }) {
 
   return (
     <div>
-      <Card containerStyle={{}} wrapperStyle={{}}>
-        <Card.Title>{displayTitle()}</Card.Title>
+      <Card containerStyle={{ height: 250 }} wrapperStyle={{}}>
+        <Card.Title
+          style={{
+            height: 42,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: showDate ? '' : 'flex',
+            whiteSpace: showDate ? '' : 'nowrap',
+            alignItems: showDate ? '' : 'center',
+            justifyContent: showDate ? '' : 'center',
+            marginBottom: showDate ? '' : 0,
+          }}
+        >
+          {displayTitle()}
+        </Card.Title>
         <Card.Divider />
         {displayContent()}
       </Card>
