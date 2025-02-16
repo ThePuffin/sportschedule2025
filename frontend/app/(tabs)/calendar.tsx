@@ -5,8 +5,9 @@ import { ScrollView } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import Cards from '../../components/Cards';
 import Selector from '../../components/Selector';
+import Buttons from '../../components/Buttons';
 
-const teamsSelected = ['NHL-NJD', 'NBA-PHX', 'NBA-ATL'];
+const teamsSelected = ['NHL-NJD', 'NHL-CGY', 'NBA-PHX', 'MLB-ATL'];
 
 const getTeamsFromApi = async (): Promise<Team[]> => {
   try {
@@ -28,9 +29,7 @@ const getGamesFromApi = async (): Promise<GameFormatted[]> => {
         ','
       )}`
     );
-    const games = await response.json();
-    console.log(games);
-    return games;
+    return await response.json();
   } catch (error) {
     console.error(error);
     return;
@@ -43,35 +42,37 @@ export default function Calendar() {
   const i = 0;
 
   const displayTeamSelector = () => {
-    if (teams.length) {
-      return teamsSelected.map((teamSelectedId, i) => {
-        const data = { i, activeTeams: teams, teamsSelectedIds: teams, teamSelectedId };
-        return (
-          <td key={teamSelectedId}>
-            <ThemedView>
-              <Selector data={data} />
-              {displayGamesCards(teamSelectedId)}
-            </ThemedView>
-          </td>
-        );
-      });
-    }
+    return teamsSelected.map((teamSelectedId, i) => {
+      const data = { i, activeTeams: teams, teamsSelectedIds: teams, teamSelectedId };
+      return (
+        <td key={teamSelectedId}>
+          <ThemedView>
+            <Selector data={data} />
+            {displayGamesCards(teamSelectedId)}
+          </ThemedView>
+        </td>
+      );
+    });
   };
 
   const displayGamesCards = (teamSelectedId) => {
-    const days = Object.keys(games);
-    if (days.length) {
-      return days.map((day) => {
-        const game = games[day].find((game) => game.teamSelectedId === teamSelectedId);
-        const gameId = game?._id || Math.random();
-        return (
-          <td key={gameId}>
-            <ThemedView>
-              <Cards data={game} showDate={true} />
-            </ThemedView>
-          </td>
-        );
-      });
+    if (games) {
+      const days = Object.keys(games) || [];
+      if (days.length) {
+        return days.map((day) => {
+          const game = games[day].find((game) => game.teamSelectedId === teamSelectedId);
+          if (game) {
+            const gameId = game?._id || Math.random();
+            return (
+              <td key={gameId}>
+                <ThemedView>
+                  <Cards data={game} showDate={true} />
+                </ThemedView>
+              </td>
+            );
+          }
+        });
+      }
     }
     return <ThemedText>page in progress</ThemedText>;
   };
@@ -90,6 +91,7 @@ export default function Calendar() {
   }, []);
   return (
     <ScrollView>
+      <Buttons />
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>
           <tr>{displayTeamSelector()}</tr>
