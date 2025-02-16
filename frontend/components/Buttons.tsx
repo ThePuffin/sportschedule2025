@@ -1,4 +1,5 @@
-import { Icon } from '@rneui/themed';
+import { ThemedView } from '@/components/ThemedView';
+import { Button } from '@rneui/themed';
 
 export default function Buttons({}) {
   const isGamesSelected = false;
@@ -18,71 +19,75 @@ export default function Buttons({}) {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', margin: '3vh 1vh ' }}>
-      <button
-        disabled={!isGamesSelected}
-        onClick={removeAllGames}
-        style={{
-          flex: 1,
-          margin: '0 10px',
-          backgroundColor: '#ff0000',
-          color: '#ffffff',
-          borderRadius: '5px',
-          padding: '10px 20px',
-          cursor: 'pointer',
-          fontSize: '16px',
-          opacity: !isGamesSelected ? 0.5 : 1,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Icon type="font-awesome" name="trash" style={{ color: '#ffffff', padding: '0.1rem' }}></Icon>
-          <Icon type="font-awesome" name="list" style={{ color: '#ffffff', padding: '0.1rem' }}></Icon>
-        </div>
-      </button>
+    <ThemedView>
+      <div style={{ display: 'flex', justifyContent: 'space-between', margin: '3vh 1vh ' }}>
+        <Button
+          disabled={!isGamesSelected}
+          icon={{
+            name: 'trash',
+            type: 'font-awesome',
+            size: 30,
+            color: 'white',
+          }}
+          iconRight
+          loading={false}
+          loadingProps={{ size: 'small', color: 'white' }}
+          buttonStyle={{
+            backgroundColor: 'rgba(214, 61, 57, 1)',
+            borderRadius: 5,
+          }}
+          containerStyle={{
+            marginHorizontal: '5vw',
+            width: '20vw',
+          }}
+          onPress={() => removeAllGames()}
+        />
 
-      <button
-        disabled={disabledAdd}
-        onClick={addAColumn}
-        style={{
-          flex: 1,
-          margin: '0 10px',
-          backgroundColor: '#ffffff',
-          color: '#000000',
-          borderRadius: '5px',
-          padding: '10px 20px',
-          cursor: 'pointer',
-          fontSize: '16px',
-          opacity: disabledAdd ? 0.5 : 1,
-          border: '1px solid #000000',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Icon type="font-awesome" name="plus" style={{ color: '#000000', padding: '0.1rem' }}></Icon>
-          <Icon type="font-awesome" name="columns" style={{ color: '#000000', padding: '0.1rem' }}></Icon>
-        </div>
-      </button>
+        <Button
+          disabled={disabledAdd}
+          icon={{
+            name: 'plus',
+            type: 'font-awesome',
+            size: 30,
+            color: 'black',
+          }}
+          iconRight
+          loading={false}
+          loadingProps={{ size: 'small', color: 'black' }}
+          buttonStyle={{
+            backgroundColor: 'white',
+            borderRadius: 5,
+          }}
+          containerStyle={{
+            marginHorizontal: '5vw',
+            width: '20vw',
+          }}
+          onPress={() => addAColumn()}
+        />
 
-      <button
-        disabled={disabledRemove}
-        onClick={removeLastColumn}
-        style={{
-          flex: 1,
-          margin: '0 10px',
-          backgroundColor: '#000000',
-          color: '#ffffff',
-          borderRadius: '5px',
-          padding: '10px 20px',
-          cursor: 'pointer',
-          fontSize: '16px',
-          opacity: disabledRemove ? 0.5 : 1,
-          border: '1px solid #ffffff',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Icon type="font-awesome" name="minus" style={{ color: '#ffffff', padding: '0.1rem' }}></Icon>
-          <Icon type="font-awesome" name="columns" style={{ color: '#ffffff', padding: '0.1rem' }}></Icon>
-        </div>
-      </button>
-    </div>
+        <Button
+          disabled={disabledRemove}
+          icon={{
+            name: 'minus',
+            type: 'font-awesome',
+            size: 30,
+            color: 'white',
+          }}
+          iconRight
+          loading={false}
+          loadingProps={{ size: 'small', color: 'white' }}
+          buttonStyle={{
+            borderColor: 'rgba(78, 116, 289, 1)',
+            backgroundColor: 'black',
+            borderRadius: 5,
+          }}
+          containerStyle={{
+            marginHorizontal: '5vw',
+            width: '20vw',
+          }}
+          onPress={() => removeLastColumn()}
+        />
+      </div>
+    </ThemedView>
   );
 }

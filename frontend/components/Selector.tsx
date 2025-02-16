@@ -42,18 +42,18 @@ export default function Selector({ data }) {
     }),
     dropdownIndicator: (base) => ({
       ...base,
-      padding: `${(targetHeight - 20 - 1 - 1) / 2}px`,
+      padding: `${(targetHeight - 20 - 1 - 1) / 3}px`,
     }),
   };
 
   return (
     <Select
-      // defaultValue={teamSelectedId}
+      defaultValue={teamSelectedId}
       placeholder={placeholder}
       isSearchable
       options={teams}
       onChange={changeTeam}
-      // styles={customStyles}
+      styles={customStyles}
     />
   );
 }

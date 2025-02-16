@@ -1,4 +1,3 @@
-import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { readableDate } from '../../utils/date';
 import { ScrollView } from 'react-native';
