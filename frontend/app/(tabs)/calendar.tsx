@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import Cards from '../../components/Cards';
 import Selector from '../../components/Selector';
 import Buttons from '../../components/Buttons';
+import { Button } from '@rneui/themed';
 
 const teamsSelected = ['NHL-NJD', 'NHL-CGY', 'NBA-PHX', 'MLB-ATL'];
 
@@ -74,7 +75,7 @@ export default function Calendar() {
         });
       }
     }
-    return <ThemedText>page in progress</ThemedText>;
+    return <Button title="Solid" disabled={true} type="solid" loading />;
   };
 
   useEffect(() => {
