@@ -1,31 +1,39 @@
-import Select from 'react-select';
-import React, { useEffect, useState } from 'react';
+import { Team } from '@/utils/types'
+import React, { useEffect, useState } from 'react'
+import Select from 'react-select'
 
-export default function Selector({ data }) {
-  const { teamsSelectedIds, activeTeams, i, teamSelectedId } = data;
-  let placeholder = activeTeams.filter((team: TeamType) => team.uniqueId === teamSelectedId)[0]?.label ?? '';
+interface SelectorProps {
+  data: {
+    teamsSelectedIds: string[]
+    activeTeams: Team[]
+    i: number
+    teamSelectedId: string
+  }
+  onTeamSelectionChange: (teamSelectedId: string, i: number) => void
+}
 
-  const [teams, setTeams] = useState<TeamDocument[]>([]);
-  const changeTeam = async (event: { value: string; label: string }) => {
-    console.log(event);
-  };
+export default function Selector({ data, onTeamSelectionChange }: Readonly<SelectorProps>) {
+  const { teamsSelectedIds, activeTeams, i, teamSelectedId } = data
+  let placeholder = activeTeams.filter((team: Team) => team.uniqueId === teamSelectedId)[0]?.label ?? ''
+
+  const [teams, setTeams] = useState<{ value: string; label: string }[]>([])
+
+  const changeTeam = (event: { value: string; label: string }) => {
+    onTeamSelectionChange(event.value, i)
+  }
 
   useEffect(() => {
-    async function fetchTeams() {
-      const selectableTeams = activeTeams
-        .filter((team: TeamType) => !teamsSelectedIds.includes(team.uniqueId))
-        .map(({ label, uniqueId }) => {
-          return { value: uniqueId, label };
-        })
-        .sort((a: TeamType, b: TeamType) => (a.label > b.label ? 1 : -1));
+    const selectableTeams = activeTeams
+      .filter((team: Team) => !teamsSelectedIds.includes(team.uniqueId))
+      .map(({ label, uniqueId }) => {
+        return { value: uniqueId, label }
+      })
+      .sort((a, b) => (a.label > b.label ? 1 : -1))
 
-      setTeams(selectableTeams);
-    }
+    setTeams(selectableTeams)
+  }, [activeTeams, teamsSelectedIds])
 
-    fetchTeams();
-  }, []);
-
-  const targetHeight = 65;
+  const targetHeight = 65
   const customStyles = {
     control: (base) => ({
       ...base,
@@ -44,16 +52,16 @@ export default function Selector({ data }) {
       ...base,
       padding: `${(targetHeight - 20 - 1 - 1) / 3}px`,
     }),
-  };
+  }
 
   return (
     <Select
-      defaultValue={teamSelectedId}
+      defaultValue={{ value: teamSelectedId, label: placeholder }}
       placeholder={placeholder}
       isSearchable
       options={teams}
       onChange={changeTeam}
       styles={customStyles}
     />
-  );
+  )
 }
