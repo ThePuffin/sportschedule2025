@@ -28,6 +28,7 @@ export interface Venue {
 export interface AwayTeam {
   id: number;
   placeName: PlaceName;
+  commonName: CommonName;
   abbrev: string;
   logo: string;
   darkLogo: string;
@@ -35,13 +36,17 @@ export interface AwayTeam {
   score: number;
 }
 
+export interface CommonName {
+  default: string;
+}
 export interface PlaceName {
   default: string;
 }
 
 export interface HomeTeam {
   id: number;
-  placeName: PlaceName2;
+  placeName: PlaceName;
+  commonName: CommonName;
   abbrev: string;
   logo: string;
   darkLogo: string;
@@ -49,10 +54,6 @@ export interface HomeTeam {
   hotelLink: string;
   hotelDesc: string;
   score: number;
-}
-
-export interface PlaceName2 {
-  default: string;
 }
 
 export interface PeriodDescriptor {
