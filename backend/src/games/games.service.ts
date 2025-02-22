@@ -19,6 +19,18 @@ export class GameService {
     private readonly teamService: TeamService,
   ) {}
 
+  getTeams = (teamSelectedIds, games) => {
+    if (teamSelectedIds) {
+      return teamSelectedIds.split(',');
+    }
+    return games.reduce((accumulator, currentItem) => {
+      if (!accumulator.includes(currentItem.teamSelectedId)) {
+        accumulator.push(currentItem.teamSelectedId);
+      }
+      return accumulator;
+    }, []);
+  };
+
   async getTeamsLogo(teams: TeamType[]): Promise<{ [key: string]: string }> {
     const logos = {};
     teams.forEach(({ abbrev, teamLogo }) => {
@@ -128,68 +140,62 @@ export class GameService {
       filter.teamSelectedId = { $in: teamSelected };
     }
 
-    const games = await this.gameModel
+    const filtredGames = await this.gameModel
       .find(filter)
       .sort({ startTimeUTC: 1 })
       .exec();
 
+    const games = Array.isArray(filtredGames) ? filtredGames : [];
     const gamesByDay = {};
-    if (games.length) {
-      const uniqueTeamSelectedIds = games.reduce((accumulator, currentItem) => {
-        if (!accumulator.includes(currentItem.teamSelectedId)) {
-          accumulator.push(currentItem.teamSelectedId);
-        }
-        return accumulator;
-      }, []);
-      const dates = games.map((game) => new Date(game.gameDate));
-      let minDate = new Date(Math.min(...dates.map((date) => date.getTime())));
-      let maxDate = new Date(Math.max(...dates.map((date) => date.getTime())));
-      minDate = new Date(startDate) > minDate ? minDate : new Date(startDate);
-      maxDate = new Date(endDate) < maxDate ? maxDate : new Date(endDate);
+    const uniqueTeamSelectedIds = this.getTeams(teamSelectedIds, games);
+    const dates = games.map((game) => new Date(game.gameDate));
+    let minDate = new Date(Math.min(...dates.map((date) => date.getTime())));
+    let maxDate = new Date(Math.max(...dates.map((date) => date.getTime())));
+    minDate = new Date(startDate) > minDate ? minDate : new Date(startDate);
+    maxDate = new Date(endDate) < maxDate ? maxDate : new Date(endDate);
 
-      for (let date = minDate; date <= maxDate; ) {
-        const currentDate = readableDate(date);
-        const gamesOfDay = [];
-        uniqueTeamSelectedIds.forEach((teamSelectedId) => {
-          const gameOfDay = games.filter(
-            (game) =>
-              game.gameDate === currentDate &&
-              game.teamSelectedId === teamSelectedId,
+    for (let date = minDate; date <= maxDate; ) {
+      const currentDate = readableDate(date);
+      const gamesOfDay = [];
+      uniqueTeamSelectedIds.forEach((teamSelectedId) => {
+        const gameOfDay = games.filter(
+          (game) =>
+            game.gameDate === currentDate &&
+            game.teamSelectedId === teamSelectedId,
+        );
+        if (!gameOfDay.length) {
+          gamesOfDay.push(
+            new this.gameModel({
+              _id: new mongoose.Types.ObjectId().toString(),
+              uniqueId: teamSelectedId + currentDate,
+              awayTeamId: '',
+              awayTeamShort: '',
+              awayTeam: '',
+              homeTeamId: '',
+              homeTeamShort: '',
+              homeTeam: '',
+              arenaName: '',
+              gameDate: currentDate,
+              teamSelectedId: teamSelectedId,
+              show: 'false',
+              selectedTeam: 'false',
+              league: '',
+              venueTimezone: '',
+              timeStart: '',
+              startTimeUTC: '',
+              updateDate: '',
+              __v: 0,
+              awayTeamLogo: '',
+              homeTeamLogo: '',
+            }),
           );
-          if (!gameOfDay.length) {
-            gamesOfDay.push(
-              new this.gameModel({
-                _id: new mongoose.Types.ObjectId().toString(),
-                uniqueId: teamSelectedId + currentDate,
-                awayTeamId: '',
-                awayTeamShort: '',
-                awayTeam: '',
-                homeTeamId: '',
-                homeTeamShort: '',
-                homeTeam: '',
-                arenaName: '',
-                gameDate: currentDate,
-                teamSelectedId: teamSelectedId,
-                show: 'false',
-                selectedTeam: 'false',
-                league: '',
-                venueTimezone: '',
-                timeStart: '',
-                startTimeUTC: '',
-                updateDate: '',
-                __v: 0,
-                awayTeamLogo: '',
-                homeTeamLogo: '',
-              }),
-            );
-          } else {
-            gamesOfDay.push(...gameOfDay);
-          }
-        });
+        } else {
+          gamesOfDay.push(...gameOfDay);
+        }
+      });
 
-        gamesByDay[currentDate] = gamesOfDay;
-        date = new Date(date.setDate(date.getDate() + 1));
-      }
+      gamesByDay[currentDate] = gamesOfDay;
+      date = new Date(date.setDate(date.getDate() + 1));
     }
 
     return gamesByDay;
