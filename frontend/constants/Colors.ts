@@ -199,7 +199,7 @@ export const Colors = {
     color: '#0076b6',
     backgroundColor: '#bbbbbb',
   },
-  'NFL-GB ': {
+  'NFL-GB': {
     color: '#204e32',
     backgroundColor: '#ffb612',
   },
@@ -215,11 +215,11 @@ export const Colors = {
     color: '#007487',
     backgroundColor: '#d7a22a',
   },
-  'NFL-KC ': {
+  'NFL-KC': {
     color: '#e31837',
     backgroundColor: '#ffb612',
   },
-  'NFL-LV ': {
+  'NFL-LV': {
     color: '#000000',
     backgroundColor: '#a5acaf',
   },
@@ -239,11 +239,11 @@ export const Colors = {
     color: '#4f2683',
     backgroundColor: '#ffc62f',
   },
-  'NFL-NE ': {
+  'NFL-NE': {
     color: '#002a5c',
     backgroundColor: '#c60c30',
   },
-  'NFL-NO ': {
+  'NFL-NO': {
     color: '#d3bc8d',
     backgroundColor: '#000000',
   },
@@ -263,7 +263,7 @@ export const Colors = {
     color: '#000000',
     backgroundColor: '#ffb612',
   },
-  'NFL-SF ': {
+  'NFL-SF': {
     color: '#aa0000',
     backgroundColor: '#b3995d',
   },
@@ -271,7 +271,7 @@ export const Colors = {
     color: '#002a5c',
     backgroundColor: '#69be28',
   },
-  'NFL-TB ': {
+  'NFL-TB': {
     color: '#bd1c36',
     backgroundColor: '#3e3a35',
   },
@@ -319,7 +319,7 @@ export const Colors = {
     color: '#1d428a',
     backgroundColor: '#c8102e',
   },
-  'NBA-GS ': {
+  'NBA-GS': {
     color: '#fdb927',
     backgroundColor: '#1d428a',
   },
@@ -355,11 +355,11 @@ export const Colors = {
     color: '#266092',
     backgroundColor: '#79bc43',
   },
-  'NBA-NO ': {
+  'NBA-NO': {
     color: '#0a2240',
     backgroundColor: '#b4975a',
   },
-  'NBA-NY ': {
+  'NBA-NY': {
     color: '#1d428a',
     backgroundColor: '#f58426',
   },
@@ -387,7 +387,7 @@ export const Colors = {
     color: '#5a2d81',
     backgroundColor: '#6a7a82',
   },
-  'NBA-SA ': {
+  'NBA-SA': {
     color: '#000000',
     backgroundColor: '#c4ced4',
   },
@@ -447,7 +447,7 @@ export const Colors = {
     color: '#002d62',
     backgroundColor: '#eb6e1f',
   },
-  'MLB-KC ': {
+  'MLB-KC': {
     color: '#004687',
     backgroundColor: '#7ab2dd',
   },
@@ -491,11 +491,11 @@ export const Colors = {
     color: '#000000',
     backgroundColor: '#fdb827',
   },
-  'MLB-SD ': {
+  'MLB-SD': {
     color: '#3e2312',
     backgroundColor: '#ffc425',
   },
-  'MLB-SF ': {
+  'MLB-SF': {
     color: '#000000',
     backgroundColor: '#fd5a1e',
   },
@@ -507,7 +507,7 @@ export const Colors = {
     color: '#be0a14',
     backgroundColor: '#001541',
   },
-  'MLB-TB ': {
+  'MLB-TB': {
     color: '#092c5c',
     backgroundColor: '#8fbce6',
   },
