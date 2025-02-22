@@ -7,7 +7,8 @@ import Cards from '../../components/Cards';
 import Selector from '../../components/Selector';
 import { readableDate } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
-import { randomNumber } from '../../utils/utils';
+import { randomNumber, addNewTeamId, removeLastTeamId } from '../../utils/utils';
+import { ButtonsKind } from '../../constants/enum.ts';
 
 export default function Calendar() {
   const [games, setGames] = useState<FilterGames>({});
@@ -19,11 +20,7 @@ export default function Calendar() {
     //TODO: get datas from storage
     if (!selection.length) {
       while (selection.length < 2) {
-        const randomId = allTeams[randomNumber(allTeams.length) - 1]?.uniqueId;
-
-        if (randomId && !selection.includes(randomId)) {
-          selection.push(randomId);
-        }
+        addNewTeamId(selection, allTeams);
       }
     }
     setTeamsSelected(selection);
@@ -53,7 +50,8 @@ export default function Calendar() {
             ','
           )}`
         );
-        return await response.json();
+        const gamesData = await response.json();
+        setGames(gamesData);
       } catch (error) {
         console.error(error);
         return {};
@@ -68,6 +66,25 @@ export default function Calendar() {
       newTeamsSelected[i] = teamSelectedId;
       return newTeamsSelected;
     });
+  };
+
+  const handleButtonClick = (clickedButton: string) => {
+    switch (clickedButton) {
+      case ButtonsKind.ADDTEAM:
+        setTeamsSelected(addNewTeamId(teamsSelected, teams));
+        getGamesFromApi();
+        break;
+      case ButtonsKind.REMOVETEAM:
+        setTeamsSelected(removeLastTeamId(teamsSelected));
+        getGamesFromApi();
+        break;
+      case ButtonsKind.REMOVEGAMES:
+        // TODO: REMOVE ALL GAMES WHEN AVAILABLE
+        console.log('TODO');
+        break;
+      default:
+        break;
+    }
   };
 
   const displayTeamSelector = () => {
@@ -118,8 +135,7 @@ export default function Calendar() {
   useEffect(() => {
     if (teamsSelected.length > 0) {
       async function fetchGames() {
-        const gamesData = await getGamesFromApi();
-        setGames(gamesData);
+        await getGamesFromApi();
       }
       fetchGames();
     }
@@ -127,7 +143,7 @@ export default function Calendar() {
 
   return (
     <ScrollView>
-      <Buttons />
+      <Buttons onClicks={handleButtonClick} />
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>
           <tr>{displayTeamSelector()}</tr>

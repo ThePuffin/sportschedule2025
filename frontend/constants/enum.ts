@@ -5,3 +5,9 @@ export enum League {
   NHL = 'NHL',
   NFL = 'NFL',
 }
+
+export enum ButtonsKind {
+  ADDTEAM = 'add team',
+  REMOVETEAM = 'remove team',
+  REMOVEGAMES = 'remove games',
+}

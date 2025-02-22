@@ -1,21 +1,22 @@
 import { ThemedView } from '@/components/ThemedView';
 import { Button } from '@rneui/themed';
+import { ButtonsKind } from '../constants/enum.ts';
 
-export default function Buttons({}) {
+interface ButtonsProps {
+  onClicks: (clickedButton: string) => void;
+}
+
+export default function Buttons({ onClicks }: Readonly<ButtonProps>) {
   const isGamesSelected = false;
   const disabledAdd = false;
   const disabledRemove = false;
 
   const removeAllGames = () => {
-    console.log('removeAllgames');
+    onClicks(ButtonsKind.REMOVEGAMES);
   };
 
   const addAColumn = () => {
-    console.log('addAColumn');
-  };
-
-  const removeLastColumn = () => {
-    console.log('removeLastColumn');
+    onClicks(ButtonsKind.ADDTEAM);
   };
 
   return (
@@ -85,7 +86,7 @@ export default function Buttons({}) {
             marginHorizontal: '5vw',
             width: '20vw',
           }}
-          onPress={() => removeLastColumn()}
+          onPress={() => onClicks(ButtonsKind.REMOVETEAM)}
         />
       </div>
     </ThemedView>
