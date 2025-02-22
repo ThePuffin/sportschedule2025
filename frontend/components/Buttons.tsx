@@ -3,21 +3,14 @@ import { Button } from '@rneui/themed';
 import { ButtonsKind } from '../constants/enum.ts';
 
 interface ButtonsProps {
+  data: { selectedNumber: number };
   onClicks: (clickedButton: string) => void;
 }
 
-export default function Buttons({ onClicks }: Readonly<ButtonProps>) {
-  const isGamesSelected = false;
-  const disabledAdd = false;
-  const disabledRemove = false;
-
-  const removeAllGames = () => {
-    onClicks(ButtonsKind.REMOVEGAMES);
-  };
-
-  const addAColumn = () => {
-    onClicks(ButtonsKind.ADDTEAM);
-  };
+export default function Buttons({ data = {}, onClicks }: Readonly<ButtonProps>) {
+  let isGamesSelected = false;
+  let disabledAdd = data?.selectedNumber >= 6 ?? false;
+  let disabledRemove = data?.selectedNumber <= 2 ?? true;
 
   return (
     <ThemedView>
@@ -41,7 +34,7 @@ export default function Buttons({ onClicks }: Readonly<ButtonProps>) {
             marginHorizontal: '5vw',
             width: '20vw',
           }}
-          onPress={() => removeAllGames()}
+          onPress={() => onClicks(ButtonsKind.REMOVEGAMES)}
         />
 
         <Button
@@ -63,7 +56,7 @@ export default function Buttons({ onClicks }: Readonly<ButtonProps>) {
             marginHorizontal: '5vw',
             width: '20vw',
           }}
-          onPress={() => addAColumn()}
+          onPress={() => onClicks(ButtonsKind.ADDTEAM)}
         />
 
         <Button

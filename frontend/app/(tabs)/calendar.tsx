@@ -68,10 +68,11 @@ export default function Calendar() {
     });
   };
 
-  const handleButtonClick = (clickedButton: string) => {
+  const handleButtonClick = async (clickedButton: string) => {
     switch (clickedButton) {
       case ButtonsKind.ADDTEAM:
         setTeamsSelected(addNewTeamId(teamsSelected, teams));
+
         getGamesFromApi();
         break;
       case ButtonsKind.REMOVETEAM:
@@ -80,7 +81,6 @@ export default function Calendar() {
         break;
       case ButtonsKind.REMOVEGAMES:
         // TODO: REMOVE ALL GAMES WHEN AVAILABLE
-        console.log('TODO');
         break;
       default:
         break;
@@ -143,7 +143,7 @@ export default function Calendar() {
 
   return (
     <ScrollView>
-      <Buttons onClicks={handleButtonClick} />
+      <Buttons onClicks={handleButtonClick} data={{ selectedNumber: teamsSelected.length }} />
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>
           <tr>{displayTeamSelector()}</tr>

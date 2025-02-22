@@ -2,21 +2,30 @@ import React from 'react';
 
 import { Card } from '@rneui/base';
 import { View, Image, Text } from 'react-native';
+import { Colors } from '../constants/Colors.ts';
 
 export default function Cards({ data, showDate }) {
-  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, gameDate } = data;
+  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, gameDate, teamSelectedId, show } = data;
+
+  let cardClass =
+    show === 'true'
+      ? Colors[teamSelectedId]
+      : {
+          cursor: 'none',
+          pointerEvents: 'none',
+        };
 
   const displayTitle = () => {
     if (arenaName && arenaName !== '') {
       if (showDate) {
         return (
-          <Card.Title>
+          <Card.Title style={cardClass}>
             <em>{gameDate}</em> {timeStart} @ {arenaName}
           </Card.Title>
         );
       }
       return (
-        <Card.Title>
+        <Card.Title style={cardClass}>
           {timeStart} @ {arenaName}
         </Card.Title>
       );
@@ -33,7 +42,7 @@ export default function Cards({ data, showDate }) {
             alignItems: 'center',
           }}
         >
-          <Text>{homeTeam}</Text>
+          <Text style={cardClass}>{homeTeam}</Text>
           <Image
             style={{ width: '50%', height: 50 }}
             resizeMode="contain"
@@ -41,7 +50,7 @@ export default function Cards({ data, showDate }) {
               uri: homeTeamLogo,
             }}
           />
-          <Text>vs</Text>
+          <Text style={cardClass}>vs</Text>
           <Image
             style={{ width: '50%', height: 50 }}
             resizeMode="contain"
@@ -49,7 +58,7 @@ export default function Cards({ data, showDate }) {
               uri: awayTeamLogo,
             }}
           />
-          <Text>{awayTeam}</Text>
+          <Text style={cardClass}>{awayTeam}</Text>
         </View>
       );
     }
@@ -64,8 +73,8 @@ export default function Cards({ data, showDate }) {
   };
 
   return (
-    <div>
-      <Card containerStyle={{ height: 250 }} wrapperStyle={{}}>
+    <div className={cardClass}>
+      <Card containerStyle={{ height: 250, ...cardClass }} wrapperStyle={cardClass}>
         <Card.Title
           style={{
             height: 42,
