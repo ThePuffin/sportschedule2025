@@ -3,8 +3,16 @@ import React from 'react';
 import { Card } from '@rneui/base';
 import { View, Image, Text } from 'react-native';
 import { Colors } from '../constants/Colors.ts';
+import { GameFormatted } from '../utils/types.ts';
 
-export default function Cards({ data, showDate }) {
+interface CardsProps {
+  data: GameFormatted;
+  showDate: boolean;
+  showName: boolean;
+  onSelection: (game: GameFormatted) => void;
+}
+
+export default function Cards({ data, showDate, showName = true, onSelection = {} }: Readonly<CardsProps>) {
   const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, gameDate, teamSelectedId, show } = data;
 
   let cardClass =
@@ -42,7 +50,7 @@ export default function Cards({ data, showDate }) {
             alignItems: 'center',
           }}
         >
-          <Text style={cardClass}>{homeTeam}</Text>
+          {showName ? <Text style={cardClass}>{homeTeam}</Text> : null}
           <Image
             style={{ width: '50%', height: 50 }}
             resizeMode="contain"
@@ -58,7 +66,7 @@ export default function Cards({ data, showDate }) {
               uri: awayTeamLogo,
             }}
           />
-          <Text style={cardClass}>{awayTeam}</Text>
+          {showName ? <Text style={cardClass}>{awayTeam}</Text> : null}
         </View>
       );
     }
@@ -74,7 +82,7 @@ export default function Cards({ data, showDate }) {
 
   return (
     <div className={cardClass}>
-      <Card containerStyle={{ height: 250, ...cardClass }} wrapperStyle={cardClass}>
+      <Card onClick={() => onSelection(data)} containerStyle={{ height: 250, ...cardClass }} wrapperStyle={cardClass}>
         <Card.Title
           style={{
             height: 42,

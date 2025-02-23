@@ -12,7 +12,7 @@ export const addNewTeamId = (selection: string[], teams: Team[]) => {
   return selection;
 };
 
-export const removeLastTeamId = (selection) => {
+export const removeLastTeamId = (selection: string[]) => {
   selection.pop();
   return selection;
 };

@@ -496,8 +496,8 @@ export const Colors = {
     backgroundColor: '#ffc425',
   },
   'MLB-SF': {
-    color: '#000000',
-    backgroundColor: '#fd5a1e',
+    color: '#fd5a1e',
+    backgroundColor: '#000000',
   },
   'MLB-SEA': {
     color: '#005c5c',

@@ -14,6 +14,7 @@ export default function Calendar() {
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
+  const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
 
   const getSelectedTeams = (allTeams) => {
     const selection = [];
@@ -68,15 +69,35 @@ export default function Calendar() {
     });
   };
 
+  const handleGamesSelection = async (game: GameFormatted) => {
+    let newSelection = [...gamesSelected];
+
+    const wasAdded = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
+
+    if (wasAdded) {
+      newSelection = newSelection.filter((gameSelect) => gameSelect._id != game._id);
+    } else {
+      newSelection.push(game);
+      newSelection = newSelection.sort((a, b) => {
+        return new Date(a.gameDate) - new Date(b.gameDate);
+      });
+    }
+
+    setGamesSelected(newSelection);
+  };
+
   const handleButtonClick = async (clickedButton: string) => {
     switch (clickedButton) {
       case ButtonsKind.ADDTEAM:
         setTeamsSelected(addNewTeamId(teamsSelected, teams));
-
         getGamesFromApi();
         break;
       case ButtonsKind.REMOVETEAM:
-        setTeamsSelected(removeLastTeamId(teamsSelected));
+        const newTeamsSelection = removeLastTeamId(teamsSelected);
+        setTeamsSelected(newTeamsSelection);
+        setGamesSelected(
+          gamesSelected.filter((gameSelected) => newTeamsSelection.includes(gameSelected.teamSelectedId))
+        );
         getGamesFromApi();
         break;
       case ButtonsKind.REMOVEGAMES:
@@ -101,6 +122,18 @@ export default function Calendar() {
     });
   };
 
+  const displayGamesSelected = () => {
+    return gamesSelected.map((gameSelected, i) => {
+      return (
+        <td key={gameSelected.gameId}>
+          <ThemedView>
+            <Cards data={gameSelected} showDate={true} showName={false} onSelection={handleGamesSelection} />
+          </ThemedView>
+        </td>
+      );
+    });
+  };
+
   const displayGamesCards = (teamSelectedId: string) => {
     if (games) {
       const days = Object.keys(games) || [];
@@ -112,7 +145,7 @@ export default function Calendar() {
             return (
               <td key={gameId}>
                 <ThemedView>
-                  <Cards data={game} showDate={true} />
+                  <Cards data={game} showDate={true} onSelection={handleGamesSelection} />
                 </ThemedView>
               </td>
             );
@@ -143,6 +176,11 @@ export default function Calendar() {
 
   return (
     <ScrollView>
+      <table style={{ tableLayout: 'fixed', width: '100%' }}>
+        <tbody>
+          <tr>{displayGamesSelected()}</tr>
+        </tbody>
+      </table>
       <Buttons onClicks={handleButtonClick} data={{ selectedNumber: teamsSelected.length }} />
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>
