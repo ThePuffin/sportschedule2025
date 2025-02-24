@@ -119,12 +119,12 @@ export class HockeyData {
 
         return {
           uniqueId: `${value}-${gameDate}-1`,
-          awayTeamId: awayTeam.abbrev,
+          awayTeamId: `${leagueName}-${awayTeam.abbrev}`,
           awayTeam: `${awayTeam.placeName.default} ${awayTeam.commonName.default}`,
           awayTeamShort: awayTeam.abbrev,
           awayTeamLogo: leagueLogos[awayTeam.abbrev],
           homeTeam: `${homeTeam.placeName.default} ${homeTeam.commonName.default}`,
-          homeTeamId: homeTeam.abbrev,
+          homeTeamId: `${leagueName}-${homeTeam.abbrev}`,
           homeTeamShort: homeTeam.abbrev,
           homeTeamLogo: leagueLogos[homeTeam.abbrev],
           arenaName: venue?.default || '',

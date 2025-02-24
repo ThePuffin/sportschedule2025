@@ -84,7 +84,7 @@ export class GameService {
     let currentGames = {};
     const teams = await this.teamService.getTeams();
     const leagues = Array.from(new Set(teams.map((team) => team.league)));
-    
+
     for (const league of leagues) {
       currentGames = {
         ...currentGames,
@@ -211,11 +211,15 @@ export class GameService {
 
     if (!games.length) {
       const allGames = await this.findAll();
-      return allGames.filter((game) => game.gameDate === gameDate);
+      return allGames.filter(({ homeTeamId, teamSelectedId }) => {
+        return homeTeamId === teamSelectedId;
+      });
     }
 
     // avoid dupplicate games
-    return [...new Map(games.map((game) => [game.homeTeam, game])).values()];
+    return games.filter(({ homeTeamId, teamSelectedId }) => {
+      return homeTeamId === teamSelectedId;
+    });
   }
 
   update(uniqueId: string, updateGameDto: UpdateGameDto) {
