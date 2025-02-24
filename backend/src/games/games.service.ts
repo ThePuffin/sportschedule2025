@@ -10,7 +10,7 @@ import { UpdateGameDto } from './dto/update-game.dto';
 import { Game } from './schemas/game.schema';
 import { TeamType } from '../utils/interface/team';
 import { readableDate } from '../utils/date';
-const mongoose = require('mongoose');
+import * as mongoose from 'mongoose';
 
 @Injectable()
 export class GameService {
@@ -82,8 +82,9 @@ export class GameService {
 
   async getAllGames(): Promise<Game[]> {
     let currentGames = {};
-
-    const leagues = [League.NFL, League.NBA, League.MLB, League.NHL];
+    const teams = await this.teamService.getTeams();
+    const leagues = Array.from(new Set(teams.map((team) => team.league)));
+    
     for (const league of leagues) {
       currentGames = {
         ...currentGames,
