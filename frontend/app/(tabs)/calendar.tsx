@@ -1,3 +1,4 @@
+import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
 import { Button } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
@@ -5,16 +6,26 @@ import { ScrollView } from 'react-native';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import Selector from '../../components/Selector';
+import { ButtonsKind } from '../../constants/enum';
 import { readableDate } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
-import { randomNumber, addNewTeamId, removeLastTeamId } from '../../utils/utils';
-import { ButtonsKind } from '../../constants/enum.ts';
+import { addNewTeamId, randomNumber, removeLastTeamId } from '../../utils/utils';
 
 export default function Calendar() {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 7);
+
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
+  const [dateRange, setDateRange] = useState({ startDate: now, endDate: tomorrow });
+
+  const handleDateChange = (startDate, endDate) => {
+    setDateRange({ startDate, endDate });
+    getGamesFromApi(startDate, endDate);
+  };
 
   const getSelectedTeams = (allTeams) => {
     const selection = [];
@@ -39,15 +50,18 @@ export default function Calendar() {
     }
   };
 
-  const getGamesFromApi = async (): Promise<FilterGames> => {
+  const getGamesFromApi = async (startDate: string, endDate: string): Promise<FilterGames> => {
     if (teamsSelected && teamsSelected.length !== 0) {
-      const now = new Date();
-      const startDate = readableDate(now);
-      const endDate = readableDate(new Date(now.setMonth(now.getMonth() + 1)));
+      let start = readableDate(dateRange.startDate);
+      let end = readableDate(dateRange.endDate);
+      if (startDate && endDate) {
+        start = readableDate(startDate);
+        end = readableDate(endDate);
+      }
 
       try {
         const response = await fetch(
-          `http://localhost:3000/games/filter?startDate=${startDate}&endDate=${endDate}&teamSelectedIds=${teamsSelected.join(
+          `http://localhost:3000/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${teamsSelected.join(
             ','
           )}`
         );
@@ -181,6 +195,7 @@ export default function Calendar() {
           <tr>{displayGamesSelected()}</tr>
         </tbody>
       </table>
+      <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
       <Buttons onClicks={handleButtonClick} data={{ selectedNumber: teamsSelected.length }} />
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>

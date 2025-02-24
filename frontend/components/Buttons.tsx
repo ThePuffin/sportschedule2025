@@ -1,16 +1,16 @@
 import { ThemedView } from '@/components/ThemedView';
 import { Button } from '@rneui/themed';
-import { ButtonsKind } from '../constants/enum.ts';
+import { ButtonsKind } from '../constants/enum';
 
 interface ButtonsProps {
   data: { selectedNumber: number };
   onClicks: (clickedButton: string) => void;
 }
 
-export default function Buttons({ data = {}, onClicks }: Readonly<ButtonProps>) {
+export default function Buttons({ data = { selectedNumber: null }, onClicks }: Readonly<ButtonProps>) {
   let isGamesSelected = false;
-  let disabledAdd = data?.selectedNumber >= 6 ?? false;
-  let disabledRemove = data?.selectedNumber <= 2 ?? true;
+  let disabledAdd = data.selectedNumber >= 6;
+  let disabledRemove = data.selectedNumber <= 2;
 
   return (
     <ThemedView>
