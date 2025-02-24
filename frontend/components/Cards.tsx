@@ -17,23 +17,22 @@ export default function Cards({ data, showDate, showName = true, onSelection = {
 
   let cardClass =
     show === 'true'
-      ? Colors[teamSelectedId]
+      ? {
+          cursor: 'pointer',
+          ...Colors[teamSelectedId],
+        }
       : {
-          cursor: 'none',
+          cursor: 'no-drop',
+          opacity: '0.97',
           pointerEvents: 'none',
+          backgroundColor: '#ffffee',
         };
 
   const displayTitle = () => {
     if (arenaName && arenaName !== '') {
-      if (showDate) {
-        return (
-          <Card.Title style={cardClass}>
-            <em>{gameDate}</em> {timeStart} @ {arenaName}
-          </Card.Title>
-        );
-      }
       return (
         <Card.Title style={cardClass}>
+          {showDate && <em>{gameDate} </em>}
           {timeStart} @ {arenaName}
         </Card.Title>
       );
@@ -50,15 +49,6 @@ export default function Cards({ data, showDate, showName = true, onSelection = {
             alignItems: 'center',
           }}
         >
-          {showName ? <Text style={cardClass}>{homeTeam}</Text> : null}
-          <Image
-            style={{ width: '50%', height: 50 }}
-            resizeMode="contain"
-            source={{
-              uri: homeTeamLogo,
-            }}
-          />
-          <Text style={cardClass}>vs</Text>
           <Image
             style={{ width: '50%', height: 50 }}
             resizeMode="contain"
@@ -67,6 +57,15 @@ export default function Cards({ data, showDate, showName = true, onSelection = {
             }}
           />
           {showName ? <Text style={cardClass}>{awayTeam}</Text> : null}
+          <Text style={cardClass}>@</Text>
+          {showName ? <Text style={cardClass}>{homeTeam}</Text> : null}
+          <Image
+            style={{ width: '50%', height: 50 }}
+            resizeMode="contain"
+            source={{
+              uri: homeTeamLogo,
+            }}
+          />
         </View>
       );
     }

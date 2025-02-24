@@ -11,9 +11,12 @@ interface DateRange {
 interface DateRangePickerProps {
   onDateChange: (startDate: Date, endDate: Date) => void;
   dateRange: DateRange;
+  noEnd: boolean;
 }
 
-export default function DateRangePicker({ onDateChange, dateRange }: Readonly<DateRangePickerProps>) {
+export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Readonly<DateRangePickerProps>) {
+  const now = new Date();
+  const inOneYear = now.setFullYear(now.getFullYear() + 1);
   const { startDate: start, endDate: end } = dateRange;
 
   const [startDate, setStartDate] = useState(start);
@@ -30,31 +33,47 @@ export default function DateRangePicker({ onDateChange, dateRange }: Readonly<Da
   };
 
   return (
-    <div className="date-range-picker">
-      <div className="date-picker-container">
-        <DatePicker
-          selected={startDate}
-          onChange={handleStartDateChange}
-          selectsStart
-          startDate={startDate}
-          endDate={endDate}
-          minDate={new Date()}
-          placeholderText="Select start date"
-          className="custom-datepicker"
-        />
-      </div>
-      <div className="date-picker-container">
-        <DatePicker
-          selected={endDate}
-          onChange={handleEndDateChange}
-          selectsEnd
-          startDate={startDate}
-          endDate={endDate}
-          minDate={startDate}
-          placeholderText="Select end date"
-          className="custom-datepicker"
-        />
-      </div>
-    </div>
+    <>
+      {!noEnd && (
+        <div className="date-range-picker">
+          <div className="date-picker-container">
+            <DatePicker
+              selected={startDate}
+              onChange={handleStartDateChange}
+              selectsStart
+              startDate={startDate}
+              endDate={endDate}
+              minDate={new Date()}
+              maxDate={now}
+              className="custom-datepicker"
+            />
+          </div>
+          <div className="date-picker-container">
+            <DatePicker
+              selected={endDate}
+              onChange={handleEndDateChange}
+              selectsEnd
+              startDate={startDate}
+              endDate={endDate}
+              minDate={startDate}
+              className="custom-datepicker"
+            />
+          </div>
+        </div>
+      )}
+      {noEnd && (
+        <div className="date-range-picker">
+          <div className="date-picker-container">
+            <DatePicker
+              selected={startDate}
+              onChange={handleStartDateChange}
+              minDate={new Date()}
+              maxDate={inOneYear}
+              className="custom-datepicker"
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

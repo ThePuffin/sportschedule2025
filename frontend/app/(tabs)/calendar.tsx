@@ -1,6 +1,6 @@
 import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
-import { Button } from '@rneui/themed';
+import Loader from '../../components/Loader';
 import React, { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
 import Buttons from '../../components/Buttons';
@@ -168,7 +168,7 @@ export default function Calendar() {
         });
       }
     }
-    return <Button title="Solid" disabled={true} type="solid" loading />;
+    return <Loader />;
   };
 
   useEffect(() => {
@@ -195,7 +195,7 @@ export default function Calendar() {
           <tr>{displayGamesSelected()}</tr>
         </tbody>
       </table>
-      <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
+      <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={false} />
       <Buttons onClicks={handleButtonClick} data={{ selectedNumber: teamsSelected.length }} />
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>

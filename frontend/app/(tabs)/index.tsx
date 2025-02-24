@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
+import Loader from '../../components/Loader';
+import DateRangePicker from '../../components/DatePicker';
 
 interface GameFormatted {
   _id: string;
@@ -27,23 +29,28 @@ interface GameFormatted {
   startTimeUTC?: string;
 }
 
-const getGamesFromApi = async (): Promise<GameFormatted[]> => {
-  const now = new Date();
-  const YYYYMMDD = now.toISOString().split('T')[0];
-
-  try {
-    const response = await fetch(`http://localhost:3000/games/date/${YYYYMMDD}`);
-    const todayGames = await response.json();
-
-    return todayGames;
-  } catch (error) {
-    console.error(error);
-    return;
-  }
-};
-
 export default function GameofTheDay() {
+  const getGamesFromApi = async (date): Promise<GameFormatted[]> => {
+    const YYYYMMDD = new Date(date).toISOString().split('T')[0];
+
+    try {
+      const response = await fetch(`http://localhost:3000/games/date/${YYYYMMDD}`);
+      const dayGames = await response.json();
+      setGames(dayGames);
+    } catch (error) {
+      console.error(error);
+      return;
+    }
+  };
+
+  const currentDate = new Date();
   const [games, setGames] = useState<GameFormatted[]>([]);
+  const [dateRange, setDateRange] = useState({ startDate: currentDate, endDate: currentDate });
+
+  const handleDateChange = (startDate, endDate) => {
+    setDateRange({ startDate, endDate });
+    getGamesFromApi(startDate);
+  };
   const leagues = Object.keys(League)
     .filter((item) => {
       return isNaN(Number(item));
@@ -52,7 +59,11 @@ export default function GameofTheDay() {
 
   const displayContent = () => {
     if (!games || games.length === 0) {
-      return <ThemedText>No data available</ThemedText>;
+      return (
+        <div style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
+          <Loader></Loader>
+        </div>
+      );
     }
     return leagues.map((league, i) => {
       let gamesFiltred = [...games];
@@ -65,14 +76,14 @@ export default function GameofTheDay() {
 
   useEffect(() => {
     async function fetchGames() {
-      const gamesData = await getGamesFromApi();
-      setGames(gamesData);
+      await getGamesFromApi(dateRange.startDate);
     }
     fetchGames();
   }, []);
 
   return (
     <>
+      <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={true} />
       <ScrollView>
         <ThemedView>{displayContent()}</ThemedView>
       </ScrollView>

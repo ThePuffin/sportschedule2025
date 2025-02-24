@@ -72,8 +72,8 @@ export const Colors = {
     backgroundColor: '#c8102e',
   },
   'NHL-TBL': {
-    color: '#ffffff',
-    backgroundColor: '#002868',
+    color: '#002868',
+    backgroundColor: '#ffffff',
   },
   'NHL-WSH': {
     color: '#c8102e',
