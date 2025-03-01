@@ -3,14 +3,17 @@ import { Button } from '@rneui/themed';
 import { ButtonsKind } from '../constants/enum';
 
 interface ButtonsProps {
-  data: { selectedNumber: number };
+  data: { selectedTeamsNumber: number; selectedGamesNumber: number };
   onClicks: (clickedButton: string) => void;
 }
 
-export default function Buttons({ data = { selectedNumber: null }, onClicks }: Readonly<ButtonProps>) {
-  let isGamesSelected = false;
-  let disabledAdd = data.selectedNumber >= 6;
-  let disabledRemove = data.selectedNumber <= 2;
+export default function Buttons({
+  data = { selectedTeamsNumber: null, selectedGamesNumber },
+  onClicks,
+}: Readonly<ButtonsProps>) {
+  let disabledAdd = data.selectedTeamsNumber >= 6;
+  let disabledRemove = data.selectedTeamsNumber <= 2;
+  let isGamesSelected = data.selectedGamesNumber > 0;
 
   return (
     <ThemedView>

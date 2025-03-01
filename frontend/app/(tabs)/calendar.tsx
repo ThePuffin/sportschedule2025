@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
+import GamesSelected from '../../components/GamesSelected';
 import Selector from '../../components/Selector';
 import { ButtonsKind } from '../../constants/enum';
 import { readableDate, addDays } from '../../utils/date';
@@ -15,11 +16,11 @@ export default function Calendar() {
   const now = new Date();
   const tomorrow = addDays(now, 7);
 
+  const [dateRange, setDateRange] = useState({ startDate: now, endDate: tomorrow });
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
-  const [dateRange, setDateRange] = useState({ startDate: now, endDate: tomorrow });
 
   const handleDateChange = (startDate, endDate) => {
     getGamesFromApi(startDate, endDate);
@@ -82,23 +83,6 @@ export default function Calendar() {
     });
   };
 
-  const handleGamesSelection = async (game: GameFormatted) => {
-    let newSelection = [...gamesSelected];
-
-    const wasAdded = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
-
-    if (wasAdded) {
-      newSelection = newSelection.filter((gameSelect) => gameSelect._id != game._id);
-    } else {
-      newSelection.push(game);
-      newSelection = newSelection.sort((a, b) => {
-        return new Date(a.gameDate) - new Date(b.gameDate);
-      });
-    }
-
-    setGamesSelected(newSelection);
-  };
-
   const handleButtonClick = async (clickedButton: string) => {
     switch (clickedButton) {
       case ButtonsKind.ADDTEAM:
@@ -113,12 +97,29 @@ export default function Calendar() {
         getGamesFromApi();
         break;
       case ButtonsKind.REMOVEGAMES:
-        // TODO: REMOVE ALL GAMES WHEN AVAILABLE
+        setGamesSelected([]);
         break;
       default:
         break;
     }
   };
+   const handleGamesSelection = async (game: GameFormatted) => {
+     let newSelection = [...gamesSelected];
+
+     const wasAdded = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
+
+     if (wasAdded) {
+       newSelection = newSelection.filter((gameSelect) => gameSelect._id != game._id);
+     } else {
+       newSelection.push(game);
+       newSelection = newSelection.sort((a, b) => {
+         return new Date(a.gameDate) - new Date(b.gameDate);
+       });
+     }
+
+     setGamesSelected(newSelection);
+   };
+
 
   const displayTeamSelector = () => {
     return teamsSelected.map((teamSelectedId, i) => {
@@ -128,18 +129,6 @@ export default function Calendar() {
           <ThemedView>
             <Selector data={data} onTeamSelectionChange={handleTeamSelectionChange} />
             {displayGamesCards(teamSelectedId)}
-          </ThemedView>
-        </td>
-      );
-    });
-  };
-
-  const displayGamesSelected = () => {
-    return gamesSelected.map((gameSelected, i) => {
-      return (
-        <td key={gameSelected.gameId}>
-          <ThemedView>
-            <Cards data={gameSelected} showDate={true} showName={false} onSelection={handleGamesSelection} />
           </ThemedView>
         </td>
       );
@@ -188,13 +177,12 @@ export default function Calendar() {
 
   return (
     <ScrollView>
-      <table style={{ tableLayout: 'fixed', width: '100%' }}>
-        <tbody>
-          <tr>{displayGamesSelected()}</tr>
-        </tbody>
-      </table>
       <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={false} />
-      <Buttons onClicks={handleButtonClick} data={{ selectedNumber: teamsSelected.length }} />
+      <Buttons
+        onClicks={handleButtonClick}
+        data={{ selectedTeamsNumber: teamsSelected.length, selectedGamesNumber: gamesSelected.length }}
+      />
+      {!!gamesSelected.length && <GamesSelected onAction={handleGamesSelection} data={gamesSelected} />}
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>
           <tr>{displayTeamSelector()}</tr>
