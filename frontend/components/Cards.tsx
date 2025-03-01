@@ -10,16 +10,24 @@ interface CardsProps {
   showDate: boolean;
   showName: boolean;
   onSelection: (game: GameFormatted) => void;
+  selected: boolean;
 }
 
-export default function Cards({ data, showDate, showName = true, onSelection = {} }: Readonly<CardsProps>) {
+export default function Cards({
+  data,
+  showDate,
+  showName = true,
+  onSelection = {},
+  selected = true,
+}: Readonly<CardsProps>) {
   const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, gameDate, teamSelectedId, show } = data;
 
+  const teamColors = Colors[teamSelectedId];
   let cardClass =
     show === 'true'
       ? {
           cursor: 'pointer',
-          ...Colors[teamSelectedId],
+          ...teamColors,
         }
       : {
           cursor: 'no-drop',
@@ -27,6 +35,8 @@ export default function Cards({ data, showDate, showName = true, onSelection = {
           pointerEvents: 'none',
           backgroundColor: '#ffffee',
         };
+
+  let selectedCard = selected ? { filter: 'brightness(1.25) saturate(1.5)', border: 'double' + teamColors.color } : {};
 
   const displayTitle = () => {
     if (arenaName && arenaName !== '') {
@@ -81,7 +91,11 @@ export default function Cards({ data, showDate, showName = true, onSelection = {
 
   return (
     <div className={cardClass}>
-      <Card onClick={() => onSelection(data)} containerStyle={{ height: 250, ...cardClass }} wrapperStyle={cardClass}>
+      <Card
+        onClick={() => onSelection(data)}
+        containerStyle={{ height: 250, ...selectedCard, ...cardClass }}
+        wrapperStyle={cardClass}
+      >
         <Card.Title
           style={{
             height: 42,

@@ -13,7 +13,13 @@ export default function GamesSelected({ data = { gamesSelected }, onAction }) {
       return (
         <td key={gameSelected.gameId}>
           <ThemedView>
-            <Cards data={gameSelected} showDate={true} showName={false} onSelection={() => onAction(gameSelected)} />
+            <Cards
+              data={gameSelected}
+              selected={false}
+              showDate={true}
+              showName={false}
+              onSelection={() => onAction(gameSelected)}
+            />
           </ThemedView>
         </td>
       );

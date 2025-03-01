@@ -139,10 +139,11 @@ export default function Calendar() {
           const game = games[day].find((game: GameFormatted) => game.teamSelectedId === teamSelectedId);
           if (game) {
             const gameId = game?._id ?? randomNumber(999999);
+            const isSelected = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
             return (
               <td key={gameId}>
                 <ThemedView>
-                  <Cards data={game} showDate={true} onSelection={handleGamesSelection} />
+                  <Cards data={game} showDate={true} onSelection={handleGamesSelection} selected={isSelected} />
                 </ThemedView>
               </td>
             );
