@@ -76,11 +76,10 @@ export default function Calendar() {
   };
 
   const handleTeamSelectionChange = (teamSelectedId: string, i: number) => {
-    setTeamsSelected((prevTeamsSelected) => {
-      const newTeamsSelected = [...prevTeamsSelected];
-      newTeamsSelected[i] = teamSelectedId;
-      return newTeamsSelected;
-    });
+    const newTeamsSelected = [...teamsSelected];
+    newTeamsSelected[i] = teamSelectedId;
+    setTeamsSelected(newTeamsSelected);
+    setGamesSelected(gamesSelected.filter((gameSelected) => newTeamsSelected.includes(gameSelected.teamSelectedId)));
   };
 
   const handleButtonClick = async (clickedButton: string) => {
@@ -91,9 +90,7 @@ export default function Calendar() {
         break;
       case ButtonsKind.REMOVETEAM:
         setTeamsSelected(removeLastTeamId(teamsSelected));
-        setGamesSelected(
-          gamesSelected.filter((gameSelected) => newTeamsSelection.includes(gameSelected.teamSelectedId))
-        );
+        setGamesSelected(gamesSelected.filter((gameSelected) => teamsSelected.includes(gameSelected.teamSelectedId)));
         getGamesFromApi();
         break;
       case ButtonsKind.REMOVEGAMES:
@@ -103,23 +100,22 @@ export default function Calendar() {
         break;
     }
   };
-   const handleGamesSelection = async (game: GameFormatted) => {
-     let newSelection = [...gamesSelected];
+  const handleGamesSelection = async (game: GameFormatted) => {
+    let newSelection = [...gamesSelected];
 
-     const wasAdded = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
+    const wasAdded = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
 
-     if (wasAdded) {
-       newSelection = newSelection.filter((gameSelect) => gameSelect._id != game._id);
-     } else {
-       newSelection.push(game);
-       newSelection = newSelection.sort((a, b) => {
-         return new Date(a.gameDate) - new Date(b.gameDate);
-       });
-     }
+    if (wasAdded) {
+      newSelection = newSelection.filter((gameSelect) => gameSelect._id != game._id);
+    } else {
+      newSelection.push(game);
+      newSelection = newSelection.sort((a, b) => {
+        return new Date(a.gameDate) - new Date(b.gameDate);
+      });
+    }
 
-     setGamesSelected(newSelection);
-   };
-
+    setGamesSelected(newSelection);
+  };
 
   const displayTeamSelector = () => {
     return teamsSelected.map((teamSelectedId, i) => {
