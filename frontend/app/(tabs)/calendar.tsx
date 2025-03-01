@@ -7,14 +7,13 @@ import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import Selector from '../../components/Selector';
 import { ButtonsKind } from '../../constants/enum';
-import { readableDate } from '../../utils/date';
+import { readableDate, addDays } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
 import { addNewTeamId, randomNumber, removeLastTeamId } from '../../utils/utils';
 
 export default function Calendar() {
   const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 7);
+  const tomorrow = addDays(now, 7);
 
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
@@ -23,8 +22,8 @@ export default function Calendar() {
   const [dateRange, setDateRange] = useState({ startDate: now, endDate: tomorrow });
 
   const handleDateChange = (startDate, endDate) => {
-    setDateRange({ startDate, endDate });
     getGamesFromApi(startDate, endDate);
+    setDateRange({ startDate, endDate });
   };
 
   const getSelectedTeams = (allTeams) => {
@@ -107,8 +106,7 @@ export default function Calendar() {
         getGamesFromApi();
         break;
       case ButtonsKind.REMOVETEAM:
-        const newTeamsSelection = removeLastTeamId(teamsSelected);
-        setTeamsSelected(newTeamsSelection);
+        setTeamsSelected(removeLastTeamId(teamsSelected));
         setGamesSelected(
           gamesSelected.filter((gameSelected) => newTeamsSelection.includes(gameSelected.teamSelectedId))
         );

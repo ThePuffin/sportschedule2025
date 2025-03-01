@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import './css/DatePicker.css';
+import { addDays } from '../utils/date';
 
 interface DateRange {
   startDate: Date;
@@ -17,19 +18,29 @@ interface DateRangePickerProps {
 export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Readonly<DateRangePickerProps>) {
   const now = new Date();
   const inOneYear = now.setFullYear(now.getFullYear() + 1);
-  const { startDate: start, endDate: end } = dateRange;
+  let { startDate: start, endDate: end } = dateRange;
 
   const [startDate, setStartDate] = useState(start);
   const [endDate, setEndDate] = useState(end);
 
   const handleStartDateChange = (date: Date) => {
+    let end = endDate;
+    if (new Date(endDate) < new Date(date)) {
+      end = addDays(date, 1);
+      setEndDate(end);
+    }
     setStartDate(date);
-    onDateChange(date, endDate);
+    onDateChange(date, end);
   };
 
   const handleEndDateChange = (date: Date) => {
+    let start = startDate;
+    if (new Date(date) < new Date(startDate)) {
+      start = addDays(date, 0);
+      setStartDate(start);
+    }
     setEndDate(date);
-    onDateChange(startDate, date);
+    onDateChange(start, date);
   };
 
   return (
