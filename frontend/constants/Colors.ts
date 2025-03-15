@@ -23,6 +23,10 @@ export const Colors = {
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
   },
+  default: {
+    color: '#000000',
+    backgroundColor: '#fff',
+  },
   'NHL-NJD': {
     color: '#000000',
     backgroundColor: '#ce1126',
@@ -479,7 +483,7 @@ export const Colors = {
     color: '#132448',
     backgroundColor: '#c4ced4',
   },
-  'MLB-OAK': {
+  'MLB-ATH': {
     color: '#006241',
     backgroundColor: '#efb21e',
   },

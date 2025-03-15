@@ -23,6 +23,8 @@ export default function Cards({
   const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, gameDate, teamSelectedId, show } = data;
 
   const teamColors = Colors[teamSelectedId];
+  const defaultColors = Colors.default;
+
   let cardClass =
     show === 'true'
       ? {
@@ -36,7 +38,9 @@ export default function Cards({
           backgroundColor: '#ffffee',
         };
 
-  let selectedCard = selected ? { filter: 'brightness(1.25) saturate(1.5)', border: 'double' + teamColors.color } : {};
+  let selectedCard = selected
+    ? { filter: 'brightness(1.25) saturate(1.5)', border: 'double' + teamColors?.color || defaultColors.color }
+    : {};
 
   const displayTitle = () => {
     if (arenaName && arenaName !== '') {

@@ -28,13 +28,14 @@ interface GameFormatted {
   timeStart?: string;
   startTimeUTC?: string;
 }
+const EXPO_PUBLIC_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || '';
 
 export default function GameofTheDay() {
   const getGamesFromApi = async (date): Promise<GameFormatted[]> => {
     const YYYYMMDD = new Date(date).toISOString().split('T')[0];
 
     try {
-      const response = await fetch(`http://localhost:3000/games/date/${YYYYMMDD}`);
+      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${YYYYMMDD}`);
       const dayGames = await response.json();
       setGames(dayGames);
     } catch (error) {

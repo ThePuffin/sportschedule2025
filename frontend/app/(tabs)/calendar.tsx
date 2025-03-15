@@ -11,6 +11,7 @@ import { ButtonsKind } from '../../constants/enum';
 import { readableDate, addDays } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
 import { addNewTeamId, randomNumber, removeLastTeamId } from '../../utils/utils';
+const EXPO_PUBLIC_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || '';
 
 export default function Calendar() {
   const now = new Date();
@@ -40,7 +41,7 @@ export default function Calendar() {
 
   const getTeamsFromApi = async (): Promise<Team[]> => {
     try {
-      const response = await fetch(`http://localhost:3000/teams`);
+      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams`);
       const allTeams = await response.json();
       getSelectedTeams(allTeams);
       return allTeams;
@@ -61,7 +62,7 @@ export default function Calendar() {
 
       try {
         const response = await fetch(
-          `http://localhost:3000/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${teamsSelected.join(
+          `${EXPO_PUBLIC_API_BASE_URL}/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${teamsSelected.join(
             ','
           )}`
         );
