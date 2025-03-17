@@ -11,7 +11,8 @@ import { ButtonsKind } from '../../constants/enum';
 import { readableDate, addDays } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
 import { addNewTeamId, randomNumber, removeLastTeamId } from '../../utils/utils';
-const EXPO_PUBLIC_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || '';
+const EXPO_PUBLIC_API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 export default function Calendar() {
   const now = new Date();

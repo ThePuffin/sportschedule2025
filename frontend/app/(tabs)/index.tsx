@@ -1,5 +1,4 @@
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { League } from '../../constants/enum';
@@ -28,7 +27,8 @@ interface GameFormatted {
   timeStart?: string;
   startTimeUTC?: string;
 }
-const EXPO_PUBLIC_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || '';
+const EXPO_PUBLIC_API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 export default function GameofTheDay() {
   const getGamesFromApi = async (date): Promise<GameFormatted[]> => {
