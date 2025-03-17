@@ -41,3 +41,4 @@ app-example
 # firebase
 firebase-debug.log
 firebase.ts
+.firebase/
