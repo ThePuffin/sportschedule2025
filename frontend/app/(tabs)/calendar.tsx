@@ -108,7 +108,7 @@ export default function Calendar() {
     const wasAdded = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
 
     if (wasAdded) {
-      newSelection = newSelection.filter((gameSelect) => gameSelect._id != game._id);
+      newSelection = newSelection.filter((gameSelect) => gameSelect._id !== game._id);
     } else {
       newSelection.push(game);
       newSelection = newSelection.sort((a, b) => {

@@ -7,7 +7,7 @@ interface GamesSelectedProps {
   onAction: (game: GameFormatted) => void;
 }
 
-export default function GamesSelected({ data = { gamesSelected }, onAction }) {
+export default function GamesSelected({ data = { gamesSelected }, onAction }: GamesSelectedProps) {
   const displayGamesSelected = () => {
     return data.map((gameSelected, i) => {
       return (

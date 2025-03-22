@@ -80,7 +80,7 @@ export default function GameofTheDay() {
       await getGamesFromApi(dateRange.startDate);
     }
     fetchGames();
-  }, []);
+  }, [dateRange.startDate]);
 
   return (
     <>
