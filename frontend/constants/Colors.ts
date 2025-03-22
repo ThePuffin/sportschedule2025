@@ -120,8 +120,8 @@ export const Colors = {
     backgroundColor: '#f47a38',
   },
   'NHL-DAL': {
-    color: '#8f8f8c',
-    backgroundColor: '#006847',
+    backgroundColor: '#8f8f8c',
+    color: '#006847',
   },
   'NHL-LAK': {
     color: '#a2aaad',
@@ -336,8 +336,8 @@ export const Colors = {
     backgroundColor: '#fdbb30',
   },
   'NBA-LAC': {
-    color: '#1d428a',
-    backgroundColor: '#c8102e',
+    backgroundColor: '#1d428a',
+    color: '#c8102e',
   },
   'NBA-LAL': {
     color: '#552583',
@@ -364,8 +364,8 @@ export const Colors = {
     backgroundColor: '#b4975a',
   },
   'NBA-NY': {
-    color: '#1d428a',
-    backgroundColor: '#f58426',
+    backgroundColor: '#1d428a',
+    color: '#f58426',
   },
   'NBA-OKC': {
     color: '#007ac1',
@@ -436,12 +436,12 @@ export const Colors = {
     backgroundColor: '#ffffff',
   },
   'MLB-CLE': {
-    color: '#002b5c',
-    backgroundColor: '#e31937',
+    backgroundColor: '#002b5c',
+    color: '#e31937',
   },
   'MLB-COL': {
-    color: '#33006f',
-    backgroundColor: '#000000',
+    backgroundColor: '#33006f',
+    color: '#000000',
   },
   'MLB-DET': {
     color: '#002d5c',
@@ -516,8 +516,8 @@ export const Colors = {
     backgroundColor: '#8fbce6',
   },
   'MLB-TEX': {
-    color: '#003278',
-    backgroundColor: '#c0111f',
+    backgroundColor: '#003278',
+    color: '#c0111f',
   },
   'MLB-TOR': {
     color: '#134a8e',
