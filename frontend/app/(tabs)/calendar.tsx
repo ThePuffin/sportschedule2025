@@ -34,6 +34,12 @@ export default function Calendar() {
     localStorage.setItem('endDate', endDate);
     getGamesFromApi(startDate, endDate);
     setDateRange({ startDate, endDate });
+    const newGamesSelection = gamesSelected.filter((gameSelected) => {
+      const gameDate = new Date(gameSelected.gameDate);
+      return gameDate >= new Date(startDate) && gameDate <= new Date(endDate);
+    });
+    setGamesSelected(newGamesSelection);
+    localStorage.setItem('gameSelected', newGamesSelection.map((game) => JSON.stringify(game)).join(';'));
   };
 
   const getSelectedTeams = (allTeams) => {
