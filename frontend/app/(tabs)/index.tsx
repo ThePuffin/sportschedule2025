@@ -1,6 +1,6 @@
 import { ThemedView } from '@/components/ThemedView';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
 import Loader from '../../components/Loader';
@@ -61,9 +61,9 @@ export default function GameofTheDay() {
   const displayContent = () => {
     if (!games || games.length === 0) {
       return (
-        <div style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
-          <Loader></Loader>
-        </div>
+        <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
+          <Loader />
+        </View>
       );
     }
     return leagues.map((league, i) => {

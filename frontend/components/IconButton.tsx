@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, ButtonProps } from '@rneui/themed';
+import { Button, ButtonProps, Icon } from '@rneui/themed';
 import { StyleSheet } from 'react-native';
 
 interface IconButtonProps extends ButtonProps {
@@ -18,12 +18,7 @@ const IconButton: React.FC<IconButtonProps> = ({
 }) => {
   return (
     <Button
-      icon={{
-        name: iconName,
-        type: 'font-awesome',
-        size: 30,
-        color: iconColor,
-      }}
+      icon={<Icon name={iconName} type="font-awesome" size={30} color={iconColor} />}
       iconRight
       loading={false}
       loadingProps={{ size: 'small', color: iconColor }}
