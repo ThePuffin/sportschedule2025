@@ -16,7 +16,7 @@ const EXPO_PUBLIC_API_BASE_URL =
 
 export default function Calendar() {
   const beginDate = new Date();
-  beginDate.setHours(0, 0, 0, 0);
+  beginDate.setHours(23, 59, 59, 999);
   const endDate = new Date(addDays(beginDate, 7));
   endDate.setHours(23, 59, 59, 999);
   const initializeDateRange = () => {
@@ -151,7 +151,7 @@ export default function Calendar() {
     } else {
       newSelection.push(game);
       newSelection = newSelection.sort((a, b) => {
-        return new Date(a.gameDate) - new Date(b.gameDate);
+        return new Date(a.startTimeUTC) - new Date(b.startTimeUTC);
       });
     }
 

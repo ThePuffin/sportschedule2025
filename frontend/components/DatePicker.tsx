@@ -33,7 +33,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
       end.setHours(23, 59, 59, 999);
       setEndDate(end);
     }
-    date.setHours(0, 0, 0, 0);
+    date.setHours(23, 59, 59, 999);
     setStartDate(date);
     onDateChange(date, end);
   };
@@ -42,7 +42,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
     let start = startDate;
     if (new Date(date) < new Date(startDate)) {
       start = new Date(addDays(date, 0));
-      start.setHours(0, 0, 0, 0);
+      start.setHours(23, 59, 59, 999);
       setStartDate(start);
     }
     date.setHours(23, 59, 59, 999);
