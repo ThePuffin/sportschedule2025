@@ -20,10 +20,19 @@ export default function Cards({
   onSelection = {},
   selected = true,
 }: Readonly<CardsProps>) {
-  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, teamSelectedId, show } = data;
+  const { homeTeam, awayTeam, arenaName, homeTeamLogo, awayTeamLogo, teamSelectedId, show, startTimeUTC } = data;
 
-  const gameDate = new Date(data.gameDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
-
+  let gameDate = new Date(data.gameDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+  if (startTimeUTC) {
+    gameDate = showDate
+      ? new Date(startTimeUTC).toLocaleString(undefined, {
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
   const teamColors = Colors[teamSelectedId];
   const defaultColors = Colors.default;
 
@@ -48,8 +57,7 @@ export default function Cards({
     if (arenaName && arenaName !== '') {
       return (
         <Card.Title style={cardClass}>
-          {showDate && <em>{gameDate} </em>}
-          {timeStart} @ {arenaName}
+          <em>{gameDate} </em> @ {arenaName}
         </Card.Title>
       );
     }

@@ -71,6 +71,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               maxDate={now}
               locale={locale}
               className="custom-datepicker"
+              dateFormat={locale === 'fr' ? 'dd/MM/yyyy' : 'MM/dd/yyyy'}
             />
           </div>
           <div className="date-picker-container">
@@ -83,6 +84,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               minDate={startDate}
               locale={locale}
               className="custom-datepicker"
+              dateFormat={locale === 'fr' ? 'dd/MM/yyyy' : 'MM/dd/yyyy'}
             />
           </div>
         </div>
