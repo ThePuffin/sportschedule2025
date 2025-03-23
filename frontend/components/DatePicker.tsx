@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { registerLocale } from 'react-datepicker';
 import './css/DatePicker.css';
 import { addDays } from '../utils/date';
+import { fr, en } from 'date-fns/locale';
 
 interface DateRange {
   startDate: Date;
@@ -22,13 +24,16 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
 
   const [startDate, setStartDate] = useState(start);
   const [endDate, setEndDate] = useState(end);
+  const [locale, setLocale] = useState('en-US');
 
   const handleStartDateChange = (date: Date) => {
     let end = endDate;
     if (new Date(endDate) < new Date(date)) {
-      end = addDays(date, 1);
+      end = new Date(addDays(date, 1));
+      end.setHours(23, 59, 59, 999);
       setEndDate(end);
     }
+    date.setHours(0, 0, 0, 0);
     setStartDate(date);
     onDateChange(date, end);
   };
@@ -36,12 +41,20 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
   const handleEndDateChange = (date: Date) => {
     let start = startDate;
     if (new Date(date) < new Date(startDate)) {
-      start = addDays(date, 0);
+      start = new Date(addDays(date, 0));
+      start.setHours(0, 0, 0, 0);
       setStartDate(start);
     }
+    date.setHours(23, 59, 59, 999);
     setEndDate(date);
     onDateChange(start, date);
   };
+
+  useEffect(() => {
+    const userLocale = navigator.language || 'en-US';
+    userLocale === 'fr-FR' ? registerLocale('fr', fr) : registerLocale('en', en);
+    setLocale(userLocale === 'fr-FR' ? 'fr' : 'en-US');
+  }, []);
 
   return (
     <>
@@ -56,6 +69,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               endDate={endDate}
               minDate={new Date()}
               maxDate={now}
+              locale={locale}
               className="custom-datepicker"
             />
           </div>
@@ -67,6 +81,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               startDate={startDate}
               endDate={endDate}
               minDate={startDate}
+              locale={locale}
               className="custom-datepicker"
             />
           </div>
@@ -80,6 +95,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               onChange={handleStartDateChange}
               minDate={new Date()}
               maxDate={inOneYear}
+              locale={locale}
               className="custom-datepicker"
             />
           </div>

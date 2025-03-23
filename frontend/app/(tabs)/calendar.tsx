@@ -2,7 +2,7 @@ import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
 import Loader from '../../components/Loader';
 import React, { useEffect, useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import GamesSelected from '../../components/GamesSelected';
@@ -16,13 +16,24 @@ const EXPO_PUBLIC_API_BASE_URL =
 
 export default function Calendar() {
   const beginDate = new Date();
-  const endDate = addDays(beginDate, 7);
-  localStorage.setItem('startDate', localStorage.getItem('startDate') ?? beginDate);
-  localStorage.setItem('endDate', localStorage.getItem('endDate') ?? endDate);
+  beginDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(addDays(beginDate, 7));
+  endDate.setHours(23, 59, 59, 999);
+  const initializeDateRange = () => {
+    const storedStartDate = localStorage.getItem('startDate');
+    const storedEndDate = localStorage.getItem('endDate');
+
+    if (!storedStartDate || new Date(storedStartDate) < beginDate) {
+      localStorage.setItem('startDate', beginDate.toISOString());
+    }
+    if (!storedEndDate || new Date(storedEndDate) > endDate) {
+      localStorage.setItem('endDate', endDate.toISOString());
+    }
+  };
 
   const [dateRange, setDateRange] = useState({
-    startDate: localStorage.getItem('startDate'),
-    endDate: localStorage.getItem('endDate'),
+    startDate: localStorage.getItem('startDate') ?? beginDate.toISOString(),
+    endDate: localStorage.getItem('endDate') ?? endDate.toISOString(),
   });
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
@@ -185,6 +196,9 @@ export default function Calendar() {
     }
     return <Loader />;
   };
+  useEffect(() => {
+    initializeDateRange();
+  }, []);
 
   useEffect(() => {
     async function fetchTeams() {
@@ -211,6 +225,11 @@ export default function Calendar() {
         data={{ selectedTeamsNumber: teamsSelected.length, selectedGamesNumber: gamesSelected.length }}
       />
       {!!gamesSelected.length && <GamesSelected onAction={handleGamesSelection} data={gamesSelected} />}
+      {!teamsSelected.length && (
+        <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
+          <Loader />
+        </View>
+      )}
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         <tbody>
           <tr>{displayTeamSelector()}</tr>

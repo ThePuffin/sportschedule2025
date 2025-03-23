@@ -20,7 +20,9 @@ export default function Cards({
   onSelection = {},
   selected = true,
 }: Readonly<CardsProps>) {
-  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, gameDate, teamSelectedId, show } = data;
+  const { homeTeam, awayTeam, arenaName, timeStart, homeTeamLogo, awayTeamLogo, teamSelectedId, show } = data;
+
+  const gameDate = new Date(data.gameDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
 
   const teamColors = Colors[teamSelectedId];
   const defaultColors = Colors.default;
