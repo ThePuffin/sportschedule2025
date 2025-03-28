@@ -99,6 +99,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               maxDate={inOneYear}
               locale={locale}
               className="custom-datepicker"
+              dateFormat={locale === 'fr' ? 'dd/MM/yyyy' : 'MM/dd/yyyy'}
             />
           </div>
         </div>
