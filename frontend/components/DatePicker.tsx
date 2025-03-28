@@ -24,7 +24,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
 
   const [startDate, setStartDate] = useState(start);
   const [endDate, setEndDate] = useState(end);
-  const [locale, setLocale] = useState('en-US');
+  const [locale, setLocale] = useState<'en' | 'fr'>('en');
 
   const handleStartDateChange = (date: Date) => {
     let end = endDate;
@@ -51,9 +51,9 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
   };
 
   useEffect(() => {
-    const userLocale = navigator.language || 'en-US';
+    const userLocale = navigator.language || '';
     userLocale === 'fr-FR' ? registerLocale('fr', fr) : registerLocale('en', en);
-    setLocale(userLocale === 'fr-FR' ? 'fr' : 'en-US');
+    setLocale(userLocale === 'fr-FR' ? 'fr' : 'en');
   }, []);
 
   return (

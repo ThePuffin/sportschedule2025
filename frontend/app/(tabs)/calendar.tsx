@@ -17,17 +17,26 @@ const EXPO_PUBLIC_API_BASE_URL =
 export default function Calendar() {
   const beginDate = new Date();
   beginDate.setHours(23, 59, 59, 999);
-  const endDate = new Date(addDays(beginDate, 7));
+  const endDate = new Date(addDays(beginDate, 15));
   endDate.setHours(23, 59, 59, 999);
   const initializeDateRange = () => {
     const storedStartDate = localStorage.getItem('startDate');
     const storedEndDate = localStorage.getItem('endDate');
 
+    let needToUpdateGames = false;
+    let start = storedStartDate;
+    let end = storedEndDate;
     if (!storedStartDate || new Date(storedStartDate) < beginDate) {
-      localStorage.setItem('startDate', beginDate.toISOString());
+      start = beginDate.toISOString();
+      localStorage.setItem('startDate', start);
     }
     if (!storedEndDate || new Date(storedEndDate) > endDate) {
-      localStorage.setItem('endDate', endDate.toISOString());
+      end = endDate.toISOString();
+      localStorage.setItem('endDate', end);
+    }
+    if (start !== storedStartDate || end !== storedEndDate) {
+      setDateRange({ startDate: start, endDate: end });
+      getGamesFromApi(start, end);
     }
   };
 
