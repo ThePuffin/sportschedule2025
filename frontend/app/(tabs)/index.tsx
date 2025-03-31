@@ -27,17 +27,40 @@ interface GameFormatted {
   timeStart?: string;
   startTimeUTC?: string;
 }
-const EXPO_PUBLIC_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
+
+const EXPO_PUBLIC_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? '';
+let gamesDay = {};
+let lastGamesUpdate: Date;
+
+const fetchGames = async (date: string): Promise<GameFormatted[]> => {
+  const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`);
+  const dayGames = await response.json();
+  gamesDay[date] = dayGames;
+  return dayGames;
+};
+
+const getNextGamesFromApi = async (date: string): Promise<null> => {
+  const newFetch = {};
+  for (let i = 0; i < 7; i++) {
+    const nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + i);
+    const nextYYYYMMDD = nextDate.toISOString().split('T')[0];
+    newFetch[nextYYYYMMDD] = await fetchGames(nextYYYYMMDD);
+  }
+  gamesDay = { ...newFetch };
+  return null;
+};
 
 export default function GameofTheDay() {
   const getGamesFromApi = async (date): Promise<GameFormatted[]> => {
     const YYYYMMDD = new Date(date).toISOString().split('T')[0];
+    if (gamesDay[YYYYMMDD]?.length) {
+      setGames(gamesDay[YYYYMMDD]);
+    }
 
     try {
-      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${YYYYMMDD}`);
-      const dayGames = await response.json();
-      setGames(dayGames);
+      const gamesOfTheDay = await fetchGames(YYYYMMDD);
+      setGames(gamesOfTheDay);
     } catch (error) {
       console.error(error);
       return;
@@ -78,6 +101,10 @@ export default function GameofTheDay() {
   useEffect(() => {
     async function fetchGames() {
       await getGamesFromApi(dateRange.startDate);
+      if (!lastGamesUpdate || lastGamesUpdate.toDateString() !== new Date().toDateString()) {
+        await getNextGamesFromApi(dateRange.startDate);
+        lastGamesUpdate = new Date();
+      }
     }
     fetchGames();
   }, [dateRange.startDate]);
