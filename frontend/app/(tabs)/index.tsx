@@ -5,6 +5,7 @@ import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
 import Loader from '../../components/Loader';
 import DateRangePicker from '../../components/DatePicker';
+import { useWindowDimensions } from 'react-native';
 
 interface GameFormatted {
   _id: string;
@@ -28,7 +29,9 @@ interface GameFormatted {
   startTimeUTC?: string;
 }
 
-const EXPO_PUBLIC_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? '';
+let width: number;
+const EXPO_PUBLIC_API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 let gamesDay = {};
 let lastGamesUpdate: Date;
 
@@ -52,6 +55,8 @@ const getNextGamesFromApi = async (date: string): Promise<null> => {
 };
 
 export default function GameofTheDay() {
+  const { width: windowWidth } = useWindowDimensions();
+  width = windowWidth;
   const getGamesFromApi = async (date): Promise<GameFormatted[]> => {
     const YYYYMMDD = new Date(date).toISOString().split('T')[0];
     if (gamesDay[YYYYMMDD]?.length) {
@@ -81,22 +86,65 @@ export default function GameofTheDay() {
     })
     .sort();
 
-  const displayContent = () => {
+  const displayAccordion = ({ league, i, gamesFiltred }) => {
+    return <Accordion key={i} league={league} i={i} gamesFiltred={gamesFiltred} />;
+  };
+
+  const displayNoContent = () => {
+    return (
+      <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
+        <Loader />
+      </View>
+    );
+  };
+
+  const displaySmallDeviceContent = () => {
     if (!games || games.length === 0) {
-      return (
-        <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
-          <Loader />
-        </View>
-      );
+      return displayNoContent();
     }
-    const leaguesAvailable = ['ALL',...new Set(games.map((game) => game.league))];
+    const leaguesAvailable = ['ALL', ...new Set(games.map((game) => game.league))];
     return leaguesAvailable.map((league, i) => {
       let gamesFiltred = [...games];
       if (league !== League.ALL) {
         gamesFiltred = gamesFiltred.filter((game) => game.league === league);
       }
-      return <Accordion key={i} league={league} i={i} gamesFiltred={gamesFiltred} />;
+      return (
+        <div key={i} style={{ margin: 'auto', width: '90%' }}>
+          {displayAccordion({ league, i, gamesFiltred })}
+        </div>
+      );
     });
+  };
+
+  const displayAccoridon = (leaguesAvailable) => {
+    return leaguesAvailable.map((league, i) => {
+      let gamesFiltred = [...games];
+      if (league !== League.ALL) {
+        gamesFiltred = gamesFiltred.filter((game) => game.league === league);
+      }
+      return (
+        <td key={i} style={{ verticalAlign: 'baseline' }}>
+          <Accordion league={league} i={i} gamesFiltred={gamesFiltred} open={true} />
+        </td>
+      );
+    });
+  };
+
+  const displayLargeDeviceContent = () => {
+    if (!games || games.length === 0) {
+      return displayNoContent();
+    }
+    const leaguesAvailable = [ ...new Set(games.map((game) => game.league))];
+   if ( leaguesAvailable.length >1 ) {
+    leaguesAvailable.unshift('ALL');
+   }
+    return (
+      <table style={{ tableLayout: 'fixed', width: leaguesAvailable.length >1 ? '100%' : '50%', margin: 'auto' }}>
+        <tbody>
+          <tr>{displayAccoridon(leaguesAvailable)}</tr>
+        </tbody>
+      </table>
+    );
   };
 
   useEffect(() => {
@@ -114,7 +162,7 @@ export default function GameofTheDay() {
     <>
       <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={true} />
       <ScrollView>
-        <ThemedView>{displayContent()}</ThemedView>
+        <ThemedView>{width > 768 ? displayLargeDeviceContent() : displaySmallDeviceContent()}</ThemedView>
       </ScrollView>
     </>
   );

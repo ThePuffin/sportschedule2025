@@ -107,7 +107,7 @@ export default function Cards({
     <div className={cardClass}>
       <Card
         onClick={() => onSelection(data)}
-        containerStyle={{ height: 250, ...selectedCard, ...cardClass }}
+        containerStyle={{ height: 250, marginLeft:0, marginRight:0,  ...selectedCard, ...cardClass }}
         wrapperStyle={cardClass}
       >
         <Card.Title
