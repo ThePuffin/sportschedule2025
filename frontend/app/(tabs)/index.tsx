@@ -89,7 +89,8 @@ export default function GameofTheDay() {
         </View>
       );
     }
-    return leagues.map((league, i) => {
+    const leaguesAvailable = ['ALL',...new Set(games.map((game) => game.league))];
+    return leaguesAvailable.map((league, i) => {
       let gamesFiltred = [...games];
       if (league !== League.ALL) {
         gamesFiltred = gamesFiltred.filter((game) => game.league === league);

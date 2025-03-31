@@ -2,6 +2,7 @@ export enum League {
   ALL = 'ALL',
   MLB = 'MLB',
   NBA = 'NBA',
+  WNBA = 'WNBA',
   NHL = 'NHL',
   NFL = 'NFL',
 }
