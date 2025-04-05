@@ -30,7 +30,7 @@ export default function Calendar() {
       start = beginDate.toISOString();
       localStorage.setItem('startDate', start);
     }
-    if (!storedEndDate || new Date(storedEndDate) > endDate) {
+    if (!storedEndDate || new Date(storedEndDate) < beginDate) {
       end = endDate.toISOString();
       localStorage.setItem('endDate', end);
     }
