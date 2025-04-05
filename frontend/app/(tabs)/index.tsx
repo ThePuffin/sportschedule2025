@@ -1,11 +1,10 @@
 import { ThemedView } from '@/components/ThemedView';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
 import Loader from '../../components/Loader';
 import DateRangePicker from '../../components/DatePicker';
-import { useWindowDimensions } from 'react-native';
 
 interface GameFormatted {
   _id: string;
@@ -44,13 +43,14 @@ const fetchGames = async (date: string): Promise<GameFormatted[]> => {
 
 const getNextGamesFromApi = async (date: string): Promise<null> => {
   const newFetch = {};
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 10; i++) {
     const nextDate = new Date(date);
     nextDate.setDate(nextDate.getDate() + i);
     const nextYYYYMMDD = nextDate.toISOString().split('T')[0];
     newFetch[nextYYYYMMDD] = await fetchGames(nextYYYYMMDD);
   }
   gamesDay = { ...newFetch };
+  localStorage.setItem('gamesDay', JSON.stringify(gamesDay));
   return null;
 };
 
@@ -59,7 +59,11 @@ export default function GameofTheDay() {
   width = windowWidth;
   const getGamesFromApi = async (date): Promise<GameFormatted[]> => {
     const YYYYMMDD = new Date(date).toISOString().split('T')[0];
-    if (gamesDay[YYYYMMDD]?.length) {
+    if (Object.keys(gamesDay).length === 0) {
+      const localStorageGamesDay = JSON.parse(localStorage.getItem('gamesDay'));
+      gamesDay = localStorageGamesDay || {};
+    }
+    if (gamesDay?.[YYYYMMDD]?.length) {
       setGames(gamesDay[YYYYMMDD]);
     }
 
@@ -80,11 +84,6 @@ export default function GameofTheDay() {
     setDateRange({ startDate, endDate });
     getGamesFromApi(startDate);
   };
-  const leagues = Object.keys(League)
-    .filter((item) => {
-      return isNaN(Number(item));
-    })
-    .sort();
 
   const displayAccordion = ({ league, i, gamesFiltred }) => {
     return <Accordion key={i} league={league} i={i} gamesFiltred={gamesFiltred} />;
@@ -134,12 +133,12 @@ export default function GameofTheDay() {
     if (!games || games.length === 0) {
       return displayNoContent();
     }
-    const leaguesAvailable = [ ...new Set(games.map((game) => game.league))];
-   if ( leaguesAvailable.length >1 ) {
-    leaguesAvailable.unshift('ALL');
-   }
+    const leaguesAvailable = [...new Set(games.map((game) => game.league))];
+    if (leaguesAvailable.length > 1) {
+      leaguesAvailable.unshift('ALL');
+    }
     return (
-      <table style={{ tableLayout: 'fixed', width: leaguesAvailable.length >1 ? '100%' : '50%', margin: 'auto' }}>
+      <table style={{ tableLayout: 'fixed', width: leaguesAvailable.length > 1 ? '100%' : '50%', margin: 'auto' }}>
         <tbody>
           <tr>{displayAccoridon(leaguesAvailable)}</tr>
         </tbody>

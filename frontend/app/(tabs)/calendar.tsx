@@ -86,8 +86,14 @@ export default function Calendar() {
   };
 
   const getGamesFromApi = async (startDate: string, endDate: string): Promise<FilterGames> => {
-    const storedGames = localStorage.getItem('gameSelected') ? localStorage.getItem('gameSelected').split(';') : [];
-    setGamesSelected(storedGames.map((game) => JSON.parse(game)));
+    if (!games || Object.keys(games).length === 0) {
+      const storedGamesData = localStorage.getItem('gamesData') ? JSON.parse(localStorage.getItem('gamesData')) : {};
+      setGames(storedGamesData);
+    }
+    if (!gamesSelected && gamesSelected.length !== 0) {
+      const storedGames = localStorage.getItem('gameSelected') ? localStorage.getItem('gameSelected').split(';') : [];
+      setGamesSelected(storedGames.map((game) => JSON.parse(game)));
+    }
 
     if (teamsSelected && teamsSelected.length !== 0) {
       let start = readableDate(dateRange.startDate);
@@ -105,6 +111,7 @@ export default function Calendar() {
         );
         const gamesData = await response.json();
         setGames(gamesData);
+        localStorage.setItem('gamesData', JSON.stringify(gamesData));
       } catch (error) {
         console.error(error);
         return {};
