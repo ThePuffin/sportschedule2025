@@ -247,8 +247,6 @@ export default function Calendar() {
   useEffect(() => {
     async function fetchTeams() {
       const teamsData = await getTeamsFromApi();
-      console.log({ teamsData });
-
       setTeams(teamsData);
     }
     fetchTeams();

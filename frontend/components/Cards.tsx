@@ -20,7 +20,18 @@ export default function Cards({
   onSelection = {},
   selected = true,
 }: Readonly<CardsProps>) {
-  const { homeTeam, awayTeam, arenaName, homeTeamLogo, awayTeamLogo, teamSelectedId, show, startTimeUTC } = data;
+  const {
+    homeTeam,
+    awayTeam,
+    arenaName,
+    homeTeamLogo,
+    awayTeamLogo,
+    teamSelectedId,
+    show,
+    startTimeUTC,
+    color,
+    backgroundColor,
+  } = data;
 
   let gameDate = new Date(data.gameDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
   if (startTimeUTC) {
@@ -33,7 +44,10 @@ export default function Cards({
         })
       : new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
-  const teamColors = Colors[teamSelectedId];
+  const colors = Colors[teamSelectedId];
+  const teamColors =
+    colors.backgroundColor && colors.backgroundColor !== '' ? Colors[teamSelectedId] : { color, backgroundColor };
+
   const defaultColors = Colors.default;
 
   let cardClass =
@@ -41,8 +55,10 @@ export default function Cards({
       ? {
           cursor: 'pointer',
           ...teamColors,
+          fontSize: '1rem',
         }
       : {
+          fontSize: '1rem',
           cursor: 'no-drop',
           opacity: '0.97',
           pointerEvents: 'none',
@@ -107,7 +123,7 @@ export default function Cards({
     <div className={cardClass}>
       <Card
         onClick={() => onSelection(data)}
-        containerStyle={{ height: 250, marginLeft:0, marginRight:0,  ...selectedCard, ...cardClass }}
+        containerStyle={{ height: 250, marginLeft: 0, marginRight: 0, ...selectedCard, ...cardClass }}
         wrapperStyle={cardClass}
       >
         <Card.Title
