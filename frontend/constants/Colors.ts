@@ -420,8 +420,8 @@ export const Colors = {
     backgroundColor: '#000000',
   },
   'MLB-BOS': {
-    color: '#0d2b56',
-    backgroundColor: '#bd3039',
+    backgroundColor: '#0d2b56',
+    color: '#bd3039',
   },
   'MLB-CHC': {
     color: '#0e3386',
@@ -476,8 +476,8 @@ export const Colors = {
     backgroundColor: '#e20e32',
   },
   'MLB-NYM': {
-    color: '#002d72',
-    backgroundColor: '#ff5910',
+    backgroundColor: '#002d72',
+    color: '#ff5910',
   },
   'MLB-NYY': {
     color: '#132448',
@@ -492,8 +492,8 @@ export const Colors = {
     backgroundColor: '#003278',
   },
   'MLB-PIT': {
-    color: '#000000',
-    backgroundColor: '#fdb827',
+    backgroundColor: '#000000',
+    color: '#fdb827',
   },
   'MLB-SD': {
     color: '#3e2312',
@@ -526,5 +526,57 @@ export const Colors = {
   'MLB-WSH': {
     color: '#ab0003',
     backgroundColor: '#11225b',
+  },
+  'WNBA-ATL': {
+    color: '#e31837',
+    backgroundColor: '#5091cc',
+  },
+  'WNBA-CHI': {
+    color: '#5091cd',
+    backgroundColor: '#ffd520',
+  },
+  'WNBA-CONN': {
+    color: '#f05023',
+    backgroundColor: '#0a2240',
+  },
+  'WNBA-DAL': {
+    color: '#002b5c',
+    backgroundColor: '#c4d600',
+  },
+  'WNBA-GSV': {
+    color: '#b38fcf',
+    backgroundColor: '#000000',
+  },
+  'WNBA-IND': {
+    color: '#002d62',
+    backgroundColor: '#e03a3e',
+  },
+  'WNBA-LV': {
+    color: '#a7a8aa',
+    backgroundColor: '#000000',
+  },
+  'WNBA-LA': {
+    color: '#552583',
+    backgroundColor: '#fdb927',
+  },
+  'WNBA-MIN': {
+    color: '#266092',
+    backgroundColor: '#79bc43',
+  },
+  'WNBA-NY': {
+    color: '#86cebc',
+    backgroundColor: '#000000',
+  },
+  'WNBA-PHX': {
+    color: '#3c286e',
+    backgroundColor: '#e56020',
+  },
+  'WNBA-SEA': {
+    color: '#2c5235',
+    backgroundColor: '#fee11a',
+  },
+  'WNBA-WSH': {
+    color: '#e03a3e',
+    backgroundColor: '#002b5c',
   },
 };

@@ -63,14 +63,35 @@ export default function Calendar() {
   };
 
   const getSelectedTeams = (allTeams) => {
-    const selection = localStorage.getItem('teamsSelected') ? localStorage.getItem('teamsSelected').split(';') : [];
+    const selection = localStorage.getItem('teamsSelected')
+      ? JSON.parse(localStorage.getItem('teamsSelected')).map((team) => team.uniqueId)
+      : teamsSelected ?? [];
     if (!selection.length) {
       while (selection.length < 2) {
         addNewTeamId(selection, allTeams);
       }
     }
-    setTeamsSelected(selection);
-    localStorage.setItem('teamsSelected', selection.join(';'));
+    storeTeamsSelected(selection);
+  };
+
+  const getStoredData = () => {
+    const selection = localStorage.getItem('teamsSelected')
+      ? JSON.parse(localStorage.getItem('teamsSelected')).map((team) => team.uniqueId)
+      : [];
+    if (selection.length > 0) {
+      storeTeamsSelected(selection);
+
+      const storedGamesData = localStorage.getItem('gamesData') ? JSON.parse(localStorage.getItem('gamesData')) : {};
+      setGames(storedGamesData);
+
+      const storedGamesSelected = localStorage.getItem('gameSelected')
+        ? localStorage.getItem('gameSelected').split(';')
+        : [];
+      setGamesSelected(storedGamesSelected.map((game) => JSON.parse(game)));
+      setTeams(selection);
+    } else {
+      setTeamsSelected(selection);
+    }
   };
 
   const getTeamsFromApi = async (): Promise<Team[]> => {
@@ -86,15 +107,6 @@ export default function Calendar() {
   };
 
   const getGamesFromApi = async (startDate: string, endDate: string): Promise<FilterGames> => {
-    if (!games || Object.keys(games).length === 0) {
-      const storedGamesData = localStorage.getItem('gamesData') ? JSON.parse(localStorage.getItem('gamesData')) : {};
-      setGames(storedGamesData);
-    }
-    if (!gamesSelected && gamesSelected.length !== 0) {
-      const storedGames = localStorage.getItem('gameSelected') ? localStorage.getItem('gameSelected').split(';') : [];
-      setGamesSelected(storedGames.map((game) => JSON.parse(game)));
-    }
-
     if (teamsSelected && teamsSelected.length !== 0) {
       let start = readableDate(dateRange.startDate);
       let end = readableDate(dateRange.endDate);
@@ -110,8 +122,8 @@ export default function Calendar() {
           )}`
         );
         const gamesData = await response.json();
-        setGames(gamesData);
         localStorage.setItem('gamesData', JSON.stringify(gamesData));
+        setGames(gamesData);
       } catch (error) {
         console.error(error);
         return {};
@@ -120,11 +132,25 @@ export default function Calendar() {
     return {};
   };
 
+  const storeTeamsSelected = (teamsSelected: string[]) => {
+    setTeamsSelected(teamsSelected);
+    const selectedTeams = teamsSelected
+      .map((teamId) => {
+        const team = teams.find((team) => team.uniqueId === teamId);
+
+        return team;
+      })
+      .filter((team) => team);
+
+    if (selectedTeams.length !== 0) {
+      localStorage.setItem('teamsSelected', JSON.stringify(selectedTeams));
+    }
+  };
+
   const handleTeamSelectionChange = (teamSelectedId: string, i: number) => {
     const newTeamsSelected = [...teamsSelected];
     newTeamsSelected[i] = teamSelectedId;
-    setTeamsSelected(newTeamsSelected);
-    localStorage.setItem('teamsSelected', newTeamsSelected.join(';'));
+    storeTeamsSelected(newTeamsSelected);
     const newSelection = gamesSelected.filter((gameSelected) => newTeamsSelected.includes(gameSelected.teamSelectedId));
     setGamesSelected(newSelection);
     localStorage.setItem('gameSelected', newSelection.map((game) => JSON.stringify(game)).join(';'));
@@ -136,14 +162,12 @@ export default function Calendar() {
     switch (clickedButton) {
       case ButtonsKind.ADDTEAM:
         newTeamsSelected = addNewTeamId(teamsSelected, teams);
-        setTeamsSelected(newTeamsSelected);
-        localStorage.setItem('teamsSelected', newTeamsSelected.join(';'));
+        storeTeamsSelected(newTeamsSelected);
         getGamesFromApi();
         break;
       case ButtonsKind.REMOVETEAM:
         newTeamsSelected = removeLastTeamId(teamsSelected);
-        setTeamsSelected(newTeamsSelected);
-        localStorage.setItem('teamsSelected', newTeamsSelected.join(';'));
+        storeTeamsSelected(newTeamsSelected);
         newGamesSelected = gamesSelected.filter((gameSelected) => teamsSelected.includes(gameSelected.teamSelectedId));
         setGamesSelected(newGamesSelected);
         localStorage.setItem('gameSelected', newGamesSelected.map((game) => JSON.stringify(game)).join(';'));
@@ -214,11 +238,14 @@ export default function Calendar() {
   };
   useEffect(() => {
     initializeDateRange();
+    getStoredData();
   }, []);
 
   useEffect(() => {
     async function fetchTeams() {
       const teamsData = await getTeamsFromApi();
+      console.log({ teamsData });
+
       setTeams(teamsData);
     }
     fetchTeams();

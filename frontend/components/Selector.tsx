@@ -14,7 +14,6 @@ interface SelectorProps {
 
 export default function Selector({ data, onTeamSelectionChange }: Readonly<SelectorProps>) {
   const { teamsSelectedIds, activeTeams, i, teamSelectedId } = data;
-  let placeholder = activeTeams.filter((team: Team) => team.uniqueId === teamSelectedId)[0]?.label ?? '';
 
   const [teams, setTeams] = useState<{ value: string; label: string }[]>([]);
 
@@ -31,6 +30,9 @@ export default function Selector({ data, onTeamSelectionChange }: Readonly<Selec
 
     setTeams(selectableTeams);
   }, [activeTeams, teamsSelectedIds]);
+
+  const selectedTeam = activeTeams.find((team) => team.uniqueId === teamSelectedId);
+  const placeholder = selectedTeam?.label ?? '';
 
   const targetHeight = 65;
   const customStyles = {
@@ -55,7 +57,7 @@ export default function Selector({ data, onTeamSelectionChange }: Readonly<Selec
 
   return (
     <Select
-      defaultValue={{ value: teamSelectedId, label: placeholder }}
+      value={selectedTeam ? { value: selectedTeam.uniqueId, label: selectedTeam.label } : null}
       placeholder={placeholder}
       isSearchable
       options={teams}
