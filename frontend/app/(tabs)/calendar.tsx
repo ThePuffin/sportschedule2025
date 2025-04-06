@@ -48,6 +48,7 @@ export default function Calendar() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
 
   const handleDateChange = (startDate, endDate) => {
     localStorage.setItem('startDate', startDate);
@@ -95,10 +96,12 @@ export default function Calendar() {
   };
 
   const getTeamsFromApi = async (): Promise<Team[]> => {
+    setLoadingTeams(true);
     try {
       const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams`);
       const allTeams = await response.json();
       getSelectedTeams(allTeams);
+      setLoadingTeams(false);
       return allTeams;
     } catch (error) {
       console.error(error);
@@ -265,7 +268,7 @@ export default function Calendar() {
       <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={false} />
       <Buttons
         onClicks={handleButtonClick}
-        data={{ selectedTeamsNumber: teamsSelected.length, selectedGamesNumber: gamesSelected.length }}
+        data={{ selectedTeamsNumber: teamsSelected.length, selectedGamesNumber: gamesSelected.length, loadingTeams }}
       />
       {!!gamesSelected.length && <GamesSelected onAction={handleGamesSelection} data={gamesSelected} />}
       {!teamsSelected.length && (

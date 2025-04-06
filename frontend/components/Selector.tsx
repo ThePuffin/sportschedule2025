@@ -22,16 +22,18 @@ export default function Selector({ data, onTeamSelectionChange }: Readonly<Selec
   };
 
   useEffect(() => {
-    const selectableTeams = activeTeams
-      .filter((team: Team) => !teamsSelectedIds.includes(team.uniqueId))
-      .map(({ label, uniqueId }) => {
-        return { value: uniqueId, label };
-      });
+    const selectableTeams = activeTeams.length
+      ? activeTeams
+          .filter((team: Team) => !teamsSelectedIds.includes(team.uniqueId))
+          .map(({ label, uniqueId }) => {
+            return { value: uniqueId, label };
+          })
+      : [];
 
     setTeams(selectableTeams);
   }, [activeTeams, teamsSelectedIds]);
 
-  const selectedTeam = activeTeams.find((team) => team.uniqueId === teamSelectedId);
+  const selectedTeam = activeTeams.length ? activeTeams.find((team) => team.uniqueId === teamSelectedId) : {};
   const placeholder = selectedTeam?.label ?? '';
 
   const targetHeight = 65;
@@ -63,6 +65,7 @@ export default function Selector({ data, onTeamSelectionChange }: Readonly<Selec
       options={teams}
       onChange={changeTeam}
       styles={customStyles}
+      noOptionsMessage={() => ' '}
     />
   );
 }

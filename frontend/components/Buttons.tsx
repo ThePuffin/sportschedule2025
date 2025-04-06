@@ -4,17 +4,19 @@ import IconButton from './IconButton';
 import { StyleSheet } from 'react-native';
 
 interface ButtonsProps {
-  data: { selectedTeamsNumber: number; selectedGamesNumber: number };
+  data: { selectedTeamsNumber: number; selectedGamesNumber: number; loadingTeams: boolean };
   onClicks: (clickedButton: string) => void;
 }
 
 export default function Buttons({
-  data = { selectedTeamsNumber: null, selectedGamesNumber },
+  data = { selectedTeamsNumber: null, selectedGamesNumber: null, loadingTeams: false },
   onClicks,
 }: Readonly<ButtonsProps>) {
-  let disabledAdd = data.selectedTeamsNumber >= 6;
-  let disabledRemove = data.selectedTeamsNumber <= 2;
-  let isGamesSelected = data.selectedGamesNumber > 0;
+  const { selectedTeamsNumber, selectedGamesNumber, loadingTeams } = data;
+
+  const disabledAdd = loadingTeams || selectedTeamsNumber >= 6;
+  const disabledRemove = loadingTeams || selectedTeamsNumber <= 2;
+  const isGamesSelected = selectedGamesNumber > 0;
 
   return (
     <ThemedView>
