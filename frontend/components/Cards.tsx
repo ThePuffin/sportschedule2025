@@ -1,9 +1,8 @@
-import React from 'react';
-
 import { Card } from '@rneui/base';
-import { View, Image, Text } from 'react-native';
+import { View, Image, Text, Dimensions } from 'react-native';
 import { Colors } from '../constants/Colors.ts';
 import { GameFormatted } from '../utils/types.ts';
+import React, { useEffect, useState } from 'react';
 
 interface CardsProps {
   data: GameFormatted;
@@ -31,14 +30,46 @@ export default function Cards({
     startTimeUTC,
     color,
     backgroundColor,
+    awayTeamShort,
+    homeTeamShort,
   } = data;
 
-  let gameDate = new Date(data.gameDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+  const [teamNameHome, setTeamNameHome] = useState(homeTeam);
+  const [teamNameAway, setTeamNameAway] = useState(awayTeam);
+  const [isSmallDevice, setIsSmallDevice] = useState(false);
+
+  useEffect(() => {
+    const updateDeviceType = () => {
+      const { width } = Dimensions.get('window');
+
+      if (width <= 768) {
+        setTeamNameHome(homeTeamShort);
+        setTeamNameAway(awayTeamShort);
+        setIsSmallDevice(true);
+      } else {
+        setTeamNameHome(homeTeam);
+        setTeamNameAway(awayTeam);
+        setIsSmallDevice(false);
+      }
+    };
+
+    updateDeviceType();
+    Dimensions.addEventListener('change', updateDeviceType);
+
+    return () => {
+      Dimensions.removeEventListener('change', updateDeviceType);
+    };
+  }, []);
+
+  let gameDate = new Date(data.gameDate).toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: isSmallDevice ? '2-digit' : 'short',
+  });
   if (startTimeUTC) {
     gameDate = showDate
       ? new Date(startTimeUTC).toLocaleString(undefined, {
           day: '2-digit',
-          month: 'short',
+          month: isSmallDevice ? '2-digit' : 'short',
           hour: '2-digit',
           minute: '2-digit',
         })
@@ -72,7 +103,7 @@ export default function Cards({
   const displayTitle = () => {
     if (arenaName && arenaName !== '') {
       return (
-        <Card.Title style={cardClass}>
+        <Card.Title style={{ ...cardClass }}>
           <em>{gameDate} </em> @ {arenaName}
         </Card.Title>
       );
@@ -96,9 +127,9 @@ export default function Cards({
               uri: awayTeamLogo,
             }}
           />
-          {showName ? <Text style={cardClass}>{awayTeam}</Text> : null}
+          <Text style={cardClass}>{teamNameAway}</Text>
           <Text style={cardClass}>@</Text>
-          {showName ? <Text style={cardClass}>{homeTeam}</Text> : null}
+          <Text style={cardClass}>{teamNameHome}</Text>
           <Image
             style={{ width: '50%', height: 50 }}
             resizeMode="contain"
@@ -123,12 +154,17 @@ export default function Cards({
     <div className={cardClass}>
       <Card
         onClick={() => onSelection(data)}
-        containerStyle={{ height: 250, marginLeft: 0, marginRight: 0, ...selectedCard, ...cardClass }}
+        containerStyle={{
+          marginLeft: 0,
+          marginRight: 0,
+          ...selectedCard,
+          ...cardClass,
+          height: isSmallDevice ? 300 : 250,
+        }}
         wrapperStyle={cardClass}
       >
         <Card.Title
           style={{
-            height: 42,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: showDate ? '' : 'flex',
@@ -136,6 +172,7 @@ export default function Cards({
             alignItems: showDate ? '' : 'center',
             justifyContent: showDate ? '' : 'center',
             marginBottom: showDate ? '' : 0,
+            height: isSmallDevice ? 50 : 42,
           }}
         >
           {displayTitle()}
