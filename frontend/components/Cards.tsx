@@ -116,8 +116,11 @@ export default function Cards({
       return (
         <View
           style={{
-            position: 'relative',
+            display: 'flex',
+            justifyContent: 'center',
             alignItems: 'center',
+            flexDirection: 'column',
+            height: isSmallDevice ? 193 : 157,
           }}
         >
           <Image
@@ -178,6 +181,7 @@ export default function Cards({
           {displayTitle()}
         </Card.Title>
         <Card.Divider />
+
         {displayContent()}
       </Card>
     </div>
