@@ -206,7 +206,7 @@ export default function Calendar() {
     return teamsSelected.map((teamSelectedId, i) => {
       const data = { i, activeTeams: teams, teamsSelectedIds: teamsSelected, teamSelectedId };
       return (
-        <td key={teamSelectedId}>
+        <td key={`${teamSelectedId}-${teamsSelected.length}`}>
           <ThemedView>
             <Selector data={data} onTeamSelectionChange={handleTeamSelectionChange} />
             {displayGamesCards(teamSelectedId)}
