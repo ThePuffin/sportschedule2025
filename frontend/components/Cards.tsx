@@ -18,6 +18,7 @@ export default function Cards({
   showDate,
   showName = true,
   onSelection = {},
+  numberSelected = 0,
   selected = true,
 }: Readonly<CardsProps>) {
   const {
@@ -39,6 +40,7 @@ export default function Cards({
   const [teamNameAway, setTeamNameAway] = useState(awayTeam);
   const [isSmallDevice, setIsSmallDevice] = useState(false);
   const [fontSize, setFontSize] = useState('1rem');
+  const addHeight = numberSelected > 4 ? numberSelected * 6 : numberSelected * 3;
 
   useEffect(() => {
     const updateDeviceType = () => {
@@ -108,6 +110,7 @@ export default function Cards({
       return (
         <Card.Title style={{ ...cardClass }}>
           <em>{gameDate} </em>
+          {showDate ? <br /> : '\u00A0'}
           <a
             href={`https://maps.google.com/?q=${stadiumSearch}`}
             style={{ textDecoration: 'none', color: 'inherit' }}
@@ -121,7 +124,9 @@ export default function Cards({
               color={cardClass.color ?? defaultColors.color}
               style={{ marginRight: 3 }}
             />
-            {arenaName}
+            <p style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', width: '100%', margin: 0 }}>
+              {arenaName}
+            </p>
           </a>
         </Card.Title>
       );
@@ -185,7 +190,7 @@ export default function Cards({
           marginRight: 0,
           ...selectedCard,
           ...cardClass,
-          height: isSmallDevice ? 300 : 250,
+          height: isSmallDevice ? 300 + addHeight : 250,
         }}
         wrapperStyle={cardClass}
       >
@@ -198,7 +203,7 @@ export default function Cards({
             alignItems: showDate ? '' : 'center',
             justifyContent: showDate ? '' : 'center',
             marginBottom: showDate ? '' : 0,
-            height: isSmallDevice ? 55 : 42,
+            height: isSmallDevice ? 55 + addHeight : 42,
           }}
         >
           {displayTitle()}

@@ -228,7 +228,13 @@ export default function Calendar() {
             return (
               <td key={gameId}>
                 <ThemedView>
-                  <Cards data={game} showDate={true} onSelection={handleGamesSelection} selected={isSelected} />
+                  <Cards
+                    data={game}
+                    numberSelected={teamsSelected.length} 
+                    showDate={true}
+                    onSelection={handleGamesSelection}
+                    selected={isSelected}
+                  />
                 </ThemedView>
               </td>
             );
