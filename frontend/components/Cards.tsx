@@ -172,7 +172,7 @@ export default function Cards({
             alignItems: showDate ? '' : 'center',
             justifyContent: showDate ? '' : 'center',
             marginBottom: showDate ? '' : 0,
-            height: isSmallDevice ? 50 : 42,
+            height: isSmallDevice ? 55 : 42,
           }}
         >
           {displayTitle()}
