@@ -17,6 +17,7 @@ interface GameFormatted {
   homeTeam: string;
   homeTeamShort: string;
   arenaName: string;
+  placeName: string;
   gameDate: string;
   teamSelectedId: string;
   show: boolean;

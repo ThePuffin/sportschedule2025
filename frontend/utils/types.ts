@@ -10,6 +10,7 @@ export interface GameFormatted {
   homeTeamShort: string;
   homeTeamLogo: string;
   arenaName: string;
+  placeName: string;
   gameDate: string;
   teamSelectedId: string;
   show: boolean;

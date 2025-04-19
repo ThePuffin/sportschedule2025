@@ -24,12 +24,13 @@ export default function Cards({
   const {
     homeTeam,
     awayTeam,
-    arenaName,
+    arenaName = '',
     homeTeamLogo,
     awayTeamLogo,
     teamSelectedId,
     show,
     startTimeUTC,
+    placeName = '',
     color,
     backgroundColor,
     awayTeamShort,
@@ -106,7 +107,7 @@ export default function Cards({
 
   const displayTitle = () => {
     if (arenaName && arenaName !== '') {
-      const stadiumSearch = arenaName.replace(/\s+/g, '+');
+      const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
       return (
         <Card.Title style={{ ...cardClass }}>
           <em>{gameDate} </em>
