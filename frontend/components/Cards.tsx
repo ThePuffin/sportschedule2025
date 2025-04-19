@@ -37,19 +37,22 @@ export default function Cards({
   const [teamNameHome, setTeamNameHome] = useState(homeTeam);
   const [teamNameAway, setTeamNameAway] = useState(awayTeam);
   const [isSmallDevice, setIsSmallDevice] = useState(false);
+  const [fontSize, setFontSize] = useState('1rem');
 
   useEffect(() => {
     const updateDeviceType = () => {
       const { width } = Dimensions.get('window');
 
-      if (width <= 768) {
+      if (width <= 1075) {
         setTeamNameHome(homeTeamShort);
         setTeamNameAway(awayTeamShort);
         setIsSmallDevice(true);
+        setFontSize('0.75rem');
       } else {
         setTeamNameHome(homeTeam);
         setTeamNameAway(awayTeam);
         setIsSmallDevice(false);
+        setFontSize('1rem');
       }
     };
 
@@ -86,10 +89,10 @@ export default function Cards({
       ? {
           cursor: 'pointer',
           ...teamColors,
-          fontSize: '1rem',
+          fontSize,
         }
       : {
-          fontSize: '1rem',
+          fontSize,
           cursor: 'no-drop',
           opacity: '0.97',
           pointerEvents: 'none',
@@ -108,7 +111,7 @@ export default function Cards({
         </Card.Title>
       );
     }
-    return <Card.Title>{gameDate}</Card.Title>;
+    return <Card.Title style={{ fontSize }}>{gameDate}</Card.Title>;
   };
 
   const displayContent = () => {

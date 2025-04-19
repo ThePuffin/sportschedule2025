@@ -14,7 +14,7 @@ export default function Buttons({
 }: Readonly<ButtonsProps>) {
   const { selectedTeamsNumber, selectedGamesNumber, loadingTeams } = data;
 
-  const disabledAdd = loadingTeams || selectedTeamsNumber >= 5;
+  const disabledAdd = loadingTeams || selectedTeamsNumber >= 6;
   const disabledRemove = loadingTeams || selectedTeamsNumber <= 2;
   const isGamesSelected = selectedGamesNumber > 0;
 

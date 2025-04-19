@@ -3,8 +3,8 @@ import Cards from './Cards';
 import { GameFormatted } from '../utils/types.ts';
 
 interface GamesSelectedProps {
-  data: { gamesSelected: GameFormatted[] };
-  onAction: (game: GameFormatted) => void;
+  readonly data: { readonly gamesSelected: GameFormatted[] };
+  readonly onAction: (game: GameFormatted) => void;
 }
 
 export default function GamesSelected({ data = { gamesSelected }, onAction }: GamesSelectedProps) {
