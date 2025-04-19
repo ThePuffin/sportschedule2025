@@ -3,6 +3,7 @@ import { View, Image, Text, Dimensions } from 'react-native';
 import { Colors } from '../constants/Colors.ts';
 import { GameFormatted } from '../utils/types.ts';
 import React, { useEffect, useState } from 'react';
+import { Icon } from '@rneui/themed';
 
 interface CardsProps {
   data: GameFormatted;
@@ -87,15 +88,13 @@ export default function Cards({
   let cardClass =
     show === 'true'
       ? {
-          cursor: 'pointer',
           ...teamColors,
           fontSize,
         }
       : {
           fontSize,
-          cursor: 'no-drop',
           opacity: '0.97',
-          pointerEvents: 'none',
+
           backgroundColor: '#ffffee',
         };
 
@@ -105,9 +104,25 @@ export default function Cards({
 
   const displayTitle = () => {
     if (arenaName && arenaName !== '') {
+      const stadiumSearch = arenaName.replace(/\s+/g, '+');
       return (
         <Card.Title style={{ ...cardClass }}>
-          <em>{gameDate} </em> @ {arenaName}
+          <em>{gameDate} </em>
+          <a
+            href={`https://maps.google.com/?q=${stadiumSearch}`}
+            style={{ textDecoration: 'none', color: 'inherit' }}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Icon
+              name="map-marker"
+              type="font-awesome"
+              size={isSmallDevice ? 12 : 16}
+              color={cardClass.color ?? defaultColors.color}
+              style={{ marginRight: 3 }}
+            />
+            {arenaName}
+          </a>
         </Card.Title>
       );
     }
@@ -118,7 +133,13 @@ export default function Cards({
     if (homeTeam && awayTeam) {
       return (
         <View
+          onClick={() => {
+            if (show === 'true') {
+              onSelection(data);
+            }
+          }}
           style={{
+            cursor: show === 'true' ? 'pointer' : 'not-allowed',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -159,7 +180,6 @@ export default function Cards({
   return (
     <div className={cardClass}>
       <Card
-        onClick={() => onSelection(data)}
         containerStyle={{
           marginLeft: 0,
           marginRight: 0,
@@ -184,7 +204,6 @@ export default function Cards({
           {displayTitle()}
         </Card.Title>
         <Card.Divider />
-
         {displayContent()}
       </Card>
     </div>
