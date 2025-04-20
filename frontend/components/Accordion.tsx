@@ -3,7 +3,7 @@ import { ListItem } from '@rneui/themed';
 import Cards from './Cards';
 import { ThemedText } from '@/components/ThemedText';
 
-export default function Accordion({ i, league, gamesFiltred, open }) {
+export default function Accordion({ i, league, gamesFiltred = [], open }) {
   const [expanded, setExpanded] = useState(open ?? i === 0);
   const makeCards = (league) => {
     if (!gamesFiltred?.length) {
@@ -32,7 +32,9 @@ export default function Accordion({ i, league, gamesFiltred, open }) {
       <ListItem.Accordion
         content={
           <ListItem.Content>
-            <ListItem.Title>{league} ({gamesFiltred.length})</ListItem.Title>
+            <ListItem.Title>
+              {league} ({gamesFiltred?.length})
+            </ListItem.Title>
           </ListItem.Content>
         }
         isExpanded={expanded}

@@ -106,9 +106,13 @@ export default function GameofTheDay() {
     const leaguesAvailable = [League.ALL, ...new Set(games.map((game) => game.league).sort())];
 
     return leaguesAvailable.map((league, i) => {
+      let gamesFiltred = [...games];
+      if (league !== League.ALL) {
+        gamesFiltred = gamesFiltred.filter((game) => game.league === league);
+      }
       return (
-        <div key={i} style={{ margin: 'auto', width: '90%' }}>
-          {displayAccordion({ league, i })}
+        <div key={league} style={{ margin: 'auto', width: '90%' }}>
+          {displayAccordion({ league, i, gamesFiltred })}
         </div>
       );
     });
