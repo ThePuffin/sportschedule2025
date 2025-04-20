@@ -4,6 +4,7 @@ import { Colors } from '../constants/Colors.ts';
 import { GameFormatted } from '../utils/types.ts';
 import React, { useEffect, useState } from 'react';
 import { Icon } from '@rneui/themed';
+import { generateICSFile } from '../utils/utils.ts';
 
 interface CardsProps {
   data: GameFormatted;
@@ -56,7 +57,7 @@ export default function Cards({
         setTeamNameHome(homeTeam);
         setTeamNameAway(awayTeam);
         setIsSmallDevice(false);
-        setFontSize('1rem');
+        setFontSize('0.9rem');
       }
     };
 
@@ -68,7 +69,8 @@ export default function Cards({
     };
   }, []);
 
-  let gameDate = new Date(data.gameDate).toLocaleDateString(undefined, {
+  const date = data?.gameDate ? new Date(data.gameDate) : new Date();
+  let gameDate = new Date(date).toLocaleDateString(undefined, {
     day: '2-digit',
     month: isSmallDevice ? '2-digit' : 'short',
   });
@@ -82,7 +84,7 @@ export default function Cards({
         })
       : new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
-  const colors = Colors[teamSelectedId];
+  const colors = Colors[teamSelectedId] ?? {};
   const teamColors =
     colors.backgroundColor && colors.backgroundColor !== '' ? Colors[teamSelectedId] : { color, backgroundColor };
 
@@ -110,8 +112,15 @@ export default function Cards({
       const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
       return (
         <Card.Title style={{ ...cardClass }}>
-          <em>{gameDate} </em>
-          {showDate ? <br /> : '\u00A0'}
+          <em
+            onClick={() => {
+              generateICSFile(data);
+            }}
+            style={{ cursor: 'pointer', textDecoration: 'none' }}
+          >
+            {gameDate}
+          </em>
+          {'\u00A0'}
           <a
             href={`https://maps.google.com/?q=${stadiumSearch}`}
             style={{ textDecoration: 'none', color: 'inherit' }}
@@ -121,7 +130,7 @@ export default function Cards({
             <Icon
               name="map-marker"
               type="font-awesome"
-              size={isSmallDevice ? 12 : 16}
+              size={isSmallDevice ? 12 : 14}
               color={cardClass.color ?? defaultColors.color}
               style={{ marginRight: 3 }}
             />
@@ -209,7 +218,7 @@ export default function Cards({
         >
           {displayTitle()}
         </Card.Title>
-        <Card.Divider />
+        <Card.Divider style={{ backgroundColor: teamColors.color }} />
         {displayContent()}
       </Card>
     </div>

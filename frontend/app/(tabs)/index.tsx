@@ -5,6 +5,7 @@ import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
 import Loader from '../../components/Loader';
 import DateRangePicker from '../../components/DatePicker';
+import { translateLeagueAll } from '../../utils/utils';
 
 interface GameFormatted {
   _id: string;
@@ -102,15 +103,12 @@ export default function GameofTheDay() {
     if (!games || games.length === 0) {
       return displayNoContent();
     }
-    const leaguesAvailable = ['ALL', ...new Set(games.map((game) => game.league))];
+    const leaguesAvailable = [League.ALL, ...new Set(games.map((game) => game.league).sort())];
+
     return leaguesAvailable.map((league, i) => {
-      let gamesFiltred = [...games];
-      if (league !== League.ALL) {
-        gamesFiltred = gamesFiltred.filter((game) => game.league === league);
-      }
       return (
         <div key={i} style={{ margin: 'auto', width: '90%' }}>
-          {displayAccordion({ league, i, gamesFiltred })}
+          {displayAccordion({ league, i })}
         </div>
       );
     });
@@ -122,9 +120,13 @@ export default function GameofTheDay() {
       if (league !== League.ALL) {
         gamesFiltred = gamesFiltred.filter((game) => game.league === league);
       }
+      let translatedLeague = league;
+      if (league === League.ALL) {
+        translatedLeague = translateLeagueAll();
+      }
       return (
-        <td key={i} style={{ verticalAlign: 'baseline' }}>
-          <Accordion league={league} i={i} gamesFiltred={gamesFiltred} open={true} />
+        <td key={league} style={{ verticalAlign: 'baseline' }}>
+          <Accordion league={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} />
         </td>
       );
     });
