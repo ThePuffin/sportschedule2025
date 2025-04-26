@@ -17,27 +17,32 @@ export const removeLastTeamId = (selection: string[]) => {
   return selection;
 };
 
-export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, placeName }) => {
-  const icsContent = `
-      BEGIN:VCALENDAR
-      VERSION:2.0
-      BEGIN:VEVENT
-      UID: ${Date.now()}
-      SUMMARY:${homeTeam} vs ${awayTeam}
-      DTSTART:${new Date(startTimeUTC).toISOString().replace(/[-:]/g, '').split('.')[0]}Z
-      DTEND:${
-        new Date(new Date(startTimeUTC).getTime() + 2 * 60 * 60 * 1000).toISOString().replace(/[-:]/g, '').split('.')[0]
-      }Z
-      LOCATION:${arenaName}, ${placeName}
-      DESCRIPTION:Game between ${homeTeam} and ${awayTeam} at ${arenaName}.
-      END:VEVENT
-      END:VCALENDAR
-              `;
+interface ICSFileParams {
+  homeTeam: string;
+  awayTeam: string;
+  startTimeUTC: string;
+  arenaName: string;
+  placeName: string;
+}
+
+export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, placeName }: ICSFileParams) => {
+  const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID: ${Date.now()}
+SUMMARY:${homeTeam} vs ${awayTeam}
+DTSTART:${new Date(startTimeUTC).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'}
+DTEND:${new Date(new Date(startTimeUTC).getTime() + 3 * 60 * 60 * 1000).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'}
+LOCATION:${arenaName}, ${placeName}
+DESCRIPTION:Game between ${homeTeam} and ${awayTeam} at ${arenaName}.
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR`;
   const blob = new Blob([icsContent], { type: 'text/calendar' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${homeTeam}_vs_${awayTeam}.ics`;
+  link.download = `${homeTeam}VS${awayTeam}.ics`;
   link.click();
   URL.revokeObjectURL(url);
 };

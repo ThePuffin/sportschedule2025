@@ -17,6 +17,7 @@ export default function GamesSelected({ data = { gamesSelected }, onAction }: Ga
               data={gameSelected}
               selected={false}
               showDate={true}
+              showButtons={true}
               showName={false}
               onSelection={() => onAction(gameSelected)}
             />

@@ -12,12 +12,14 @@ interface CardsProps {
   showName: boolean;
   onSelection: (game: GameFormatted) => void;
   selected: boolean;
+  showButtons?: boolean;
 }
 
 export default function Cards({
   data,
   showDate,
   showName = true,
+  showButtons = false,
   onSelection = {},
   numberSelected = 0,
   selected = false,
@@ -115,32 +117,76 @@ export default function Cards({
       const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
       return (
         <Card.Title style={{ ...cardClass }}>
-          <em
+          <button
             onClick={() => {
-              generateICSFile(data);
+              if (showButtons) generateICSFile(data);
             }}
-            style={{ cursor: 'pointer', textDecoration: 'none' }}
+            style={{
+              cursor: 'pointer',
+              textDecoration: showButtons && !isSmallDevice ? 'underline' : 'none',
+              color: showButtons && isSmallDevice ? teamColors.color : 'inherit',
+              backgroundColor: showButtons && isSmallDevice ? teamColors.backgroundColor : 'inherit',
+              border: 'none',
+              font: 'inherit',
+              padding: 0,
+              margin: 0,
+            }}
+            aria-label="Generate ICS file"
           >
+            {showButtons && (
+              <Icon
+                name="calendar"
+                type="font-awesome"
+                style={{ paddingRight: isSmallDevice ? 5 : 10 }}
+                size={isSmallDevice ? 10 : 15}
+                color={teamColors.backgroundColor}
+              />
+            )}
             {gameDate}
-          </em>
-          {'\u00A0'}
-          <a
-            href={`https://maps.google.com/?q=${stadiumSearch}`}
-            style={{ textDecoration: 'none', color: 'inherit' }}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Icon
-              name="map-marker"
-              type="font-awesome"
-              size={isSmallDevice ? 12 : 14}
-              color={cardClass.color ?? defaultColors.color}
-              style={{ marginRight: 3 }}
-            />
-            <p style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', width: '100%', margin: 0 }}>
+          </button>
+          {'\u00A0'}{' '}
+          {!showButtons ? (
+            <p
+              style={{
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                width: '100%',
+                margin: 3,
+                padding: 0,
+                color: 'inherit',
+              }}
+            >
               {arenaName}
             </p>
-          </a>
+          ) : (
+            <a
+              href={`https://maps.google.com/?q=${stadiumSearch}`}
+              style={{ textDecoration: 'none', color: 'inherit' }}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Icon
+                name="map-marker"
+                type="font-awesome"
+                size={isSmallDevice ? 10 : 12}
+                color={cardClass.color ?? defaultColors.color}
+                style={{ marginRight: 0, paddingRight: 0 }}
+              />
+              <p
+                style={{
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  width: '100%',
+                  margin: 3,
+                  padding: 0,
+                }}
+              >
+                {arenaName}
+              </p>
+            </a>
+          )}
         </Card.Title>
       );
     }
@@ -198,6 +244,11 @@ export default function Cards({
   return (
     <div className={cardClass}>
       <Card
+        onClick={() => {
+          if (show === 'true' && !showButtons) {
+            onSelection(data);
+          }
+        }}
         containerStyle={{
           marginLeft: 0,
           marginRight: 0,
