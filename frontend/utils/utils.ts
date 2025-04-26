@@ -19,10 +19,10 @@ export const removeLastTeamId = (selection: string[]) => {
 
 export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, placeName }) => {
   const icsContent = `
-      UID: ${Date.now()}
       BEGIN:VCALENDAR
       VERSION:2.0
       BEGIN:VEVENT
+      UID: ${Date.now()}
       SUMMARY:${homeTeam} vs ${awayTeam}
       DTSTART:${new Date(startTimeUTC).toISOString().replace(/[-:]/g, '').split('.')[0]}Z
       DTEND:${
