@@ -37,10 +37,15 @@ let gamesDay = {};
 let lastGamesUpdate: Date;
 
 const fetchGames = async (date: string): Promise<GameFormatted[]> => {
-  const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`);
-  const dayGames = await response.json();
-  gamesDay[date] = dayGames;
-  return dayGames;
+  try {
+    const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`);
+    const dayGames = await response.json();
+    gamesDay[date] = dayGames;
+    return dayGames;
+  } catch (error) {
+    console.error(`Error fetching games for date ${date}:`, error);
+    return [];
+  }
 };
 
 const getNextGamesFromApi = async (date: string): Promise<null> => {

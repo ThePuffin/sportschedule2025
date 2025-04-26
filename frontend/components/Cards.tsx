@@ -20,7 +20,7 @@ export default function Cards({
   showName = true,
   onSelection = {},
   numberSelected = 0,
-  selected = true,
+  selected = false,
 }: Readonly<CardsProps>) {
   const {
     homeTeam,
@@ -104,7 +104,10 @@ export default function Cards({
         };
 
   let selectedCard = selected
-    ? { filter: 'brightness(1.25) saturate(1.5)', border: 'double' + teamColors?.color || defaultColors.color }
+    ? {
+        filter: 'brightness(1.25) saturate(1.5) contrast(1.05)',
+        border: 'double' + teamColors?.color || defaultColors.color,
+      }
     : {};
 
   const displayTitle = () => {
