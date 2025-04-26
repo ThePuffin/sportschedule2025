@@ -17,7 +17,7 @@ interface CardsProps {
 
 export default function Cards({
   data,
-  showDate,
+  showDate = false,
   showName = true,
   showButtons = false,
   onSelection = {},
@@ -145,21 +145,7 @@ export default function Cards({
             {gameDate}
           </button>
           {'\u00A0'}{' '}
-          {!showButtons ? (
-            <p
-              style={{
-                textOverflow: 'ellipsis',
-                overflow: 'hidden',
-                whiteSpace: 'nowrap',
-                width: '100%',
-                margin: 3,
-                padding: 0,
-                color: 'inherit',
-              }}
-            >
-              {arenaName}
-            </p>
-          ) : (
+          {showButtons || !showDate ? (
             <a
               href={`https://maps.google.com/?q=${stadiumSearch}`}
               style={{ textDecoration: 'none', color: 'inherit' }}
@@ -186,6 +172,20 @@ export default function Cards({
                 {arenaName}
               </p>
             </a>
+          ) : (
+            <p
+              style={{
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                width: '100%',
+                margin: 3,
+                padding: 0,
+                color: 'inherit',
+              }}
+            >
+              {arenaName}
+            </p>
           )}
         </Card.Title>
       );
@@ -199,7 +199,11 @@ export default function Cards({
         <View
           onClick={() => {
             if (show === 'true') {
-              onSelection(data);
+              if (!showDate) {
+                generateICSFile(data);
+              } else {
+                onSelection(data);
+              }
             }
           }}
           style={{
