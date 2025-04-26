@@ -25,26 +25,55 @@ interface ICSFileParams {
   placeName: string;
 }
 
+const formatICSDate = (date: Date): string => {
+  return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+};
+
 export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, placeName }: ICSFileParams) => {
-  const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-BEGIN:VEVENT
-UID: ${Date.now()}
-SUMMARY:${homeTeam} vs ${awayTeam}
-DTSTART:${new Date(startTimeUTC).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'}
-DTEND:${new Date(new Date(startTimeUTC).getTime() + 3 * 60 * 60 * 1000).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'}
-LOCATION:${arenaName}, ${placeName}
-DESCRIPTION:Game between ${homeTeam} and ${awayTeam} at ${arenaName}.
-TRANSP:OPAQUE
-END:VEVENT
-END:VCALENDAR`;
-  const blob = new Blob([icsContent], { type: 'text/calendar' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${homeTeam}VS${awayTeam}.ics`;
-  link.click();
-  URL.revokeObjectURL(url);
+  const startDate = new Date(startTimeUTC);
+
+  if (isNaN(startDate.getTime())) {
+    console.error('Invalid startTimeUTC provided:', startTimeUTC);
+
+    return;
+  }
+
+  const endDate = new Date(startDate.getTime() + 3 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const eventUID = `${formatICSDate(startDate)}`;
+
+  const icsContent = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'BEGIN:VEVENT',
+    `UID:${eventUID}`,
+    `DTSTAMP:${formatICSDate(now)}`,
+    `DTSTART:${formatICSDate(startDate)}`,
+    `DTEND:${formatICSDate(endDate)}`,
+    `SUMMARY:${homeTeam} vs ${awayTeam}`,
+    `LOCATION:${arenaName}, ${placeName}`,
+    `DESCRIPTION:Game between ${homeTeam} and ${awayTeam} at ${arenaName}`,
+    'TRANSP:OPAQUE',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  try {
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    // Sanitize filename slightly
+    const filename = `${homeTeam}_vs_${awayTeam}.ics`.replace(/[^a-z0-9_.-]/gi, '_');
+    link.download = filename;
+    link.click();
+
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  } catch (e) {
+    console.error('Error generating or downloading ICS file:', e);
+    return;
+  }
 };
 
 export const translateLeagueAll = () => {
