@@ -26,7 +26,7 @@ interface GameFormatted {
   league: string;
   updateDate?: Date;
   venueTimezone?: string;
-  timeStart?: string;
+  isActive?: boolean;
   startTimeUTC?: string;
 }
 
