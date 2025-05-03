@@ -212,7 +212,7 @@ export default function Cards({
             justifyContent: 'center',
             alignItems: 'center',
             flexDirection: 'column',
-            height: isSmallDevice ? 193 : 157,
+            height: isSmallDevice ? 193 : 180,
           }}
         >
           <Image
@@ -258,7 +258,7 @@ export default function Cards({
           marginRight: 0,
           ...selectedCard,
           ...cardClass,
-          height: isSmallDevice ? 300 + addHeight : 250,
+          height: isSmallDevice ? 300 + addHeight : 290,
         }}
         wrapperStyle={cardClass}
       >
@@ -271,7 +271,7 @@ export default function Cards({
             alignItems: showDate ? '' : 'center',
             justifyContent: showDate ? '' : 'center',
             marginBottom: showDate ? '' : 0,
-            height: isSmallDevice ? 55 + addHeight : 42,
+            height: isSmallDevice ? 55 + addHeight : 55,
           }}
         >
           {displayTitle()}
