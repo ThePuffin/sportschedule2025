@@ -216,7 +216,12 @@ export default function Cards({
           }}
         >
           <Image
-            style={{ width: '50%', height: 50 }}
+            style={{
+              width: '50%',
+              height: 50,
+              filter:
+                'drop-shadow(0.01px 0 0 #101518) drop-shadow(0 0.01px 0 #101518) drop-shadow(0.01px 0 0 #101518) drop-shadow(0 0.01px 0 #101518)',
+            }}
             resizeMode="contain"
             source={{
               uri: awayTeamLogo,
@@ -226,7 +231,12 @@ export default function Cards({
           <Text style={cardClass}>@</Text>
           <Text style={cardClass}>{teamNameHome}</Text>
           <Image
-            style={{ width: '50%', height: 50 }}
+            style={{
+              width: '50%',
+              height: 50,
+              filter:
+                'drop-shadow(0.01px 0 0 #101518) drop-shadow(0 0.01px 0 #101518) drop-shadow(0.01px 0 0 #101518) drop-shadow(0 0.01px 0 #101518)',
+            }}
             resizeMode="contain"
             source={{
               uri: homeTeamLogo,
