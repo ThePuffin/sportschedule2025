@@ -13,6 +13,7 @@ export interface GameFormatted {
   placeName: string;
   gameDate: string;
   teamSelectedId: string;
+  startTimeUTC: string;
   show: boolean;
   selectedTeam: boolean;
   league: string;

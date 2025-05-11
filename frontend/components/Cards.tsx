@@ -1,16 +1,16 @@
 import { Card } from '@rneui/base';
-import { View, Image, Text, Dimensions } from 'react-native';
-import { Colors } from '../constants/Colors.ts';
-import { GameFormatted } from '../utils/types.ts';
-import React, { useEffect, useState } from 'react';
 import { Icon } from '@rneui/themed';
-import { generateICSFile } from '../utils/utils.ts';
+import React, { useEffect, useState } from 'react';
+import { Dimensions, Image, Text, View } from 'react-native';
+import { Colors } from '../constants/Colors';
+import { GameFormatted } from '../utils/types';
+import { generateICSFile } from '../utils/utils';
 
 interface CardsProps {
   data: GameFormatted;
   showDate: boolean;
-  showName: boolean;
-  onSelection: (game: GameFormatted) => void;
+  showName?: boolean;
+  onSelection?: (game: GameFormatted) => void;
   selected: boolean;
   showButtons?: boolean;
   numberSelected?: number;
@@ -21,7 +21,7 @@ export default function Cards({
   showDate = false,
   showName = true,
   showButtons = false,
-  onSelection = {},
+  onSelection = () => {},
   numberSelected = 0,
   selected = false,
 }: Readonly<CardsProps>) {

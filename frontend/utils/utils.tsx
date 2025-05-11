@@ -4,8 +4,12 @@ export const randomNumber = (max) => {
   return Math.floor(Math.random() * (max - 0 + 1) + 0);
 };
 
+export const getRandomTeamId = (teams: Team[]) => {
+  return teams[randomNumber(teams.length) - 1]?.uniqueId;
+};
+
 export const addNewTeamId = (selection: string[], teams: Team[]) => {
-  const randomId = teams[randomNumber(teams.length) - 1]?.uniqueId;
+  const randomId = getRandomTeamId(teams);
   if (randomId && !selection.includes(randomId)) {
     selection.push(randomId);
   }

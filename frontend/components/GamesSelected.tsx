@@ -1,6 +1,6 @@
 import { ThemedView } from '@/components/ThemedView';
+import { GameFormatted } from '../utils/types';
 import Cards from './Cards';
-import { GameFormatted } from '../utils/types.ts';
 
 interface GamesSelectedProps {
   readonly data: { readonly gamesSelected: GameFormatted[] };
