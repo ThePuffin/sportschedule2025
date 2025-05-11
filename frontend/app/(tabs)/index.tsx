@@ -1,10 +1,10 @@
 import { ThemedView } from '@/components/ThemedView';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
-import Loader from '../../components/Loader';
 import DateRangePicker from '../../components/DatePicker';
+import Loader from '../../components/Loader';
+import { League } from '../../constants/enum';
 import { translateWord } from '../../utils/utils';
 
 interface GameFormatted {
@@ -93,7 +93,7 @@ export default function GameofTheDay() {
   };
 
   const displayAccordion = ({ league, i, gamesFiltred }) => {
-    return <Accordion key={i} league={league} i={i} gamesFiltred={gamesFiltred} />;
+    return <Accordion key={i} filter={league} i={i} gamesFiltred={gamesFiltred} />;
   };
 
   const displayNoContent = () => {
@@ -135,7 +135,7 @@ export default function GameofTheDay() {
       }
       return (
         <td key={league} style={{ verticalAlign: 'baseline' }}>
-          <Accordion league={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} />
+          <Accordion filter={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} isCounted={true} />
         </td>
       );
     });

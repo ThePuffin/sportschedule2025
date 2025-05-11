@@ -154,6 +154,7 @@ export default function Cards({
       const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
       let shortArenaName =
         arenaName && numberSelected > 3 && arenaName.length > 5 ? arenaName.split(' ')[0] + ' ...' : arenaName || '';
+      shortArenaName = isSmallDevice ? shortArenaName.split(' ').slice(0, -1).join(' ') : shortArenaName;
       shortArenaName =
         isSmallDevice && shortArenaName.length > 7 && numberSelected > 5
           ? shortArenaName.slice(0, 6) + ' ...'

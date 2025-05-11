@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { ListItem } from '@rneui/themed';
-import Cards from './Cards';
 import { ThemedText } from '@/components/ThemedText';
+import { ListItem } from '@rneui/themed';
+import React, { useState } from 'react';
+import Cards from './Cards';
 
-export default function Accordion({ i, league, gamesFiltred = [], open }) {
+export default function Accordion({ i, filter, gamesFiltred = [], open, isCounted = false, showDate = false }) {
   const [expanded, setExpanded] = useState(open ?? i === 0);
-  const makeCards = (league) => {
+  const makeCards = (filter) => {
     if (!gamesFiltred?.length) {
       return <ThemedText>There are no games today</ThemedText>;
     }
@@ -19,6 +19,7 @@ export default function Accordion({ i, league, gamesFiltred = [], open }) {
             }}
             key={gameId}
             data={game}
+            showDate={showDate}
             style={{ margin: 0, padding: 0 }}
           />
         );
@@ -33,7 +34,7 @@ export default function Accordion({ i, league, gamesFiltred = [], open }) {
         content={
           <ListItem.Content>
             <ListItem.Title>
-              {league} ({gamesFiltred?.length})
+              {filter} {isCounted ? `(${gamesFiltred?.length})` : ''}
             </ListItem.Title>
           </ListItem.Content>
         }
@@ -42,7 +43,7 @@ export default function Accordion({ i, league, gamesFiltred = [], open }) {
           setExpanded(!expanded);
         }}
       >
-        {makeCards(league)}
+        {makeCards(filter)}
       </ListItem.Accordion>
     </div>
   );

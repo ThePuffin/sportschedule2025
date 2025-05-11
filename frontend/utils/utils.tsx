@@ -80,7 +80,7 @@ export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, p
   }
 };
 
-export const translateWord = (word) => {
+export const translateWord = (word: string) => {
   let translation = {};
   const language = navigator.language.split('-')[0];
   switch (language) {
@@ -90,6 +90,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Spiele des Tages',
         remainingGames: 'Verbleibende Spiele',
         calendars: 'Kalender',
+        noResults: 'Keine Ergebnisse',
       };
       break;
     case 'es':
@@ -98,6 +99,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Juegos del día',
         remainingGames: 'Juegos restantes',
         calendars: 'Calendarios',
+        noResults: 'Sin resultados',
       };
       break;
     case 'fr':
@@ -106,6 +108,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Programme du jour',
         remainingGames: 'Matchs restants',
         calendars: 'Calendriers',
+        noResults: 'Pas de résultats',
       };
       break;
     case 'it':
@@ -114,6 +117,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Giochi del giorno',
         remainingGames: 'Giochi rimanenti',
         calendars: 'Calendari',
+        noResults: 'Nessun risultato',
       };
       break;
     case 'ja':
@@ -122,6 +126,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'その日のゲーム',
         remainingGames: '残りのゲーム',
         calendars: 'カレンダー',
+        noResults: '結果なし',
       };
       break;
     case 'ko':
@@ -130,6 +135,7 @@ export const translateWord = (word) => {
         gamesOfDay: '그날의 게임',
         remainingGames: '남은 게임',
         calendars: '달력',
+        noResults: '결과 없음',
       };
       break;
     case 'nl':
@@ -138,6 +144,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Spelkalender',
         remainingGames: 'Resterende spellen',
         calendars: 'Kalenders',
+        noResults: 'Geen resultaten',
       };
       break;
     case 'pt':
@@ -146,6 +153,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Jogos do dia',
         remainingGames: 'Jogos restantes',
         calendars: 'Calendários',
+        noResults: 'Sem resultados',
       };
       break;
     case 'ru':
@@ -154,6 +162,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Игры дня',
         remainingGames: 'Оставшиеся игры',
         calendars: 'Календари',
+        noResults: 'Нет результатов',
       };
       break;
     case 'zh':
@@ -162,6 +171,7 @@ export const translateWord = (word) => {
         gamesOfDay: '当天的比赛',
         remainingGames: '剩余比赛',
         calendars: '日历',
+        noResults: '没有结果',
       };
       break;
     default:
@@ -170,6 +180,7 @@ export const translateWord = (word) => {
         gamesOfDay: 'Games of the day',
         remainingGames: 'Remaining games',
         calendars: 'Calendars',
+        noResults: 'No results',
       };
       break;
   }
