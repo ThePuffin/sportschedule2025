@@ -27,9 +27,9 @@ export default function Schedule() {
     if (selection) {
       storeTeamSelected(selection);
 
-      const gamesData = localStorage.getItem('gamesData');
-      if (gamesData) {
-        setGames(JSON.parse(gamesData));
+      const scheduleData = localStorage.getItem('scheduleData');
+      if (scheduleData) {
+        setGames(JSON.parse(scheduleData));
       }
     } else {
       setTeamSelected(selection);
@@ -99,10 +99,10 @@ export default function Schedule() {
       try {
         const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/team/${teamSelected}`);
 
-        const gamesData = await response.json();
-        console.log({ gamesData });
-        localStorage.setItem('gamesData', JSON.stringify(gamesData));
-        setGames(gamesData);
+        const scheduleData = await response.json();
+        console.log({ scheduleData });
+        localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+        setGames(scheduleData);
       } catch (error) {
         console.error(error);
         return {};
