@@ -3,7 +3,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Dimensions, ScrollView, View } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
 import Loader from '../../components/Loader';
 import { FilterGames, GameFormatted, Team } from '../../utils/types'; // Added GameFormatted
@@ -14,6 +14,27 @@ export default function Schedule() {
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamSelected, setTeamSelected] = useState<string>('');
+  const [isSmallDevice, setIsSmallDevice] = useState(false);
+
+  useEffect(() => {
+    const updateDeviceType = () => {
+      const { width } = Dimensions.get('window');
+      console.log('width', width);
+
+      if (width <= 1075) {
+        setIsSmallDevice(true);
+      } else {
+        setIsSmallDevice(false);
+      }
+    };
+
+    updateDeviceType();
+    Dimensions.addEventListener('change', updateDeviceType);
+
+    return () => {
+      Dimensions.removeEventListener('change', updateDeviceType);
+    };
+  }, []);
 
   const getSelectedTeams = (allTeams: []) => {
     let selection = localStorage.getItem('teamSelected') || '';
@@ -104,7 +125,7 @@ export default function Schedule() {
             return null;
           }
           return (
-            <div style={{ width: '50%', margin: '0 auto' }} key={month}>
+            <div style={{ width: isSmallDevice ? '100%' : '50%', margin: '0 auto' }}>
               <Accordion
                 key={month}
                 filter={month}
