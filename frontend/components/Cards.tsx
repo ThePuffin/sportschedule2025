@@ -155,7 +155,9 @@ export default function Cards({
       let shortArenaName =
         arenaName && numberSelected > 3 && arenaName.length > 5 ? arenaName.split(' ')[0] + ' ...' : arenaName || '';
       shortArenaName =
-        isSmallDevice && shortArenaName.length > 7 ? shortArenaName.slice(0, 6) + ' ...' : shortArenaName;
+        isSmallDevice && shortArenaName.length > 7 && numberSelected > 5
+          ? shortArenaName.slice(0, 6) + ' ...'
+          : shortArenaName;
       return (
         <View
           onClick={() => {
@@ -181,7 +183,7 @@ export default function Cards({
               width: '50%',
               height: 50,
               filter:
-                'drop-shadow(1px 0 0 #101518) drop-shadow(0 1px 0 #101518) drop-shadow(0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+                'drop-shadow(-1px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
             }}
             resizeMode="contain"
             source={{
@@ -196,7 +198,7 @@ export default function Cards({
               width: '50%',
               height: 50,
               filter:
-                'drop-shadow(1px 0 0 #101518) drop-shadow(0 1px 0 #101518) drop-shadow(0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+                'drop-shadow(-1.5px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
             }}
             resizeMode="contain"
             source={{

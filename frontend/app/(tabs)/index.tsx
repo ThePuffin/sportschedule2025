@@ -5,7 +5,7 @@ import { League } from '../../constants/enum';
 import Accordion from '../../components/Accordion';
 import Loader from '../../components/Loader';
 import DateRangePicker from '../../components/DatePicker';
-import { translateLeagueAll } from '../../utils/utils';
+import { translateWord } from '../../utils/utils';
 
 interface GameFormatted {
   _id: string;
@@ -131,7 +131,7 @@ export default function GameofTheDay() {
       }
       let translatedLeague = league;
       if (league === League.ALL) {
-        translatedLeague = translateLeagueAll();
+        translatedLeague = translateWord('translatedLeague');
       }
       return (
         <td key={league} style={{ verticalAlign: 'baseline' }}>

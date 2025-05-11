@@ -76,36 +76,98 @@ export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, p
   }
 };
 
-export const translateLeagueAll = () => {
-  let translatedLeague = '';
+export const translateWord = (word) => {
+  let translation = {};
   const language = navigator.language.split('-')[0];
   switch (language) {
-    case 'fr':
-      translatedLeague = 'TOUS';
-      break;
-    case 'en':
-      translatedLeague = 'ALL';
-      break;
     case 'de':
-      translatedLeague = 'ALLE';
+      translation = {
+        translatedLeague: 'ALLE',
+        gamesOfDay: 'Spiele des Tages',
+        remainingGames: 'Verbleibende Spiele',
+        calendars: 'Kalender',
+      };
       break;
     case 'es':
-      translatedLeague = 'TODOS';
+      translation = {
+        translatedLeague: 'TODOS',
+        gamesOfDay: 'Juegos del día',
+        remainingGames: 'Juegos restantes',
+        calendars: 'Calendarios',
+      };
+      break;
+    case 'fr':
+      translation = {
+        translatedLeague: 'TOUS',
+        gamesOfDay: 'Programme du jour',
+        remainingGames: 'Matchs restants',
+        calendars: 'Calendriers',
+      };
       break;
     case 'it':
-      translatedLeague = 'TUTTI';
-      break;
-    case 'zh':
-      translatedLeague = '所有';
+      translation = {
+        translatedLeague: 'TUTTI',
+        gamesOfDay: 'Giochi del giorno',
+        remainingGames: 'Giochi rimanenti',
+        calendars: 'Calendari',
+      };
       break;
     case 'ja':
-      translatedLeague = 'すべて';
+      translation = {
+        translatedLeague: 'すべて',
+        gamesOfDay: 'その日のゲーム',
+        remainingGames: '残りのゲーム',
+        calendars: 'カレンダー',
+      };
       break;
     case 'ko':
-      translatedLeague = '전체';
+      translation = {
+        translatedLeague: '전체',
+        gamesOfDay: '그날의 게임',
+        remainingGames: '남은 게임',
+        calendars: '달력',
+      };
+      break;
+    case 'nl':
+      translation = {
+        translatedLeague: 'ALLE',
+        gamesOfDay: 'Spelkalender',
+        remainingGames: 'Resterende spellen',
+        calendars: 'Kalenders',
+      };
+      break;
+    case 'pt':
+      translation = {
+        translatedLeague: 'TODOS',
+        gamesOfDay: 'Jogos do dia',
+        remainingGames: 'Jogos restantes',
+        calendars: 'Calendários',
+      };
+      break;
+    case 'ru':
+      translation = {
+        translatedLeague: 'ВСЕ',
+        gamesOfDay: 'Игры дня',
+        remainingGames: 'Оставшиеся игры',
+        calendars: 'Календари',
+      };
+      break;
+    case 'zh':
+      translation = {
+        translatedLeague: '所有',
+        gamesOfDay: '当天的比赛',
+        remainingGames: '剩余比赛',
+        calendars: '日历',
+      };
       break;
     default:
+      translation = {
+        translatedLeague: 'ALL',
+        gamesOfDay: 'Games of the day',
+        remainingGames: 'Remaining games',
+        calendars: 'Calendars',
+      };
       break;
   }
-  return translatedLeague;
+  return translation[word] ?? '';
 };
