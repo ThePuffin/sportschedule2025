@@ -35,6 +35,7 @@ const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 let gamesDay = {};
 let lastGamesUpdate: Date;
+const isCounted = true;
 
 const fetchGames = async (date: string): Promise<GameFormatted[]> => {
   try {
@@ -93,7 +94,7 @@ export default function GameofTheDay() {
   };
 
   const displayAccordion = ({ league, i, gamesFiltred }) => {
-    return <Accordion key={i} filter={league} i={i} gamesFiltred={gamesFiltred} />;
+    return <Accordion key={i} filter={league} i={i} gamesFiltred={gamesFiltred} isCounted={isCounted} />;
   };
 
   const displayNoContent = () => {
@@ -135,7 +136,7 @@ export default function GameofTheDay() {
       }
       return (
         <td key={league} style={{ verticalAlign: 'baseline' }}>
-          <Accordion filter={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} isCounted={true} />
+          <Accordion filter={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} isCounted={isCounted} />
         </td>
       );
     });

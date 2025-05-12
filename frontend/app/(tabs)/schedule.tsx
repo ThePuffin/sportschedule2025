@@ -19,8 +19,6 @@ export default function Schedule() {
   useEffect(() => {
     const updateDeviceType = () => {
       const { width } = Dimensions.get('window');
-      console.log('width', width);
-
       if (width <= 1075) {
         setIsSmallDevice(true);
       } else {
