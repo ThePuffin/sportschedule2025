@@ -92,7 +92,7 @@ export default function Schedule() {
 
   const displayGamesCards = (teamSelectedId: string) => {
     const today = new Date().toISOString().split('T')[0];
-    if (!games || (games[today]?.[0].updateDate ?? '') === '') {
+    if (!games || (Object.keys(games).length === 1 && (games[today]?.[1]?.updateDate ?? '')) === '') {
       return (
         <div>
           <br />
@@ -123,9 +123,8 @@ export default function Schedule() {
             return null;
           }
           return (
-            <div style={{ width: isSmallDevice ? '100%' : '50%', margin: '0 auto' }}>
+            <div key={month} style={{ width: isSmallDevice ? '100%' : '50%', margin: '0 auto' }}>
               <Accordion
-                key={month}
                 filter={month}
                 i={monthIndex}
                 gamesFiltred={gamesForThisMonth}
