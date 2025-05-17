@@ -34,10 +34,19 @@ export default function Schedule() {
     };
   }, []);
 
-  const getSelectedTeams = (allTeams: []) => {
+  const getSelectedTeams = (allTeams: Team[]) => {
     let selection = localStorage.getItem('teamSelected') || '';
     if (selection.length === 0) {
-      selection = getRandomTeamId(allTeams);
+      const selectedTeams = localStorage.getItem('teamsSelected') || '';
+
+      let teamsSelectedIds = selectedTeams.length > 0 ? JSON.parse(selectedTeams) : [];
+      let randomTeam = getRandomTeamId(allTeams);
+
+      if (teamsSelectedIds.length > 0) {
+        selection = teamsSelectedIds[0]?.uniqueId || randomTeam;
+      } else {
+        selection = randomTeam;
+      }
     }
     storeTeamSelected(selection);
   };
@@ -100,7 +109,11 @@ export default function Schedule() {
         </div>
       );
     } else if (games) {
-      const months = Object.keys(games).reduce((acc: { [key: string]: string[] }, day: string) => {
+      const filteredGames = Object.keys(games).filter((day: string) => {
+        return games[day]?.some((game: GameFormatted) => game.updateDate);
+      });
+
+      const months = filteredGames.reduce((acc: { [key: string]: string[] }, day: string) => {
         const month = new Date(day).toLocaleString('default', { month: 'long' });
         if (!acc[month]) {
           acc[month] = [];
@@ -130,13 +143,23 @@ export default function Schedule() {
                 gamesFiltred={gamesForThisMonth}
                 open={monthIndex === 0}
                 showDate={true}
+                isCounted={true}
               />
             </div>
           );
         });
       }
     }
-    return <Loader />;
+    return Object.keys(games).length ? (
+      <div>
+        <br />
+        <ThemedText>{translateWord('noResults')}</ThemedText>
+      </div>
+    ) : (
+      <div>
+        <Loader />
+      </div>
+    );
   };
 
   const getGamesFromApi = async (): Promise<FilterGames> => {
