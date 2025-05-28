@@ -3,22 +3,12 @@ import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Image, Text, View } from 'react-native';
 import { Colors } from '../constants/Colors';
-import { GameFormatted } from '../utils/types';
+import { CardsProps } from '../utils/types';
 import { generateICSFile } from '../utils/utils';
-
-interface CardsProps {
-  data: GameFormatted;
-  showDate: boolean;
-  onSelection?: (game: GameFormatted) => void;
-  selected: boolean;
-  showButtons?: boolean;
-  numberSelected?: number;
-}
 
 export default function Cards({
   data,
   showDate = false,
-
   showButtons = false,
   onSelection = () => {},
   numberSelected = 0,
@@ -152,8 +142,6 @@ export default function Cards({
     if (homeTeam && awayTeam) {
       const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
       let shortArenaName = arenaName;
-      console.log({ numberSelected });
-
       if (numberSelected > 1) {
         shortArenaName =
           arenaName && numberSelected > 3 && arenaName.length > 5 ? arenaName.split(' ')[0] + ' ...' : arenaName || '';

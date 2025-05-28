@@ -77,10 +77,9 @@ export interface IconButtonProps extends ButtonProps {
 }
 
 export interface GamesSelectedProps {
-  readonly data: { readonly gamesSelected: GameFormatted[] };
+  readonly data?: GameFormatted[];
   readonly onAction: (game: GameFormatted) => void;
 }
-
 export interface SelectorProps {
   data: {
     teamsSelectedIds: string[];
@@ -89,4 +88,13 @@ export interface SelectorProps {
     teamSelectedId: string;
   };
   onTeamSelectionChange: (teamSelectedId: string, i: number) => void;
+}
+
+export interface CardsProps {
+  data: GameFormatted;
+  showDate: boolean;
+  onSelection?: (game: GameFormatted) => void;
+  selected: boolean;
+  showButtons?: boolean;
+  numberSelected?: number;
 }

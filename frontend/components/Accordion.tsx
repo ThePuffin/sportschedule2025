@@ -28,6 +28,7 @@ export default function Accordion({
             }}
             key={gameId}
             data={game}
+            numberSelected={1}
             showDate={showDate}
             style={{ margin: 0, padding: 0 }}
           />
