@@ -15,6 +15,7 @@ import { Game } from './schemas/game.schema';
 
 @Injectable()
 export class GameService {
+  private isFetchingGames: boolean = false;
   constructor(
     @InjectModel(Game.name) public gameModel: Model<Game>,
     private readonly teamService: TeamService,
@@ -57,6 +58,12 @@ export class GameService {
   }
 
   async getLeagueGames(league): Promise<any> {
+    if (this.isFetchingGames) {
+      console.info(`getLeagueGames is already running.`);
+      return;
+    }
+
+    this.isFetchingGames = true; // Set the flag to true
     const teams = await this.teamService.findByLeague(league);
     let currentGames = {};
     const leagueLogos = await this.getTeamsLogo(teams);
@@ -102,6 +109,8 @@ export class GameService {
         throw error;
       }
       throw new Error('An unknown error occurred');
+    } finally {
+      this.isFetchingGames = false; // Reset the flag when the method finishes
     }
   }
 

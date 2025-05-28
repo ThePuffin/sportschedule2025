@@ -101,7 +101,7 @@ export default function Schedule() {
 
   const displayGamesCards = (teamSelectedId: string) => {
     const today = new Date().toISOString().split('T')[0];
-    if (!games || (Object.keys(games).length === 1 && (games[today]?.[1]?.updateDate ?? '')) === '') {
+    if (!games || (Object.keys(games).length === 1 && (games[today]?.[0]?.updateDate ?? '')) === '') {
       return (
         <div>
           <br />
