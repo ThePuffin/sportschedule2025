@@ -543,7 +543,7 @@ export const Colors = {
     color: '#002b5c',
     backgroundColor: '#c4d600',
   },
-  'WNBA-GSV': {
+  'WNBA-GS': {
     color: '#b38fcf',
     backgroundColor: '#000000',
   },

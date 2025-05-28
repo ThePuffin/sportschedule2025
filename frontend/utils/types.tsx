@@ -1,3 +1,5 @@
+import { ButtonProps } from '@rneui/themed';
+
 export interface GameFormatted {
   _id?: string;
   uniqueId: string;
@@ -40,4 +42,51 @@ export interface Team {
 
 export interface FilterGames {
   [date: string]: GameFormatted[];
+}
+
+export type AccordionProps = {
+  readonly i?: number;
+  readonly filter?: string;
+  readonly gamesFiltred?: ReadonlyArray<GameFormatted>;
+  readonly open?: boolean;
+  readonly isCounted?: boolean;
+  readonly showDate?: boolean;
+};
+
+export interface ButtonsProps {
+  data: { selectedTeamsNumber: number; selectedGamesNumber: number; loadingTeams: boolean };
+  onClicks: (clickedButton: string) => void;
+}
+
+interface DateRange {
+  startDate: Date;
+  endDate: Date;
+}
+
+export interface DateRangePickerProps {
+  onDateChange: (startDate: Date, endDate: Date) => void;
+  dateRange: DateRange;
+  noEnd: boolean;
+}
+
+export interface IconButtonProps extends ButtonProps {
+  iconName: string;
+  iconColor?: string;
+  buttonColor?: string;
+  borderColor?: string;
+}
+
+export interface GamesSelectedProps {
+  readonly data: { readonly gamesSelected: GameFormatted[] };
+  readonly onAction: (game: GameFormatted) => void;
+}
+
+export interface SelectorProps {
+  data: {
+    teamsSelectedIds: string[];
+    activeTeams: Team[];
+    i: number;
+    teamSelectedId: string;
+  };
+  onTeamSelectionChange: (teamSelectedId: string, i: number) => void;
 }

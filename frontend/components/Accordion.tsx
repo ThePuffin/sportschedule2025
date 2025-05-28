@@ -3,15 +3,24 @@ import { ListItem } from '@rneui/themed';
 import React, { useState } from 'react';
 import Cards from './Cards';
 
-export default function Accordion({ i, filter, gamesFiltred = [], open, isCounted = false, showDate = false }) {
+import type { AccordionProps } from '../utils/types'; // Adjust the import path as needed
+
+export default function Accordion({
+  i = 0,
+  filter = '',
+  gamesFiltred = [],
+  open = true,
+  isCounted = false,
+  showDate = false,
+}: Readonly<AccordionProps>) {
   const [expanded, setExpanded] = useState(open ?? i === 0);
-  const makeCards = (filter) => {
+  const makeCards = () => {
     if (!gamesFiltred?.length) {
       return <ThemedText>There are no games today</ThemedText>;
     }
     if (gamesFiltred.length) {
       return gamesFiltred.map((game) => {
-        const gameId = game?._id || Math.random();
+        const gameId = game._id ?? Math.random();
         return (
           <Cards
             onSelection={() => {
@@ -43,7 +52,7 @@ export default function Accordion({ i, filter, gamesFiltred = [], open, isCounte
           setExpanded(!expanded);
         }}
       >
-        {makeCards(filter)}
+        {makeCards()}
       </ListItem.Accordion>
     </div>
   );

@@ -1,24 +1,18 @@
 import { ThemedView } from '@/components/ThemedView';
-import { GameFormatted } from '../utils/types';
+import { GameFormatted, GamesSelectedProps } from '../utils/types';
 import Cards from './Cards';
 
-interface GamesSelectedProps {
-  readonly data: { readonly gamesSelected: GameFormatted[] };
-  readonly onAction: (game: GameFormatted) => void;
-}
-
-export default function GamesSelected({ data = { gamesSelected }, onAction }: GamesSelectedProps) {
+export default function GamesSelected({ data = { gamesSelected: [] }, onAction }: Readonly<GamesSelectedProps>) {
   const displayGamesSelected = () => {
-    return data.map((gameSelected, i) => {
+    return data.gamesSelected.map((gameSelected: GameFormatted) => {
       return (
-        <td key={gameSelected.gameId}>
+        <td key={gameSelected._id}>
           <ThemedView>
             <Cards
               data={gameSelected}
               selected={false}
               showDate={true}
               showButtons={true}
-              showName={false}
               onSelection={() => onAction(gameSelected)}
             />
           </ThemedView>

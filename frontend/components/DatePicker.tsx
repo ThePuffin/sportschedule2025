@@ -1,21 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import DatePicker from 'react-datepicker';
+import { DateRangePickerProps } from '@/utils/types';
+import { en, fr } from 'date-fns/locale';
+import React, { useEffect, useState } from 'react';
+import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { registerLocale } from 'react-datepicker';
-import './css/DatePicker.css';
 import { addDays } from '../utils/date';
-import { fr, en } from 'date-fns/locale';
-
-interface DateRange {
-  startDate: Date;
-  endDate: Date;
-}
-
-interface DateRangePickerProps {
-  onDateChange: (startDate: Date, endDate: Date) => void;
-  dateRange: DateRange;
-  noEnd: boolean;
-}
+import './css/DatePicker.css';
 
 export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Readonly<DateRangePickerProps>) {
   const now = new Date();

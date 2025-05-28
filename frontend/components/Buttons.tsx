@@ -1,15 +1,11 @@
 import { ThemedView } from '@/components/ThemedView';
+import { ButtonsProps } from '@/utils/types';
+import { StyleSheet } from 'react-native';
 import { ButtonsKind } from '../constants/enum';
 import IconButton from './IconButton';
-import { StyleSheet } from 'react-native';
-
-interface ButtonsProps {
-  data: { selectedTeamsNumber: number; selectedGamesNumber: number; loadingTeams: boolean };
-  onClicks: (clickedButton: string) => void;
-}
 
 export default function Buttons({
-  data = { selectedTeamsNumber: null, selectedGamesNumber: null, loadingTeams: false },
+  data = { selectedTeamsNumber: 0, selectedGamesNumber: 0, loadingTeams: false },
   onClicks,
 }: Readonly<ButtonsProps>) {
   const { selectedTeamsNumber, selectedGamesNumber, loadingTeams } = data;

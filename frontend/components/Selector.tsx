@@ -1,16 +1,6 @@
-import { Team } from '@/utils/types';
+import { SelectorProps, Team } from '@/utils/types';
 import React, { useEffect, useState } from 'react';
 import Select from 'react-select';
-
-interface SelectorProps {
-  data: {
-    teamsSelectedIds: string[];
-    activeTeams: Team[];
-    i: number;
-    teamSelectedId: string;
-  };
-  onTeamSelectionChange: (teamSelectedId: string, i: number) => void;
-}
 
 export default function Selector({ data, onTeamSelectionChange }: Readonly<SelectorProps>) {
   const { teamsSelectedIds, activeTeams, i, teamSelectedId } = data;
@@ -33,7 +23,10 @@ export default function Selector({ data, onTeamSelectionChange }: Readonly<Selec
     setTeams(selectableTeams);
   }, [activeTeams, teamsSelectedIds]);
 
-  const selectedTeam = activeTeams.length ? activeTeams.find((team) => team.uniqueId === teamSelectedId) : {};
+  const selectedTeam: Team | undefined =
+    activeTeams.length && activeTeams.find((team) => team.uniqueId === teamSelectedId)
+      ? (activeTeams.find((team) => team.uniqueId === teamSelectedId) as Team)
+      : undefined;
   const placeholder = selectedTeam?.label ?? '';
 
   const targetHeight = 65;

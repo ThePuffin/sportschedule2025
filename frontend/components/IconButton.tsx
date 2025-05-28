@@ -1,13 +1,7 @@
+import { IconButtonProps } from '@/utils/types';
+import { Button, Icon } from '@rneui/themed';
 import React from 'react';
-import { Button, ButtonProps, Icon } from '@rneui/themed';
 import { StyleSheet } from 'react-native';
-
-interface IconButtonProps extends ButtonProps {
-  iconName: string;
-  iconColor?: string;
-  buttonColor?: string;
-  borderColor?: string;
-}
 
 const IconButton: React.FC<IconButtonProps> = ({
   iconName,

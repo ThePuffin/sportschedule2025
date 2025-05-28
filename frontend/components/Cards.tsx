@@ -9,7 +9,6 @@ import { generateICSFile } from '../utils/utils';
 interface CardsProps {
   data: GameFormatted;
   showDate: boolean;
-  showName?: boolean;
   onSelection?: (game: GameFormatted) => void;
   selected: boolean;
   showButtons?: boolean;
@@ -19,7 +18,7 @@ interface CardsProps {
 export default function Cards({
   data,
   showDate = false,
-  showName = true,
+
   showButtons = false,
   onSelection = () => {},
   numberSelected = 0,
@@ -32,7 +31,6 @@ export default function Cards({
     homeTeamLogo,
     awayTeamLogo,
     teamSelectedId,
-    show,
     startTimeUTC,
     placeName = '',
     color,
@@ -40,6 +38,7 @@ export default function Cards({
     awayTeamShort,
     homeTeamShort,
   } = data;
+  const show = typeof data.show === 'boolean' ? data.show : data.show === 'true';
 
   const [teamNameHome, setTeamNameHome] = useState(homeTeam);
   const [teamNameAway, setTeamNameAway] = useState(awayTeam);
@@ -49,15 +48,16 @@ export default function Cards({
   useEffect(() => {
     const updateDeviceType = () => {
       const { width } = Dimensions.get('window');
-
+      setTeamNameHome(homeTeam);
+      setTeamNameAway(awayTeam);
       if (width <= 1075) {
-        setTeamNameHome(homeTeamShort);
-        setTeamNameAway(awayTeamShort);
+        if (numberSelected > 2) {
+          setTeamNameHome(homeTeamShort);
+          setTeamNameAway(awayTeamShort);
+        }
         setIsSmallDevice(true);
         setFontSize('0.75rem');
       } else {
-        setTeamNameHome(homeTeam);
-        setTeamNameAway(awayTeam);
         setIsSmallDevice(false);
         setFontSize('0.9rem');
       }
@@ -92,18 +92,17 @@ export default function Cards({
 
   const defaultColors = Colors.default;
 
-  let cardClass =
-    show === 'true'
-      ? {
-          ...teamColors,
-          fontSize,
-        }
-      : {
-          fontSize,
-          opacity: '0.97',
+  let cardClass = show
+    ? {
+        ...teamColors,
+        fontSize,
+      }
+    : {
+        fontSize,
+        opacity: '0.97',
 
-          backgroundColor: '#ffffee',
-        };
+        backgroundColor: '#ffffee',
+      };
 
   let selectedCard = selected
     ? {
@@ -152,17 +151,22 @@ export default function Cards({
   const displayContent = () => {
     if (homeTeam && awayTeam) {
       const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
-      let shortArenaName =
-        arenaName && numberSelected > 3 && arenaName.length > 5 ? arenaName.split(' ')[0] + ' ...' : arenaName || '';
-      shortArenaName = isSmallDevice ? shortArenaName.split(' ').slice(0, -1).join(' ') : shortArenaName;
-      shortArenaName =
-        isSmallDevice && shortArenaName.length > 7 && numberSelected > 5
-          ? shortArenaName.slice(0, 6) + ' ...'
-          : shortArenaName;
+      let shortArenaName = arenaName;
+      console.log({ numberSelected });
+
+      if (numberSelected > 1) {
+        shortArenaName =
+          arenaName && numberSelected > 3 && arenaName.length > 5 ? arenaName.split(' ')[0] + ' ...' : arenaName || '';
+        shortArenaName = isSmallDevice ? shortArenaName.split(' ').slice(0, -1).join(' ') : shortArenaName;
+        shortArenaName =
+          isSmallDevice && shortArenaName.length > 7 && numberSelected > 5
+            ? shortArenaName.slice(0, 6) + ' ...'
+            : shortArenaName;
+      }
       return (
         <View
           onClick={() => {
-            if (show === 'true') {
+            if (show) {
               if (!showDate) {
                 generateICSFile(data);
               } else {
@@ -171,7 +175,7 @@ export default function Cards({
             }
           }}
           style={{
-            cursor: show === 'true' ? 'pointer' : 'not-allowed',
+            cursor: show ? 'pointer' : 'not-allowed',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -289,7 +293,7 @@ export default function Cards({
     <div className={cardClass}>
       <Card
         onClick={() => {
-          if (show === 'true' && !showButtons) {
+          if (show && !showButtons) {
             onSelection(data);
           }
         }}
@@ -306,7 +310,7 @@ export default function Cards({
           style={{
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            // display: showDate ? '' : 'flex',
+            display: showDate ? '' : 'flex',
             whiteSpace: showDate ? '' : 'nowrap',
             alignItems: showDate ? '' : 'center',
             justifyContent: showDate ? '' : 'center',
