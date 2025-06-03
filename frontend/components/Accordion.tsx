@@ -9,7 +9,7 @@ export default function Accordion({
   i = 0,
   filter = '',
   gamesFiltred = [],
-  open = true,
+  open = false,
   isCounted = false,
   showDate = false,
 }: Readonly<AccordionProps>) {

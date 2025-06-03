@@ -94,7 +94,8 @@ export default function GameofTheDay() {
   };
 
   const displayAccordion = ({ league, i, gamesFiltred }) => {
-    return <Accordion key={i} filter={league} i={i} gamesFiltred={gamesFiltred} isCounted={isCounted} />;
+    
+    return <Accordion key={i} open={i === 0} filter={league} i={i} gamesFiltred={gamesFiltred} isCounted={isCounted} />;
   };
 
   const displayNoContent = () => {

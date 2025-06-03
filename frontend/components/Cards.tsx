@@ -20,7 +20,7 @@ export default function Cards({
     arenaName = '',
     homeTeamLogo,
     awayTeamLogo,
-    teamSelectedId,
+    teamSelectedId = '',
     startTimeUTC,
     placeName = '',
     color,
@@ -76,11 +76,16 @@ export default function Cards({
         })
       : new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
+  const defaultColors = Colors.default;
   const colors = Colors[teamSelectedId] ?? {};
   const teamColors =
-    colors.backgroundColor && colors.backgroundColor !== '' ? Colors[teamSelectedId] : { color, backgroundColor };
+    colors.backgroundColor && colors.backgroundColor !== ''
+      ? colors
+      : color && backgroundColor
+      ? { color, backgroundColor }
+      : defaultColors;
+  
 
-  const defaultColors = Colors.default;
 
   let cardClass = show
     ? {
@@ -97,7 +102,7 @@ export default function Cards({
   let selectedCard = selected
     ? {
         filter: 'brightness(1.25) saturate(1.5) contrast(1.05)',
-        border: 'double' + teamColors?.color || defaultColors.color,
+        border: 'double' + teamColors?.color ,
       }
     : {};
 
@@ -205,7 +210,7 @@ export default function Cards({
                 href={`https://maps.google.com/?q=${stadiumSearch}`}
                 style={{
                   textDecoration: 'none',
-                  color: cardClass.color ?? defaultColors.color,
+                  color: cardClass.color ,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 5,
@@ -218,7 +223,7 @@ export default function Cards({
                   type="font-awesome"
                   size={isSmallDevice ? 10 : 12}
                   style={{ marginRight: 0 }}
-                  color={cardClass.color ?? defaultColors.color}
+                  color={cardClass.color }
                 />
                 <span
                   style={{
@@ -246,7 +251,7 @@ export default function Cards({
                   type="font-awesome"
                   size={isSmallDevice ? 10 : 12}
                   style={{ marginRight: 0 }}
-                  color={cardClass.color ?? defaultColors.color}
+                  color={cardClass.color }
                 />
                 <p
                   style={{
@@ -256,7 +261,7 @@ export default function Cards({
                     width: '80%',
                     margin: 3,
                     padding: 0,
-                    color: cardClass.color ?? defaultColors.color,
+                    color: cardClass.color ,
                   }}
                 >
                   {arenaName ? shortArenaName : 'Stadium not found'}
