@@ -24,8 +24,8 @@ export const Colors = {
     tabIconSelected: tintColorDark,
   },
   default: {
-    color: '#000000',
-    backgroundColor: '#fff',
+    color: '#ffffff',
+    backgroundColor: '#000000',
   },
   'NHL-NJD': {
     color: '#000000',
