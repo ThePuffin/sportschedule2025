@@ -1,14 +1,14 @@
 import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
-import Loader from '../../components/Loader';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import GamesSelected from '../../components/GamesSelected';
+import Loader from '../../components/Loader';
 import Selector from '../../components/Selector';
 import { ButtonsKind } from '../../constants/enum';
-import { readableDate, addDays } from '../../utils/date';
+import { addDays, readableDate } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
 import { addNewTeamId, randomNumber, removeLastTeamId } from '../../utils/utils';
 const EXPO_PUBLIC_API_BASE_URL =
@@ -23,7 +23,6 @@ export default function Calendar() {
     const storedStartDate = localStorage.getItem('startDate');
     const storedEndDate = localStorage.getItem('endDate');
 
-    let needToUpdateGames = false;
     let start = storedStartDate;
     let end = storedEndDate;
     if (!storedStartDate || new Date(storedStartDate) < beginDate) {
@@ -35,8 +34,8 @@ export default function Calendar() {
       localStorage.setItem('endDate', end);
     }
     if (start !== storedStartDate || end !== storedEndDate) {
-      setDateRange({ startDate: start, endDate: end });
-      getGamesFromApi(start, end);
+      setDateRange({ startDate: start ?? beginDate.toISOString(), endDate: end ?? endDate.toISOString() });
+      getGamesFromApi(start ?? beginDate.toISOString(), end ?? endDate.toISOString());
     }
   };
 
@@ -50,7 +49,7 @@ export default function Calendar() {
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
 
-  const handleDateChange = (startDate, endDate) => {
+  const handleDateChange = (startDate: string, endDate: string) => {
     localStorage.setItem('startDate', startDate);
     localStorage.setItem('endDate', endDate);
     getGamesFromApi(startDate, endDate);
@@ -204,11 +203,11 @@ export default function Calendar() {
 
   const displayTeamSelector = () => {
     return teamsSelected.map((teamSelectedId, i) => {
-      const data = { i, activeTeams: teams, teamsSelectedIds: teamsSelected, teamSelectedId };
+      const data = { i, activeTeams: teams, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
       return (
         <td key={`${teamSelectedId}-${teamsSelected.length}`}>
           <ThemedView>
-            <Selector data={data} onTeamSelectionChange={handleTeamSelectionChange} />
+            <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} />
             {displayGamesCards(teamSelectedId)}
           </ThemedView>
         </td>
@@ -230,7 +229,7 @@ export default function Calendar() {
                 <ThemedView>
                   <Cards
                     data={game}
-                    numberSelected={teamsSelected.length} 
+                    numberSelected={teamsSelected.length}
                     showDate={true}
                     onSelection={handleGamesSelection}
                     selected={isSelected}

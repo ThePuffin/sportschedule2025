@@ -86,13 +86,13 @@ export default function Schedule() {
     const data = {
       i: randomNumber(999999),
       activeTeams: teams,
-      teamsSelectedIds: [teamSelected],
-      teamSelectedId: teamSelected,
+      itemsSelectedIds: [teamSelected],
+      itemSelectedId: teamSelected,
     };
     return (
       <td key={`${teamSelected}-${teamSelected.length}`}>
         <ThemedView>
-          <Selector data={data} onTeamSelectionChange={handleTeamSelectionChange} />
+          <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} />
           {displayGamesCards(teamSelected)}
         </ThemedView>
       </td>

@@ -82,12 +82,12 @@ export interface GamesSelectedProps {
 }
 export interface SelectorProps {
   data: {
-    teamsSelectedIds: string[];
+    itemsSelectedIds: string[];
     activeTeams: Team[];
     i: number;
-    teamSelectedId: string;
+    itemSelectedId: string;
   };
-  onTeamSelectionChange: (teamSelectedId: string, i: number) => void;
+  onItemSelectionChange: (itemmSelectedId: string, i: number) => void;
 }
 
 export interface CardsProps {

@@ -2,49 +2,51 @@ import { SelectorProps, Team } from '@/utils/types';
 import React, { useEffect, useState } from 'react';
 import Select from 'react-select';
 
-export default function Selector({ data, onTeamSelectionChange }: Readonly<SelectorProps>) {
-  const { teamsSelectedIds, activeTeams, i, teamSelectedId } = data;
+export default function Selector({ data, onItemSelectionChange }: Readonly<SelectorProps>) {
+  const { itemsSelectedIds, activeTeams, i, itemSelectedId } = data;
 
   const [teams, setTeams] = useState<{ value: string; label: string }[]>([]);
 
-  const changeTeam = (event: { value: string; label: string }) => {
-    onTeamSelectionChange(event.value, i);
+  const changeTeam = (newValue: { value: string; label: string } | null) => {
+    if (newValue) {
+      onItemSelectionChange(newValue.value, i);
+    }
   };
 
   useEffect(() => {
     const selectableTeams = activeTeams.length
       ? activeTeams
-          .filter((team: Team) => !teamsSelectedIds.includes(team.uniqueId))
+          .filter((team: Team) => !itemsSelectedIds.includes(team.uniqueId))
           .map(({ label, uniqueId }) => {
             return { value: uniqueId, label };
           })
       : [];
 
     setTeams(selectableTeams);
-  }, [activeTeams, teamsSelectedIds]);
+  }, [activeTeams, itemsSelectedIds]);
 
   const selectedTeam: Team | undefined =
-    activeTeams.length && activeTeams.find((team) => team.uniqueId === teamSelectedId)
-      ? (activeTeams.find((team) => team.uniqueId === teamSelectedId) as Team)
+    activeTeams.length && activeTeams.find((team) => team.uniqueId === itemSelectedId)
+      ? (activeTeams.find((team) => team.uniqueId === itemSelectedId) as Team)
       : undefined;
   const placeholder = selectedTeam?.label ?? '';
 
   const targetHeight = 65;
   const customStyles = {
-    control: (base) => ({
+    control: (base: React.CSSProperties) => ({
       ...base,
       minHeight: 'initial',
     }),
-    valueContainer: (base) => ({
+    valueContainer: (base: React.CSSProperties) => ({
       ...base,
       height: `${targetHeight - 1 - 1}px`,
       padding: '0 8px',
     }),
-    clearIndicator: (base) => ({
+    clearIndicator: (base: React.CSSProperties) => ({
       ...base,
       padding: `${(targetHeight - 20 - 1 - 1) / 2}px`,
     }),
-    dropdownIndicator: (base) => ({
+    dropdownIndicator: (base: React.CSSProperties) => ({
       ...base,
       padding: `${(targetHeight - 20 - 1 - 1) / 3}px`,
     }),
