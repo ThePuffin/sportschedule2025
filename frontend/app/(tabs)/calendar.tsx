@@ -203,7 +203,7 @@ export default function Calendar() {
 
   const displayTeamSelector = () => {
     return teamsSelected.map((teamSelectedId, i) => {
-      const data = { i, activeTeams: teams, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
+      const data = { i, items: teams, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
       return (
         <td key={`${teamSelectedId}-${teamsSelected.length}`}>
           <ThemedView>

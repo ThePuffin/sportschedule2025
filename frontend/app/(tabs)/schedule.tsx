@@ -85,7 +85,7 @@ export default function Schedule() {
   const displayTeamSelector = () => {
     const data = {
       i: randomNumber(999999),
-      activeTeams: teams,
+      items: teams,
       itemsSelectedIds: [teamSelected],
       itemSelectedId: teamSelected,
     };

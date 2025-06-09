@@ -26,6 +26,12 @@ export interface GameFormatted {
   backgroundColor: string;
 }
 
+export interface League {
+  label: string;
+  value: string;
+  uniqueId: string;
+}
+
 export interface Team {
   uniqueId: string;
   value: string;
@@ -83,7 +89,7 @@ export interface GamesSelectedProps {
 export interface SelectorProps {
   data: {
     itemsSelectedIds: string[];
-    activeTeams: Team[];
+    items: Team[];
     i: number;
     itemSelectedId: string;
   };

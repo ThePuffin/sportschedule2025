@@ -1,35 +1,35 @@
-import { SelectorProps, Team } from '@/utils/types';
+import { League, SelectorProps, Team } from '@/utils/types';
 import React, { useEffect, useState } from 'react';
 import Select from 'react-select';
 
 export default function Selector({ data, onItemSelectionChange }: Readonly<SelectorProps>) {
-  const { itemsSelectedIds, activeTeams, i, itemSelectedId } = data;
+  const { itemsSelectedIds, items, i, itemSelectedId } = data;
 
-  const [teams, setTeams] = useState<{ value: string; label: string }[]>([]);
+  const [itemsSelection, setItemsSelection] = useState<{ value: string; label: string }[]>([]);
 
-  const changeTeam = (newValue: { value: string; label: string } | null) => {
+  const changeItem = (newValue: { value: string; label: string } | null) => {
     if (newValue) {
       onItemSelectionChange(newValue.value, i);
     }
   };
 
   useEffect(() => {
-    const selectableTeams = activeTeams.length
-      ? activeTeams
-          .filter((team: Team) => !itemsSelectedIds.includes(team.uniqueId))
+    const selectableItems = items.length
+      ? items
+          .filter((item: Team | League) => !itemsSelectedIds.includes(item.uniqueId))
           .map(({ label, uniqueId }) => {
             return { value: uniqueId, label };
           })
       : [];
 
-    setTeams(selectableTeams);
-  }, [activeTeams, itemsSelectedIds]);
+    setItemsSelection(selectableItems);
+  }, [items, itemsSelectedIds]);
 
-  const selectedTeam: Team | undefined =
-    activeTeams.length && activeTeams.find((team) => team.uniqueId === itemSelectedId)
-      ? (activeTeams.find((team) => team.uniqueId === itemSelectedId) as Team)
+  const selectedItem =
+    items.length && items.find((item) => item.uniqueId === itemSelectedId)
+      ? (items.find((item) => item.uniqueId === itemSelectedId) as Team | League)
       : undefined;
-  const placeholder = selectedTeam?.label ?? '';
+  const placeholder = selectedItem?.label ?? '';
 
   const targetHeight = 65;
   const customStyles = {
@@ -54,11 +54,11 @@ export default function Selector({ data, onItemSelectionChange }: Readonly<Selec
 
   return (
     <Select
-      value={selectedTeam ? { value: selectedTeam.uniqueId, label: selectedTeam.label } : null}
+      value={selectedItem ? { value: selectedItem.uniqueId, label: selectedItem.label } : null}
       placeholder={placeholder}
       isSearchable
-      options={teams}
-      onChange={changeTeam}
+      options={itemsSelection}
+      onChange={changeItem}
       styles={customStyles}
       noOptionsMessage={() => ' '}
     />

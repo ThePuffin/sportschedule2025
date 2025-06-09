@@ -1,12 +1,14 @@
-// import Selector from '@/components/Selector';
+import Cards from '@/components/Cards';
+import Selector from '@/components/Selector';
+import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ScrollView, View, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion';
 import DateRangePicker from '../../components/DatePicker';
 import Loader from '../../components/Loader';
 import { League } from '../../constants/enum';
-import { translateWord } from '../../utils/utils';
+import { randomNumber, translateWord } from '../../utils/utils';
 
 interface GameFormatted {
   _id: string;
@@ -29,6 +31,10 @@ interface GameFormatted {
   venueTimezone?: string;
   isActive?: boolean;
   startTimeUTC?: string;
+  awayTeamLogo?: string;
+  homeTeamLogo?: string;
+  color?: string;
+  backgroundColor?: string;
 }
 
 let width: number;
@@ -90,32 +96,54 @@ export default function GameofTheDay() {
   const currentDate = new Date();
   const [games, setGames] = useState<GameFormatted[]>([]);
   const [dateRange, setDateRange] = useState({ startDate: currentDate, endDate: currentDate });
+  const [gamesFiltred, setGamesFiltred] = useState<GameFormatted[]>([]);
+  const [league, setLeague] = useState(League.ALL);
 
   const handleDateChange = (startDate: Date, endDate: Date) => {
     setDateRange({ startDate, endDate });
     getGamesFromApi(startDate);
   };
 
-  // const handleLeagueSelectionChange = (leagueSelectedId: string, i: number) => {
-  //   console.log(`League selected: ${leagueSelectedId} at index ${i}`);
-  // };
+  const handleLeagueSelectionChange = (leagueSelectedId: string, i: number) => {
+    setLeague(leagueSelectedId as League);
+    if (leagueSelectedId === League.ALL) {
+      setGamesFiltred([...games]);
+    } else {
+      const filteredGames = games.filter((game) => game.league === leagueSelectedId);
+      setGamesFiltred(filteredGames);
+    }
+  };
 
-  const displaySelect = ({ league, leaguesAvailable, i, gamesFiltred }) => {
-        // const data = {
-    //   i: i,
-    //   activeTeams: leaguesAvailable,
-    //   itemsSelectedIds: [leaguesAvailable],
-    //   itemSelectedId: leaguesAvailable[i],
-    // };
-    // return (
-    //   <ThemedView>
-    //     <Selector data={data} onItemSelectionChange={handleLeagueSelectionChange} />
-    //     <p>the card</p>
-    //   </ThemedView>
-    // );
+  const displayGamesCards = (gamesToShow: GameFormatted[]) => {
+    if (gamesToShow?.length === 0) {
+      return <ThemedText>{translateWord('noResults')}</ThemedText>;
+    } else {
+      return gamesToShow.map((game) => {
+        if (game) {
+          const gameId = game?._id ?? randomNumber(999999);
+          return (
+            <Cards key={gameId} data={game} numberSelected={1} showDate={true} onSelection={() => {}} selected={true} />
+          );
+        }
+      });
+    }
+  };
+  const displaySelect = () => {
+    const leaguesAvailable = Object.values(League);
+
+    const leagues = leaguesAvailable.map((league: string) => {
+      return { label: league, uniqueId: league, value: league };
+    });
+    const data = {
+      i: 0,
+      items: leagues,
+      itemsSelectedIds: [],
+      itemSelectedId: league,
+    };
     return (
       <ThemedView>
-        <Accordion key={i} open={i === 0} filter={league} i={i} gamesFiltred={gamesFiltred} isCounted={isCounted} />
+        <Selector data={data} onItemSelectionChange={handleLeagueSelectionChange} />
+        {displayGamesCards(gamesFiltred)}
       </ThemedView>
     );
   };
@@ -132,18 +160,11 @@ export default function GameofTheDay() {
     if (!games || games.length === 0) {
       return displayNoContent();
     }
-    const leaguesAvailable = [League.ALL, ...new Set(games.map((game) => game.league).sort())];
 
-    return leaguesAvailable.map((league, i: number) => {
-      let gamesFiltred = [...games];
-      if (league !== League.ALL) {
-        gamesFiltred = gamesFiltred.filter((game) => game.league === league);
-      }
-      return <div key={league}>{displaySelect({ league, leaguesAvailable, i, gamesFiltred })}</div>;
-    });
+    return <div>{displaySelect()}</div>;
   };
 
-  const displayAccordion = (leaguesAvailable) => {
+  const displayAccordion = (leaguesAvailable: string[]) => {
     return leaguesAvailable.map((league, i: number) => {
       let gamesFiltred = [...games];
       if (league !== League.ALL) {
@@ -198,16 +219,3 @@ export default function GameofTheDay() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-});
