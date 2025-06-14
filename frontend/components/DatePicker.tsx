@@ -1,5 +1,5 @@
 import { DateRangePickerProps } from '@/utils/types';
-import { en, fr } from 'date-fns/locale';
+import { enUS as en, fr } from 'date-fns/locale';
 import React, { useEffect, useState } from 'react';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -8,14 +8,16 @@ import './css/DatePicker.css';
 
 export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Readonly<DateRangePickerProps>) {
   const now = new Date();
-  const inOneYear = now.setFullYear(now.getFullYear() + 1);
+  const inOneYear = new Date(now);
+  inOneYear.setFullYear(inOneYear.getFullYear() + 1);
   let { startDate: start, endDate: end } = dateRange;
 
   const [startDate, setStartDate] = useState(start);
   const [endDate, setEndDate] = useState(end);
   const [locale, setLocale] = useState<'en' | 'fr'>('en');
 
-  const handleStartDateChange = (date: Date) => {
+  const handleStartDateChange = (date: Date | null) => {
+    if (!date) return;
     let end = endDate;
     if (new Date(endDate) < new Date(date)) {
       end = new Date(addDays(date, 1));
@@ -27,7 +29,8 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
     onDateChange(date, end);
   };
 
-  const handleEndDateChange = (date: Date) => {
+  const handleEndDateChange = (date: Date | null) => {
+    if (!date) return;
     let start = startDate;
     if (new Date(date) < new Date(startDate)) {
       start = new Date(addDays(date, 0));

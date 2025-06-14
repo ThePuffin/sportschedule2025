@@ -71,9 +71,29 @@ const getNextGamesFromApi = async (date: Date): Promise<null> => {
 };
 
 export default function GameofTheDay() {
+  const currentDate = new Date();
+  const [games, setGames] = useState<GameFormatted[]>([]);
+  const [dateRange, setDateRange] = useState({ startDate: currentDate, endDate: currentDate });
+  const [gamesFiltred, setGamesFiltred] = useState<GameFormatted[]>([]);
+  const [league, setLeague] = useState(League.ALL);
+
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
-  const getGamesFromApi = async (date: Date): Promise<GameFormatted[] | undefined> => {
+
+  const handleGames = (gamesDayExists: GameFormatted[]) => {
+    const storedLeague = localStorage.getItem('league');
+    const leagueFromStorage = storedLeague ? (storedLeague as League) : League.ALL;
+    let gamesToDisplay: GameFormatted[] = gamesDayExists;
+    setGames(gamesDayExists);
+    if (leagueFromStorage !== League.ALL) {
+      gamesToDisplay = gamesDayExists.filter((game) => game.league === league);
+      console.log(gamesToDisplay);
+    }
+    setGamesFiltred(gamesToDisplay);
+    displayGamesCards(gamesToDisplay, leagueFromStorage);
+  };
+
+  const getGamesFromApi = async (date: Date, storedLeague?: string): Promise<GameFormatted[] | undefined> => {
     const YYYYMMDD = new Date(date).toISOString().split('T')[0];
     if (Object.keys(gamesDay).length === 0) {
       const gamesDayString = localStorage.getItem('gamesDay');
@@ -81,23 +101,17 @@ export default function GameofTheDay() {
       gamesDay = localStorageGamesDay || {};
     }
     if (gamesDay?.[YYYYMMDD]?.length) {
-      setGames(gamesDay[YYYYMMDD]);
+      handleGames(gamesDay[YYYYMMDD]);
     }
 
     try {
       const gamesOfTheDay = await fetchGames(YYYYMMDD);
-      setGames(gamesOfTheDay);
+      handleGames(gamesOfTheDay);
     } catch (error) {
       console.error(error);
       return;
     }
   };
-
-  const currentDate = new Date();
-  const [games, setGames] = useState<GameFormatted[]>([]);
-  const [dateRange, setDateRange] = useState({ startDate: currentDate, endDate: currentDate });
-  const [gamesFiltred, setGamesFiltred] = useState<GameFormatted[]>([]);
-  const [league, setLeague] = useState(League.ALL);
 
   const handleDateChange = (startDate: Date, endDate: Date) => {
     setDateRange({ startDate, endDate });
@@ -105,6 +119,7 @@ export default function GameofTheDay() {
   };
 
   const handleLeagueSelectionChange = (leagueSelectedId: string, i: number) => {
+    localStorage.setItem('league', leagueSelectedId);
     setLeague(leagueSelectedId as League);
     if (leagueSelectedId === League.ALL) {
       setGamesFiltred([...games]);
@@ -114,7 +129,7 @@ export default function GameofTheDay() {
     }
   };
 
-  const displayGamesCards = (gamesToShow: GameFormatted[]) => {
+  const displayGamesCards = (gamesToShow: GameFormatted[], league = League.ALL) => {
     if (gamesToShow?.length === 0) {
       return <ThemedText>{translateWord('noResults')}</ThemedText>;
     } else {
@@ -137,13 +152,15 @@ export default function GameofTheDay() {
     const data = {
       i: 0,
       items: leagues,
-      itemsSelectedIds: [],
+      itemsSelectedIds: [league],
       itemSelectedId: league,
     };
+
+    const displayGames = league !== League.ALL ? gamesFiltred : games;
     return (
       <ThemedView>
         <Selector data={data} onItemSelectionChange={handleLeagueSelectionChange} />
-        {displayGamesCards(gamesFiltred)}
+        {displayGamesCards(displayGames, league)}
       </ThemedView>
     );
   };
@@ -201,6 +218,11 @@ export default function GameofTheDay() {
 
   useEffect(() => {
     async function fetchGames() {
+      const storedLeague = localStorage.getItem('league');
+
+      if (storedLeague) {
+        await setLeague(storedLeague as League);
+      }
       await getGamesFromApi(dateRange.startDate);
       if (!lastGamesUpdate || lastGamesUpdate.toDateString() !== new Date().toDateString()) {
         await getNextGamesFromApi(dateRange.startDate);

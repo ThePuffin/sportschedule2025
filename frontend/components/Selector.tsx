@@ -15,8 +15,8 @@ export default function Selector({ data, onItemSelectionChange }: Readonly<Selec
 
   useEffect(() => {
     const selectableItems = items.length
-      ? items
-          .filter((item: Team | League) => !itemsSelectedIds.includes(item.uniqueId))
+      ? (items as (Team | League)[])
+          .filter((item) => !itemsSelectedIds.includes(item.uniqueId))
           .map(({ label, uniqueId }) => {
             return { value: uniqueId, label };
           })

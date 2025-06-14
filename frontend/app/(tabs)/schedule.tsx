@@ -92,7 +92,9 @@ export default function Schedule() {
     return (
       <td key={`${teamSelected}-${teamSelected.length}`}>
         <ThemedView>
-          <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} />
+          <div style={{ width: isSmallDevice ? '100%' : '50%', margin: '0 auto', alignContent: 'center' }}>
+            <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} />
+          </div>
           {displayGamesCards(teamSelected)}
         </ThemedView>
       </td>

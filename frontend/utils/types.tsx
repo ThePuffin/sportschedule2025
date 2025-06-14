@@ -86,10 +86,11 @@ export interface GamesSelectedProps {
   readonly data?: GameFormatted[];
   readonly onAction: (game: GameFormatted) => void;
 }
+
 export interface SelectorProps {
   data: {
     itemsSelectedIds: string[];
-    items: Team[];
+    items: Team[] | string[];
     i: number;
     itemSelectedId: string;
   };
