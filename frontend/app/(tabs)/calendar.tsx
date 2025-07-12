@@ -64,7 +64,7 @@ export default function Calendar() {
 
   const getSelectedTeams = (allTeams) => {
     const selection = localStorage.getItem('teamsSelected')
-      ? JSON.parse(localStorage.getItem('teamsSelected')).map((team) => team.uniqueId)
+      ? JSON.parse(localStorage.getItem('teamsSelected') ?? '[]').map((team) => team.uniqueId)
       : teamsSelected ?? [];
     if (!selection.length) {
       while (selection.length < 2) {
@@ -74,20 +74,36 @@ export default function Calendar() {
     storeTeamsSelected(selection);
   };
 
-  const getStoredData = () => {
-    const selection = localStorage.getItem('teamsSelected')
-      ? JSON.parse(localStorage.getItem('teamsSelected')).map((team) => team.uniqueId)
-      : [];
+  const getStoredGames = () => {
+    const gamesDataString = localStorage.getItem('gamesData');
+    const storedGamesDataRaw = gamesDataString && gamesDataString.length ? JSON.parse(gamesDataString) : {};
+    if (!Object.keys(storedGamesDataRaw).length) return {};
+
+    const begindateStr = beginDate.toISOString().split('T')[0];
+
+    // Keep only games whose date is today or in the future
+    const filteredGamesData = Object.fromEntries(
+      Object.entries(storedGamesDataRaw).filter(([date]) => date >= begindateStr)
+    );
+
+    return filteredGamesData;
+  };
+
+  const getStoredTeams = () => {
+    const selectionString = localStorage.getItem('teamsSelected');
+    const selection =
+      selectionString && selectionString.length
+        ? JSON.parse(localStorage.getItem('teamsSelected') ?? '[]').map((team) => team.uniqueId)
+        : [];
     if (selection.length > 0) {
       storeTeamsSelected(selection);
 
-      const storedGamesData = localStorage.getItem('gamesData') ? JSON.parse(localStorage.getItem('gamesData')) : {};
-      setGames(storedGamesData);
+      setGames(getStoredGames() as FilterGames);
 
       const storedGamesSelected = localStorage.getItem('gameSelected')
-        ? localStorage.getItem('gameSelected').split(';')
+        ? localStorage.getItem('gameSelected')?.split(';')
         : [];
-      setGamesSelected(storedGamesSelected.map((game) => JSON.parse(game)));
+      setGamesSelected((storedGamesSelected ?? []).map((game) => JSON.parse(game)));
       setTeams(selection);
     } else {
       setTeamsSelected(selection);
@@ -108,7 +124,10 @@ export default function Calendar() {
     }
   };
 
-  const getGamesFromApi = async (startDate: string, endDate: string): Promise<FilterGames> => {
+  const getGamesFromApi = async (
+    startDate: string | undefined = undefined,
+    endDate: string | undefined = undefined
+  ): Promise<FilterGames> => {
     if (teamsSelected && teamsSelected.length !== 0) {
       let start = readableDate(dateRange.startDate);
       let end = readableDate(dateRange.endDate);
@@ -246,7 +265,7 @@ export default function Calendar() {
   };
   useEffect(() => {
     initializeDateRange();
-    getStoredData();
+    getStoredTeams();
   }, []);
 
   useEffect(() => {
