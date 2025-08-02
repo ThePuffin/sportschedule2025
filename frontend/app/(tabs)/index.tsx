@@ -76,6 +76,7 @@ export default function GameofTheDay() {
   const [dateRange, setDateRange] = useState({ startDate: currentDate, endDate: currentDate });
   const [gamesFiltred, setGamesFiltred] = useState<GameFormatted[]>([]);
   const [league, setLeague] = useState(League.ALL);
+  const [isLoading, setIsLoading] = useState(true);
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
@@ -110,6 +111,8 @@ export default function GameofTheDay() {
     } catch (error) {
       console.error(error);
       return;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -166,11 +169,15 @@ export default function GameofTheDay() {
   };
 
   const displayNoContent = () => {
-    return (
-      <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
-        <Loader />
-      </View>
-    );
+    if (isLoading) {
+      return (
+        <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
+          <Loader />
+        </View>
+      );
+    } else {
+      return <ThemedText>{translateWord('noResults')}</ThemedText>;
+    }
   };
 
   const displaySmallDeviceContent = () => {

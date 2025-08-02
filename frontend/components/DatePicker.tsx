@@ -48,6 +48,12 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
     setLocale(userLocale === 'fr-FR' ? 'fr' : 'en');
   }, []);
 
+  const minDate = new Date();
+  minDate.setHours(0, 0, 0, 0);
+  const maxDate = new Date();
+  maxDate.setMonth(minDate.getMonth() + 11);
+  maxDate.setHours(23, 59, 59, 999);
+
   return (
     <>
       {!noEnd && (
@@ -59,8 +65,8 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               selectsStart
               startDate={startDate}
               endDate={endDate}
-              minDate={new Date()}
-              maxDate={now}
+              minDate={minDate}
+              maxDate={maxDate}
               locale={locale}
               className="custom-datepicker"
               dateFormat={locale === 'fr' ? 'dd/MM/yyyy' : 'MM/dd/yyyy'}
@@ -74,6 +80,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
               startDate={startDate}
               endDate={endDate}
               minDate={startDate}
+              maxDate={inOneYear}
               locale={locale}
               className="custom-datepicker"
               dateFormat={locale === 'fr' ? 'dd/MM/yyyy' : 'MM/dd/yyyy'}
@@ -87,7 +94,7 @@ export default function DateRangePicker({ onDateChange, dateRange, noEnd }: Read
             <DatePicker
               selected={startDate}
               onChange={handleStartDateChange}
-              minDate={new Date()}
+              minDate={minDate}
               maxDate={inOneYear}
               locale={locale}
               className="custom-datepicker"
