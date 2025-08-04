@@ -44,6 +44,17 @@ let gamesDay: { [key: string]: GameFormatted[] } = {};
 let lastGamesUpdate: Date;
 const isCounted = true;
 
+const fetchLeagues = async (): Promise<string[]> => {
+  try {
+    const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`);
+    const leagues = await response.json();
+    return leagues;
+  } catch (error) {
+    console.error('Error fetching leagues:', error);
+    return [];
+  }
+};
+
 const fetchGames = async (date: string): Promise<GameFormatted[]> => {
   try {
     date = date || new Date().toISOString().split('T')[0];
@@ -76,6 +87,7 @@ export default function GameofTheDay() {
   const [dateRange, setDateRange] = useState({ startDate: currentDate, endDate: currentDate });
   const [gamesFiltred, setGamesFiltred] = useState<GameFormatted[]>([]);
   const [league, setLeague] = useState(League.ALL);
+  const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const { width: windowWidth } = useWindowDimensions();
@@ -88,7 +100,6 @@ export default function GameofTheDay() {
     setGames(gamesDayExists);
     if (leagueFromStorage !== League.ALL) {
       gamesToDisplay = gamesDayExists.filter((game) => game.league === league);
-      console.log(gamesToDisplay);
     }
     setGamesFiltred(gamesToDisplay);
     displayGamesCards(gamesToDisplay, leagueFromStorage);
@@ -147,9 +158,8 @@ export default function GameofTheDay() {
     }
   };
   const displaySelect = () => {
-    const leaguesAvailable = Object.values(League);
-
-    const leagues = leaguesAvailable.map((league: string) => {
+    const leaguesAvailables = Object.values(League);
+    const leagues = leaguesAvailables.map((league: string) => {
       return { label: league, uniqueId: league, value: league };
     });
     const data = {
@@ -181,14 +191,14 @@ export default function GameofTheDay() {
   };
 
   const displaySmallDeviceContent = () => {
-    if (!games || games.length === 0) {
+    if (!games || games.length === 0 || leaguesAvailable.length === 0) {
       return displayNoContent();
     }
 
     return <div>{displaySelect()}</div>;
   };
 
-  const displayAccordion = (leaguesAvailable: string[]) => {
+  const displayAccordion = () => {
     return leaguesAvailable.map((league, i: number) => {
       let gamesFiltred = [...games];
       if (league !== League.ALL) {
@@ -198,26 +208,27 @@ export default function GameofTheDay() {
       if (league === League.ALL) {
         translatedLeague = translateWord('translatedLeague');
       }
-      return (
-        <td key={league} style={{ verticalAlign: 'baseline' }}>
-          <Accordion filter={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} isCounted={isCounted} />
-        </td>
-      );
+
+      if (gamesFiltred.length > 0) {
+        return (
+          <td key={league} style={{ verticalAlign: 'baseline' }}>
+            <Accordion filter={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} isCounted={isCounted} />
+          </td>
+        );
+      }
     });
   };
 
   const displayLargeDeviceContent = () => {
-    if (!games || games.length === 0) {
+    if (!games || games.length === 0 || !leaguesAvailable || leaguesAvailable.length === 0) {
       return displayNoContent();
     }
-    const leaguesAvailable = [...new Set(games.map((game) => game.league))];
-    if (leaguesAvailable.length > 1) {
-      leaguesAvailable.unshift('ALL');
-    }
+    const leaguesNumber = Array.from(new Set(games.map((game) => game.league))).length || 0;
+
     return (
-      <table style={{ tableLayout: 'fixed', width: leaguesAvailable.length > 1 ? '100%' : '50%', margin: 'auto' }}>
+      <table style={{ tableLayout: 'fixed', width: leaguesNumber.length > 1 ? '100%' : '50%', margin: 'auto' }}>
         <tbody>
-          <tr>{displayAccordion(leaguesAvailable)}</tr>
+          <tr>{displayAccordion()}</tr>
         </tbody>
       </table>
     );
@@ -225,6 +236,7 @@ export default function GameofTheDay() {
 
   useEffect(() => {
     async function fetchGames() {
+      setLeaguesAvailable(await fetchLeagues());
       const storedLeague = localStorage.getItem('league');
 
       if (storedLeague) {
