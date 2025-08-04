@@ -1,7 +1,7 @@
+import { translateWord } from '@/utils/utils';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
-import { translateWord } from '@/utils/utils';
 
 import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
