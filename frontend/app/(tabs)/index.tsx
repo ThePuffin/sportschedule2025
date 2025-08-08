@@ -44,17 +44,6 @@ let gamesDay: { [key: string]: GameFormatted[] } = {};
 let lastGamesUpdate: Date;
 const isCounted = true;
 
-const fetchLeagues = async (): Promise<string[]> => {
-  try {
-    const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`);
-    const leagues = await response.json();
-    return leagues;
-  } catch (error) {
-    console.error('Error fetching leagues:', error);
-    return [];
-  }
-};
-
 const fetchGames = async (date: string): Promise<GameFormatted[]> => {
   try {
     date = date || new Date().toISOString().split('T')[0];
@@ -92,6 +81,19 @@ export default function GameofTheDay() {
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
+
+  const fetchLeagues = async (): Promise<string[]> => {
+    try {
+      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`);
+      const leagues = await response.json();
+      setLeaguesAvailable(leagues);
+      localStorage.setItem('leagues', JSON.stringify(leagues));
+      return leagues;
+    } catch (error) {
+      console.error('Error fetching leagues:', error);
+      return [];
+    }
+  };
 
   const handleGames = (gamesDayExists: GameFormatted[]) => {
     const storedLeague = localStorage.getItem('league');
@@ -236,12 +238,17 @@ export default function GameofTheDay() {
 
   useEffect(() => {
     async function fetchGames() {
-      setLeaguesAvailable(await fetchLeagues());
+      fetchLeagues();
       const storedLeague = localStorage.getItem('league');
+      const storedLeagues = localStorage.getItem('leagues');
 
+      if (storedLeagues) {
+        await setLeaguesAvailable(JSON.parse(storedLeagues));
+      }
       if (storedLeague) {
         await setLeague(storedLeague as League);
       }
+
       await getGamesFromApi(dateRange.startDate);
       if (!lastGamesUpdate || lastGamesUpdate.toDateString() !== new Date().toDateString()) {
         await getNextGamesFromApi(dateRange.startDate);
