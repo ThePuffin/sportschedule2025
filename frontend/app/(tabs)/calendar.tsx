@@ -213,8 +213,8 @@ export default function Calendar() {
       newSelection = newSelection.filter((gameSelect) => gameSelect._id !== game._id);
     } else {
       newSelection.push(game);
-      newSelection = newSelection.sort((a, b) => {
-        return new Date(a.startTimeUTC) - new Date(b.startTimeUTC);
+      newSelection = newSelection.sort((a: GameFormatted, b: GameFormatted) => {
+        return new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime();
       });
     }
 

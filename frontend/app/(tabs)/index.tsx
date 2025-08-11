@@ -202,9 +202,9 @@ export default function GameofTheDay() {
 
   const displayAccordion = () => {
     return leaguesAvailable.map((league, i: number) => {
-      let gamesFiltred = [...games];
+      let gamesFiltred: GameFormatted[] = [...games];
       if (league !== League.ALL) {
-        gamesFiltred = gamesFiltred.filter((game) => game.league === league);
+        gamesFiltred = gamesFiltred.filter((game) => game.league === league && game.awayTeamLogo && game.homeTeamLogo);
       }
       let translatedLeague = league;
       if (league === League.ALL) {

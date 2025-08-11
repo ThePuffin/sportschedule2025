@@ -3,7 +3,7 @@ import { ListItem } from '@rneui/themed';
 import React, { useState } from 'react';
 import Cards from './Cards';
 
-import type { AccordionProps } from '../utils/types'; // Adjust the import path as needed
+import type { AccordionProps } from '../utils/types';
 
 export default function Accordion({
   i = 0,

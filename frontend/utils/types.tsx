@@ -53,7 +53,7 @@ export interface FilterGames {
 export type AccordionProps = {
   readonly i?: number;
   readonly filter?: string;
-  readonly gamesFiltred?: ReadonlyArray<GameFormatted>;
+  readonly gamesFiltred: ReadonlyArray<GameFormatted>;
   readonly open?: boolean;
   readonly isCounted?: boolean;
   readonly showDate?: boolean;
