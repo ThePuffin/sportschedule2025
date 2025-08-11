@@ -228,7 +228,7 @@ export default function GameofTheDay() {
     const leaguesNumber = Array.from(new Set(games.map((game) => game.league))).length || 0;
 
     return (
-      <table style={{ tableLayout: 'fixed', width: leaguesNumber.length > 1 ? '100%' : '50%', margin: 'auto' }}>
+      <table style={{ tableLayout: 'fixed', width: leaguesNumber > 1 ? '100%' : '50%', margin: 'auto' }}>
         <tbody>
           <tr>{displayAccordion()}</tr>
         </tbody>

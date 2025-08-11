@@ -1,7 +1,7 @@
 import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Dimensions, ScrollView, View } from 'react-native';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import GamesSelected from '../../components/GamesSelected';
@@ -15,6 +15,13 @@ const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 export default function Calendar() {
+  const [games, setGames] = useState<FilterGames>({});
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
+  const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
+  const [maxTeamsNumber, setMaxTeamsNumber] = useState(6);
+
   const beginDate = new Date();
   beginDate.setHours(23, 59, 59, 999);
   const endDate = new Date(addDays(beginDate, 15));
@@ -43,11 +50,6 @@ export default function Calendar() {
     startDate: localStorage.getItem('startDate') ?? beginDate.toISOString(),
     endDate: localStorage.getItem('endDate') ?? endDate.toISOString(),
   });
-  const [games, setGames] = useState<FilterGames>({});
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
-  const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
-  const [loadingTeams, setLoadingTeams] = useState(false);
 
   const handleDateChange = (startDate: string, endDate: string) => {
     localStorage.setItem('startDate', startDate);
@@ -62,9 +64,9 @@ export default function Calendar() {
     localStorage.setItem('gameSelected', newGamesSelection.map((game) => JSON.stringify(game)).join(';'));
   };
 
-  const getSelectedTeams = (allTeams) => {
+  const getSelectedTeams = (allTeams: Team[]) => {
     const selection = localStorage.getItem('teamsSelected')
-      ? JSON.parse(localStorage.getItem('teamsSelected') ?? '[]').map((team) => team.uniqueId)
+      ? JSON.parse(localStorage.getItem('teamsSelected') ?? '[]').map((team: Team) => team.uniqueId)
       : teamsSelected ?? [];
     if (!selection.length) {
       while (selection.length < 2) {
@@ -93,7 +95,7 @@ export default function Calendar() {
     const selectionString = localStorage.getItem('teamsSelected');
     const selection =
       selectionString && selectionString.length
-        ? JSON.parse(localStorage.getItem('teamsSelected') ?? '[]').map((team) => team.uniqueId)
+        ? JSON.parse(localStorage.getItem('teamsSelected') ?? '[]').map((team: Team) => team.uniqueId)
         : [];
     if (selection.length > 0) {
       storeTeamsSelected(selection);
@@ -285,14 +287,34 @@ export default function Calendar() {
     }
   }, [teamsSelected]);
 
+  useEffect(() => {
+    const updateDeviceType = () => {
+      const { width } = Dimensions.get('window');
+      if (width <= 1075) {
+        setMaxTeamsNumber(6);
+      } else {
+        setMaxTeamsNumber(8);
+      }
+    };
+
+    updateDeviceType();
+  }, []);
+
   return (
     <ScrollView>
       <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={false} />
       <Buttons
         onClicks={handleButtonClick}
-        data={{ selectedTeamsNumber: teamsSelected.length, selectedGamesNumber: gamesSelected.length, loadingTeams }}
+        data={{
+          selectedTeamsNumber: teamsSelected.length,
+          selectedGamesNumber: gamesSelected.length,
+          loadingTeams,
+          maxTeamsNumber,
+        }}
       />
-      {!!gamesSelected.length && <GamesSelected onAction={handleGamesSelection} data={gamesSelected} />}
+      {!!gamesSelected.length && (
+        <GamesSelected onAction={handleGamesSelection} data={gamesSelected} teamNumber={maxTeamsNumber} />
+      )}
       {!teamsSelected.length && (
         <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
           <Loader />

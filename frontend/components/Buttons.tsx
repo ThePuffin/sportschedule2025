@@ -5,12 +5,12 @@ import { ButtonsKind } from '../constants/enum';
 import IconButton from './IconButton';
 
 export default function Buttons({
-  data = { selectedTeamsNumber: 0, selectedGamesNumber: 0, loadingTeams: false },
+  data = { selectedTeamsNumber: 0, selectedGamesNumber: 0, loadingTeams: false, maxTeamsNumber: 6 },
   onClicks,
 }: Readonly<ButtonsProps>) {
-  const { selectedTeamsNumber, selectedGamesNumber, loadingTeams } = data;
+  const { selectedTeamsNumber, selectedGamesNumber, loadingTeams, maxTeamsNumber = 6 } = data;
 
-  const disabledAdd = loadingTeams || selectedTeamsNumber >= 6;
+  const disabledAdd = loadingTeams || selectedTeamsNumber >= maxTeamsNumber;
   const disabledRemove = loadingTeams || selectedTeamsNumber <= 2;
   const isGamesSelected = selectedGamesNumber > 0;
 

@@ -27,11 +27,6 @@ export default function Schedule() {
     };
 
     updateDeviceType();
-    Dimensions.addEventListener('change', updateDeviceType);
-
-    return () => {
-      Dimensions.removeEventListener('change', updateDeviceType);
-    };
   }, []);
 
   const getSelectedTeams = (allTeams: Team[]) => {

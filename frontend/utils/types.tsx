@@ -60,7 +60,7 @@ export type AccordionProps = {
 };
 
 export interface ButtonsProps {
-  data: { selectedTeamsNumber: number; selectedGamesNumber: number; loadingTeams: boolean };
+  data: { selectedTeamsNumber: number; selectedGamesNumber: number; loadingTeams: boolean; maxTeamsNumber?: number };
   onClicks: (clickedButton: string) => void;
 }
 
@@ -84,6 +84,7 @@ export interface IconButtonProps extends ButtonProps {
 
 export interface GamesSelectedProps {
   readonly data?: GameFormatted[];
+  readonly teamNumber?: number;
   readonly onAction: (game: GameFormatted) => void;
 }
 
