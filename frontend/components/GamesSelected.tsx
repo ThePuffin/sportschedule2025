@@ -25,7 +25,6 @@ export default function GamesSelected({ data = [], teamNumber = 6, onAction }: R
   const cutSelectedGames: GameFormatted[][] = [];
   data.forEach((gameSelected: GameFormatted, i) => {
     const arrayNumber = Math.floor(i / teamNumber);
-    console.log('arrayNumber', arrayNumber);
     if (!cutSelectedGames[arrayNumber]) {
       cutSelectedGames[arrayNumber] = new Array(teamNumber);
     }

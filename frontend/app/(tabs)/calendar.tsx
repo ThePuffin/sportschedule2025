@@ -156,11 +156,11 @@ export default function Calendar() {
   };
 
   const storeTeamsSelected = (teamsSelected: string[]) => {
+    teamsSelected = teamsSelected.filter((teamId, i) => teamId && i < maxTeamsNumber);
     setTeamsSelected(teamsSelected);
     const selectedTeams = teamsSelected
       .map((teamId) => {
         const team = teams.find((team) => team.uniqueId === teamId);
-
         return team;
       })
       .filter((team) => team);
@@ -313,7 +313,11 @@ export default function Calendar() {
         }}
       />
       {!!gamesSelected.length && (
-        <GamesSelected onAction={handleGamesSelection} data={gamesSelected} teamNumber={maxTeamsNumber} />
+        <GamesSelected
+          onAction={handleGamesSelection}
+          data={gamesSelected}
+          teamNumber={maxTeamsNumber > teamsSelected.length ? teamsSelected.length : maxTeamsNumber}
+        />
       )}
       {!teamsSelected.length && (
         <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
