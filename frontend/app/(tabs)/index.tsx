@@ -103,11 +103,6 @@ export default function GameofTheDay() {
     if (leagueFromStorage !== League.ALL) {
       gamesToDisplay = gamesDayExists.filter((game) => game.league === league);
     }
-    if (gamesToDisplay.length === 0) {
-      setLeague(League.ALL);
-      localStorage.setItem('league', League.ALL);
-      gamesToDisplay = gamesDayExists;
-    }
     setGamesFiltred(gamesToDisplay);
     displayGamesCards(gamesToDisplay, leagueFromStorage);
   };
