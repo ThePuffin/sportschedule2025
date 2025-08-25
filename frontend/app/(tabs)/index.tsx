@@ -103,6 +103,11 @@ export default function GameofTheDay() {
     if (leagueFromStorage !== League.ALL) {
       gamesToDisplay = gamesDayExists.filter((game) => game.league === league);
     }
+    if (gamesToDisplay.length === 0) {
+      setLeague(League.ALL);
+      localStorage.setItem('league', League.ALL);
+      gamesToDisplay = gamesDayExists;
+    }
     setGamesFiltred(gamesToDisplay);
     displayGamesCards(gamesToDisplay, leagueFromStorage);
   };
@@ -153,7 +158,14 @@ export default function GameofTheDay() {
         if (game) {
           const gameId = game?._id ?? randomNumber(999999);
           return (
-            <Cards key={gameId} data={game} numberSelected={1} showDate={true} onSelection={() => {}} selected={true} />
+            <Cards
+              key={gameId}
+              data={game}
+              numberSelected={1}
+              showDate={false}
+              onSelection={() => {}}
+              selected={true}
+            />
           );
         }
       });
@@ -210,7 +222,6 @@ export default function GameofTheDay() {
       if (league === League.ALL) {
         translatedLeague = translateWord('translatedLeague');
       }
-
       if (gamesFiltred.length > 0) {
         return (
           <td key={league} style={{ verticalAlign: 'baseline' }}>

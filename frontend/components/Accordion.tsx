@@ -3,6 +3,7 @@ import { ListItem } from '@rneui/themed';
 import React, { useState } from 'react';
 import Cards from './Cards';
 
+import { translateWord } from '@/utils/utils';
 import type { AccordionProps } from '../utils/types';
 
 export default function Accordion({
@@ -35,7 +36,7 @@ export default function Accordion({
         );
       });
     }
-    return <ThemedText>Wait for it ....</ThemedText>;
+    return <ThemedText>{translateWord('noResults')}</ThemedText>;
   };
 
   return (
