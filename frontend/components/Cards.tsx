@@ -124,7 +124,7 @@ export default function Cards({
                 type="font-awesome"
                 style={{ paddingRight: isSmallDevice ? 5 : 10 }}
                 size={isSmallDevice ? 10 : 15}
-                color={teamColors.backgroundColor}
+                color={teamColors.color}
               />
             )}
             {gameDate}
@@ -149,117 +149,99 @@ export default function Cards({
             : shortArenaName;
       }
       return (
-        <View
-          onClick={() => {
-            if (show) {
+        <View>
+          <button
+            onClick={() => {
               if (!showDate) {
                 generateICSFile(data);
               } else {
                 onSelection(data);
               }
-            }
-          }}
-          style={{
-            cursor: show ? 'pointer' : 'not-allowed',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            flexDirection: 'column',
-            height: 180,
-          }}
-        >
-          <Image
+            }}
             style={{
-              width: '50%',
-              height: 50,
-              filter:
-                'drop-shadow(-1px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+              cursor: show ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexDirection: 'column',
+              height: 160,
+              border: 'none',
+              backgroundColor: 'transparent',
+              padding: 0,
+              margin: 0,
             }}
-            resizeMode="contain"
-            source={{
-              uri: awayTeamLogo,
-            }}
-          />
-          <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>{teamNameAway}</Text>
-          <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>@</Text>
-          <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>{teamNameHome}</Text>
-          <Image
+          >
+            <Image
+              style={{
+                width: '50%',
+                height: 50,
+                filter:
+                  'drop-shadow(-1px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+              }}
+              resizeMode="contain"
+              source={{
+                uri: awayTeamLogo,
+              }}
+            />
+            <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>{teamNameAway}</Text>
+            <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>@</Text>
+            <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>{teamNameHome}</Text>
+            <Image
+              style={{
+                width: '50%',
+                height: 50,
+                filter:
+                  'drop-shadow(-1.5px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+              }}
+              resizeMode="contain"
+              source={{
+                uri: homeTeamLogo,
+              }}
+            />
+            <br />
+          </button>
+          <Text
             style={{
-              width: '50%',
-              height: 50,
-              filter:
-                'drop-shadow(-1.5px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexDirection: 'column',
+              height: 20,
             }}
-            resizeMode="contain"
-            source={{
-              uri: homeTeamLogo,
-            }}
-          />
-          <br />
-          <Text>
-            {showButtons || !showDate ? (
-              <a
-                href={`https://maps.google.com/?q=${stadiumSearch}`}
+          >
+            <a
+              href={`https://maps.google.com/?q=${stadiumSearch}`}
+              style={{
+                cursor: 'pointer',
+                textDecoration: 'none',
+                color: cardClass.color,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Icon
+                name="map-marker"
+                type="font-awesome"
+                size={isSmallDevice ? 10 : 12}
+                style={{ marginRight: 0 }}
+                color={cardClass.color}
+              />
+              <span
                 style={{
-                  textDecoration: 'none',
-                  color: cardClass.color,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                }}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Icon
-                  name="map-marker"
-                  type="font-awesome"
-                  size={isSmallDevice ? 10 : 12}
-                  style={{ marginRight: 0 }}
-                  color={cardClass.color}
-                />
-                <span
-                  style={{
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden',
-                    whiteSpace: 'nowrap',
-                    width: '100%',
-                    margin: 0,
-                    padding: 0,
-                  }}
-                >
-                  {arenaName ? shortArenaName : 'Stadium not found'}
-                </span>
-              </a>
-            ) : (
-              <div
-                style={{
-                  display: 'flex', // Makes the content inline
-                  alignItems: 'center', // Vertically aligns items
-                  gap: 5, // Adds spacing between the icon and text
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  width: '100%',
+                  margin: 0,
+                  padding: 0,
                 }}
               >
-                <Icon
-                  name="map-marker"
-                  type="font-awesome"
-                  size={isSmallDevice ? 10 : 12}
-                  style={{ marginRight: 0 }}
-                  color={cardClass.color}
-                />
-                <p
-                  style={{
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden',
-                    whiteSpace: 'nowrap',
-                    width: '80%',
-                    margin: 3,
-                    padding: 0,
-                    color: cardClass.color,
-                  }}
-                >
-                  {arenaName ? shortArenaName : 'Stadium not found'}
-                </p>
-              </div>
-            )}
+                {arenaName ? shortArenaName : 'Stadium not found'}
+              </span>
+            </a>
           </Text>
         </View>
       );
