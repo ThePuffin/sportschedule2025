@@ -1,15 +1,29 @@
-import { League, SelectorProps, Team } from '@/utils/types';
+import { League } from '@/constants/enum';
+import { SelectorProps, Team } from '@/utils/types';
 import React, { useEffect, useState } from 'react';
 import Select from 'react-select';
 
-export default function Selector({ data, onItemSelectionChange }: Readonly<SelectorProps>) {
-  const { itemsSelectedIds, items, i, itemSelectedId } = data;
+export default function Selector({
+  data,
+  onItemSelectionChange,
+  allowMultipleSelection = false,
+}: Readonly<SelectorProps>) {
+  const { items, i, itemSelectedId } = data;
+  let { itemsSelectedIds } = data;
 
   const [itemsSelection, setItemsSelection] = useState<{ value: string; label: string }[]>([]);
 
-  const changeItem = (newValue: { value: string; label: string } | null) => {
+  const changeItem = (
+    newValue: { value: string; label: string } | readonly { value: string; label: string }[] | null
+  ) => {
     if (newValue) {
-      onItemSelectionChange(newValue.value, i);
+      if (Array.isArray(newValue)) {
+        itemsSelectedIds = newValue;
+        const values = newValue.map((val) => val.value);
+        onItemSelectionChange(values, i);
+      } else {
+        onItemSelectionChange((newValue as { value: string }).value, i);
+      }
     }
   };
 
@@ -25,11 +39,19 @@ export default function Selector({ data, onItemSelectionChange }: Readonly<Selec
     setItemsSelection(selectableItems);
   }, [items, itemsSelectedIds]);
 
-  const selectedItem =
-    items.length && items.find((item) => item.uniqueId === itemSelectedId)
-      ? (items.find((item) => item.uniqueId === itemSelectedId) as Team | League)
-      : undefined;
-  const placeholder = selectedItem?.label ?? '';
+  const getValue = () => {
+    if (allowMultipleSelection) {
+      return items.filter(({ value }) => itemsSelectedIds.includes(value));
+    }
+    const selectedItem = items.find((item) => item.uniqueId === itemSelectedId);
+    if (selectedItem) {
+      return { value: selectedItem.uniqueId, label: selectedItem.label };
+    }
+    return null;
+  };
+
+  const singleSelectedItem = items.find((item) => item.uniqueId === itemSelectedId);
+  const placeholder = singleSelectedItem?.label ?? '';
 
   const targetHeight = 65;
   const customStyles = {
@@ -54,13 +76,14 @@ export default function Selector({ data, onItemSelectionChange }: Readonly<Selec
 
   return (
     <Select
-      value={selectedItem ? { value: selectedItem.uniqueId, label: selectedItem.label } : null}
+      value={getValue()}
       placeholder={placeholder}
       isSearchable
       options={itemsSelection}
       onChange={changeItem}
       styles={customStyles}
       noOptionsMessage={() => ' '}
+      isMulti={allowMultipleSelection}
     />
   );
 }

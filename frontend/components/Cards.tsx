@@ -1,3 +1,4 @@
+import { League } from '@/constants/enum';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
@@ -5,6 +6,15 @@ import { Dimensions, Image, Text, View } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { CardsProps } from '../utils/types';
 import { generateICSFile } from '../utils/utils';
+
+const leagueLogos = {
+  MLB: require('../assets/images/MLB.png'),
+  NBA: require('../assets/images/NBA.png'),
+  NFL: require('../assets/images/NFL.png'),
+  NHL: require('../assets/images/NHL.png'),
+  WNBA: require('../assets/images/WNBA.png'),
+  DEFAULT: require('../assets/images/DEFAULT.png'),
+};
 
 export default function Cards({
   data,
@@ -28,6 +38,7 @@ export default function Cards({
     awayTeamShort,
     homeTeamShort,
   } = data;
+  const league = teamSelectedId.split('-')[0] || 'DEFAULT';
   const show = typeof data.show === 'boolean' ? data.show : data.show === 'true';
 
   const [teamNameHome, setTeamNameHome] = useState(homeTeam);
@@ -152,9 +163,7 @@ export default function Cards({
         <View>
           <button
             onClick={() => {
-              if (!showDate) {
-                generateICSFile(data);
-              } else {
+              if (showDate) {
                 onSelection(data);
               }
             }}
@@ -273,6 +282,21 @@ export default function Cards({
         }}
         wrapperStyle={cardClass}
       >
+        {!!startTimeUTC && !showDate && (
+          <Image
+            source={leagueLogos[league as keyof typeof leagueLogos] || leagueLogos.DEFAULT}
+            style={{
+              height: 20,
+              width: 40,
+              resizeMode: 'contain',
+              position: 'absolute',
+              top: -10,
+              left: -10,
+              backgroundColor: league === League.WNBA ? '#F0F0F0' : 'transparent',
+            }}
+            accessibilityLabel={`${league} logo`}
+          />
+        )}
         <Card.Title
           style={{
             overflow: 'hidden',
