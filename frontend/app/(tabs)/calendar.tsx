@@ -105,7 +105,12 @@ export default function Calendar() {
       const storedGamesSelected = localStorage.getItem('gameSelected')
         ? localStorage.getItem('gameSelected')?.split(';')
         : [];
-      setGamesSelected((storedGamesSelected ?? []).map((game) => JSON.parse(game)));
+      const today = new Date().toISOString().split('T')[0];
+      const gamesSelectedFromStorage = (storedGamesSelected ?? [])
+        .map((game) => JSON.parse(game))
+        .filter((game: GameFormatted) => game.gameDate >= today);
+      setGamesSelected(gamesSelectedFromStorage);
+      localStorage.setItem('gameSelected', gamesSelectedFromStorage.map((game) => JSON.stringify(game)).join(';'));
       setTeams(selection);
     } else {
       setTeamsSelected(selection);

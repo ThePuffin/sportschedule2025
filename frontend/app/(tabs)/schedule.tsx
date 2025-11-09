@@ -50,10 +50,16 @@ export default function Schedule() {
     const selection = localStorage.getItem('teamSelected') ?? '';
     if (selection) {
       storeTeamSelected(selection);
-
       const scheduleData = localStorage.getItem('scheduleData');
       if (scheduleData) {
-        setGames(JSON.parse(scheduleData));
+        const storedGames = JSON.parse(scheduleData);
+        const today = new Date().toISOString().split('T')[0];
+        const filteredGames = Object.fromEntries(
+          Object.entries(storedGames)
+            .filter(([date]) => date >= today)
+            .map(([date, games]) => [date, games as GameFormatted[]])
+        ) as FilterGames;
+        setGames(filteredGames);
       }
     } else {
       setTeamSelected(selection);

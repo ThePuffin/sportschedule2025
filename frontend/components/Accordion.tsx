@@ -31,6 +31,7 @@ export default function Accordion({
             data={game}
             numberSelected={1}
             showDate={showDate}
+            showButtons={true}
             style={{ margin: 0, padding: 0 }}
           />
         );

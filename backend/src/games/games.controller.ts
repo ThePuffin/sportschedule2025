@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -43,6 +44,15 @@ export class GamesController {
     return this.GameService.findByDate(gameDate);
   }
 
+  @Get('/league/:league')
+  findByLeague(
+    @Param('league') league: string,
+    @Query('maxResults', new ParseIntPipe({ optional: true }))
+    maxResults?: number,
+  ) {
+    return this.GameService.findByLeague(league, maxResults);
+  }
+
   @Get(':uniqueId')
   findOne(@Param('uniqueId') uniqueId: string) {
     return this.GameService.findOne(uniqueId);
@@ -60,7 +70,7 @@ export class GamesController {
 
   @Post('/refresh/:league')
   async refreshByLeague(@Param('league') league: string) {
-    return this.GameService.getLeagueGames(league);
+    return this.GameService.getLeagueGames(league, true);
   }
 
   @Patch(':uniqueId')

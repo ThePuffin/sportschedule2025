@@ -91,6 +91,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Verbleibende Spiele',
         calendars: 'Kalender',
         noResults: 'Keine Ergebnisse',
+        inProgress: 'In Bearbeitung',
       };
       break;
     case 'es':
@@ -100,6 +101,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Juegos restantes',
         calendars: 'Calendarios',
         noResults: 'Sin resultados',
+        inProgress: 'En progreso',
       };
       break;
     case 'fr':
@@ -109,6 +111,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Matchs restants',
         calendars: 'Calendriers',
         noResults: 'Pas de résultats',
+        inProgress: 'En cours',
       };
       break;
     case 'it':
@@ -118,6 +121,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Giochi rimanenti',
         calendars: 'Calendari',
         noResults: 'Nessun risultato',
+        inProgress: 'In corso',
       };
       break;
     case 'ja':
@@ -127,6 +131,7 @@ export const translateWord = (word: string) => {
         remainingGames: '残りのゲーム',
         calendars: 'カレンダー',
         noResults: '結果なし',
+        inProgress: '進行中',
       };
       break;
     case 'ko':
@@ -136,6 +141,7 @@ export const translateWord = (word: string) => {
         remainingGames: '남은 게임',
         calendars: '달력',
         noResults: '결과 없음',
+        inProgress: '진행 중',
       };
       break;
     case 'nl':
@@ -145,6 +151,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Resterende spellen',
         calendars: 'Kalenders',
         noResults: 'Geen resultaten',
+        inProgress: 'In afwachting',
       };
       break;
     case 'pt':
@@ -154,6 +161,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Jogos restantes',
         calendars: 'Calendários',
         noResults: 'Sem resultados',
+        inProgress: 'Em andamento',
       };
       break;
     case 'ru':
@@ -163,6 +171,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Оставшиеся игры',
         calendars: 'Календари',
         noResults: 'Нет результатов',
+        inProgress: 'В процессе',
       };
       break;
     case 'zh':
@@ -172,6 +181,7 @@ export const translateWord = (word: string) => {
         remainingGames: '剩余比赛',
         calendars: '日历',
         noResults: '没有结果',
+        inProgress: '进行中',
       };
       break;
     default:
@@ -181,6 +191,7 @@ export const translateWord = (word: string) => {
         remainingGames: 'Remaining games',
         calendars: 'Calendars',
         noResults: 'No results',
+        inProgress: 'In progress',
       };
       break;
   }

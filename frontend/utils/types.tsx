@@ -71,8 +71,9 @@ interface DateRange {
 
 export interface DateRangePickerProps {
   onDateChange: (startDate: Date, endDate: Date) => void;
-  dateRange: DateRange;
-  noEnd: boolean;
+  dateRange?: DateRange;
+  selectDate?: Date;
+  readonly?: boolean;
 }
 
 export interface IconButtonProps extends ButtonProps {
@@ -95,7 +96,8 @@ export interface SelectorProps {
     i: number;
     itemSelectedId: string;
   };
-  onItemSelectionChange: (itemmSelectedId: string, i: number) => void;
+  onItemSelectionChange: (itemmSelectedId: League | League[], i: number) => void;
+  allowMultipleSelection?: boolean;
 }
 
 export interface CardsProps {

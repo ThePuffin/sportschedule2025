@@ -1,10 +1,21 @@
+import { League } from '@/constants/enum';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Image, Text, View } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { CardsProps } from '../utils/types';
-import { generateICSFile } from '../utils/utils';
+import { generateICSFile, translateWord } from '../utils/utils';
+const defaultLogo = require('../assets/images/default_logo.png');
+
+const leagueLogos = {
+  MLB: require('../assets/images/MLB.png'),
+  NBA: require('../assets/images/NBA.png'),
+  NFL: require('../assets/images/NFL.png'),
+  NHL: require('../assets/images/NHL.png'),
+  WNBA: require('../assets/images/WNBA.png'),
+  DEFAULT: require('../assets/images/DEFAULT.png'),
+};
 
 export default function Cards({
   data,
@@ -28,6 +39,8 @@ export default function Cards({
     awayTeamShort,
     homeTeamShort,
   } = data;
+
+  const league = teamSelectedId.split('-')[0] || 'DEFAULT';
   const show = typeof data.show === 'boolean' ? data.show : data.show === 'true';
 
   const [teamNameHome, setTeamNameHome] = useState(homeTeam);
@@ -99,6 +112,15 @@ export default function Cards({
     : {};
 
   const displayTitle = () => {
+    const now = new Date();
+    const todayEnd = new Date(data.startTimeUTC);
+    todayEnd.setHours(todayEnd.getHours() + 3);
+
+    const displayDate =
+      data.startTimeUTC && now >= new Date(data.startTimeUTC) && now < todayEnd
+        ? translateWord('inProgress')
+        : gameDate;
+
     if (arenaName && arenaName !== '') {
       return (
         <Card.Title style={{ ...cardClass }}>
@@ -108,9 +130,9 @@ export default function Cards({
             }}
             style={{
               cursor: 'pointer',
-              textDecoration: showButtons && !isSmallDevice ? 'underline' : 'none',
-              color: showButtons && isSmallDevice ? teamColors.color : 'inherit',
-              backgroundColor: showButtons && isSmallDevice ? teamColors.backgroundColor : 'inherit',
+              textDecoration: showButtons ? 'underline' : 'none',
+              color: 'inherit',
+              backgroundColor: 'inherit',
               border: 'none',
               font: 'inherit',
               padding: 0,
@@ -127,7 +149,7 @@ export default function Cards({
                 color={teamColors.color}
               />
             )}
-            {gameDate}
+            {displayDate}
           </button>
         </Card.Title>
       );
@@ -152,9 +174,7 @@ export default function Cards({
         <View>
           <button
             onClick={() => {
-              if (!showDate) {
-                generateICSFile(data);
-              } else {
+              if (showDate) {
                 onSelection(data);
               }
             }}
@@ -179,9 +199,7 @@ export default function Cards({
                   'drop-shadow(-1px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
               }}
               resizeMode="contain"
-              source={{
-                uri: awayTeamLogo,
-              }}
+              source={awayTeamLogo ? { uri: awayTeamLogo } : defaultLogo}
             />
             <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>{teamNameAway}</Text>
             <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>@</Text>
@@ -194,9 +212,7 @@ export default function Cards({
                   'drop-shadow(-1.5px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
               }}
               resizeMode="contain"
-              source={{
-                uri: homeTeamLogo,
-              }}
+              source={homeTeamLogo ? { uri: homeTeamLogo } : defaultLogo}
             />
             <br />
           </button>
@@ -273,6 +289,21 @@ export default function Cards({
         }}
         wrapperStyle={cardClass}
       >
+        {!!startTimeUTC && !showDate && (
+          <Image
+            source={leagueLogos[league as keyof typeof leagueLogos] || leagueLogos.DEFAULT}
+            style={{
+              height: 20,
+              width: 40,
+              resizeMode: 'contain',
+              position: 'absolute',
+              top: -10,
+              left: -10,
+              backgroundColor: league === League.WNBA ? '#F0F0F0' : 'transparent',
+            }}
+            accessibilityLabel={`${league} logo`}
+          />
+        )}
         <Card.Title
           style={{
             overflow: 'hidden',

@@ -71,16 +71,19 @@ const getNextGamesFromApi = async (date: Date): Promise<null> => {
 };
 
 export default function GameofTheDay() {
+  const LeaguesWithoutAll = Object.values(League).filter((league) => league !== League.ALL);
   const currentDate = new Date();
   const [games, setGames] = useState<GameFormatted[]>([]);
-  const [dateRange, setDateRange] = useState({ startDate: currentDate, endDate: currentDate });
+  const [selectDate, setSelectDate] = useState<Date>(currentDate);
   const [gamesFiltred, setGamesFiltred] = useState<GameFormatted[]>([]);
-  const [league, setLeague] = useState(League.ALL);
+  const [league, setLeague] = useState<League>(League.ALL);
+  const [selectLeagues, setSelectLeagues] = useState<League[]>(LeaguesWithoutAll);
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
+  let readonly = false;
 
   const fetchLeagues = async (): Promise<string[]> => {
     try {
@@ -96,24 +99,41 @@ export default function GameofTheDay() {
   };
 
   const handleGames = (gamesDayExists: GameFormatted[]) => {
-    const storedLeague = localStorage.getItem('league');
-    const leagueFromStorage = storedLeague ? (storedLeague as League) : League.ALL;
-    let gamesToDisplay: GameFormatted[] = gamesDayExists;
-    setGames(gamesDayExists);
-    if (leagueFromStorage !== League.ALL) {
-      gamesToDisplay = gamesDayExists.filter((game) => game.league === league);
+    const nowMinusThreeHour = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const storedLeaguesSelected = localStorage.getItem('leaguesSelected');
+    let gamesToDisplay: GameFormatted[] = gamesDayExists.filter(
+      ({ startTimeUTC = '' }) => new Date(startTimeUTC) >= nowMinusThreeHour
+    );
+    if (storedLeaguesSelected) {
+      const leaguesFromStorage = storedLeaguesSelected ? JSON.parse(storedLeaguesSelected) : LeaguesWithoutAll;
+
+      setSelectLeagues(leaguesFromStorage);
+      setGames(gamesDayExists);
+      if (leaguesFromStorage !== LeaguesWithoutAll) {
+        gamesToDisplay = gamesToDisplay.filter((game) => leaguesFromStorage.includes(game.league as League));
+      }
+      setGamesFiltred(gamesToDisplay);
+      displayGamesCards(gamesToDisplay);
+    } else {
+      const storedLeague = localStorage.getItem('league');
+      const leagueFromStorage = storedLeague ? (storedLeague as League) : League.ALL;
+
+      setGames(gamesDayExists);
+      if (leagueFromStorage !== League.ALL) {
+        gamesToDisplay = gamesDayExists.filter((game) => game.league === league);
+      }
+      if (gamesToDisplay.length === 0) {
+        setLeague(League.ALL);
+        localStorage.setItem('league', League.ALL);
+        gamesToDisplay = gamesDayExists;
+      }
+      setGamesFiltred(gamesToDisplay);
+      displayGamesCards(gamesToDisplay);
     }
-    if (gamesToDisplay.length === 0) {
-      setLeague(League.ALL);
-      localStorage.setItem('league', League.ALL);
-      gamesToDisplay = gamesDayExists;
-    }
-    setGamesFiltred(gamesToDisplay);
-    displayGamesCards(gamesToDisplay, leagueFromStorage);
   };
 
-  const getGamesFromApi = async (date: Date, storedLeague?: string): Promise<GameFormatted[] | undefined> => {
-    const YYYYMMDD = new Date(date).toISOString().split('T')[0];
+  const getGamesFromApi = async (): Promise<GameFormatted[] | undefined> => {
+    const YYYYMMDD = new Date(selectDate).toISOString().split('T')[0];
     if (Object.keys(gamesDay).length === 0) {
       const gamesDayString = localStorage.getItem('gamesDay');
       const localStorageGamesDay = gamesDayString ? JSON.parse(gamesDayString) : {};
@@ -134,23 +154,38 @@ export default function GameofTheDay() {
     }
   };
 
-  const handleDateChange = (startDate: Date, endDate: Date) => {
-    setDateRange({ startDate, endDate });
-    getGamesFromApi(startDate);
+  const handleDateChange = async (startDate: Date, endDate: Date) => {
+    readonly = true;
+    setTimeout(async () => {
+      await setSelectDate(startDate);
+      await getGamesFromApi();
+      readonly = false;
+    }, 10);
   };
 
-  const handleLeagueSelectionChange = (leagueSelectedId: string, i: number) => {
-    localStorage.setItem('league', leagueSelectedId);
-    setLeague(leagueSelectedId as League);
-    if (leagueSelectedId === League.ALL) {
-      setGamesFiltred([...games]);
+  const handleLeagueSelectionChange = (leagueSelectedId: League | League[], i: number) => {
+    const nowMinusOneHour = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
+    if (Array.isArray(leagueSelectedId)) {
+      localStorage.setItem('leaguesSelected', JSON.stringify(leagueSelectedId));
+      setSelectLeagues(leagueSelectedId);
+      const filteredGames = games.filter(
+        (game) =>
+          leagueSelectedId.includes(game.league as League) && new Date(game.startTimeUTC || '') >= nowMinusOneHour
+      );
+      setGamesFiltred([...filteredGames]);
     } else {
-      const filteredGames = games.filter((game) => game.league === leagueSelectedId);
-      setGamesFiltred(filteredGames);
+      localStorage.setItem('league', leagueSelectedId);
+      setLeague(leagueSelectedId as League);
+      if (leagueSelectedId === League.ALL) {
+        setGamesFiltred([...games]);
+      } else {
+        const filteredGames = games.filter((game) => game.league === leagueSelectedId);
+        setGamesFiltred(filteredGames);
+      }
     }
   };
 
-  const displayGamesCards = (gamesToShow: GameFormatted[], league = League.ALL) => {
+  const displayGamesCards = (gamesToShow: GameFormatted[]) => {
     if (gamesToShow?.length === 0) {
       return <ThemedText>{translateWord('noResults')}</ThemedText>;
     } else {
@@ -162,6 +197,7 @@ export default function GameofTheDay() {
               key={gameId}
               data={game}
               numberSelected={1}
+              showButtons={true}
               showDate={false}
               onSelection={() => {}}
               selected={true}
@@ -172,22 +208,20 @@ export default function GameofTheDay() {
     }
   };
   const displaySelect = () => {
-    const leaguesAvailables = Object.values(League);
-    const leagues = leaguesAvailables.map((league: string) => {
+    const leagues = leaguesAvailable.map((league: string) => {
       return { label: league, uniqueId: league, value: league };
     });
     const data = {
       i: 0,
       items: leagues,
-      itemsSelectedIds: [league],
+      itemsSelectedIds: selectLeagues,
       itemSelectedId: league,
     };
 
-    const displayGames = league !== League.ALL ? gamesFiltred : games;
     return (
       <ThemedView>
-        <Selector data={data} onItemSelectionChange={handleLeagueSelectionChange} />
-        {displayGamesCards(displayGames, league)}
+        <Selector data={data} onItemSelectionChange={handleLeagueSelectionChange} allowMultipleSelection={true} />
+        {displayGamesCards(gamesFiltred)}
       </ThemedView>
     );
   };
@@ -252,6 +286,10 @@ export default function GameofTheDay() {
       fetchLeagues();
       const storedLeague = localStorage.getItem('league');
       const storedLeagues = localStorage.getItem('leagues');
+      const storedLeaguesSelected = localStorage.getItem('leaguesSelected');
+      if (storedLeaguesSelected) {
+        await setSelectLeagues(JSON.parse(storedLeaguesSelected));
+      }
 
       if (storedLeagues) {
         await setLeaguesAvailable(JSON.parse(storedLeagues));
@@ -260,18 +298,18 @@ export default function GameofTheDay() {
         await setLeague(storedLeague as League);
       }
 
-      await getGamesFromApi(dateRange.startDate);
+      await getGamesFromApi();
       if (!lastGamesUpdate || lastGamesUpdate.toDateString() !== new Date().toDateString()) {
-        await getNextGamesFromApi(dateRange.startDate);
+        await getNextGamesFromApi(selectDate);
         lastGamesUpdate = new Date();
       }
     }
     fetchGames();
-  }, [dateRange.startDate]);
+  }, [selectDate]);
 
   return (
     <>
-      <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={true} />
+      <DateRangePicker readonly={readonly} onDateChange={handleDateChange} selectDate={selectDate} />
       <ScrollView>
         <ThemedView>{width > 768 ? displayLargeDeviceContent() : displaySmallDeviceContent()}</ThemedView>
       </ScrollView>
