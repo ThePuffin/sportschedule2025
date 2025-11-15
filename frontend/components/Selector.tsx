@@ -1,5 +1,4 @@
-import { League } from '@/constants/enum';
-import { SelectorProps, Team } from '@/utils/types';
+import { SelectorProps } from '@/utils/types';
 import React, { useEffect, useState } from 'react';
 import Select from 'react-select';
 
@@ -29,11 +28,14 @@ export default function Selector({
 
   useEffect(() => {
     const selectableItems = items.length
-      ? (items as (Team | League)[])
-          .filter((item) => !itemsSelectedIds.includes(item.uniqueId))
-          .map(({ label, uniqueId }) => {
-            return { value: uniqueId, label };
+      ? (items.filter((i) => i) as any[])
+          .map((item) => {
+            if (typeof item === 'string') {
+              return { value: item, label: item };
+            }
+            return { value: item.uniqueId, label: item.label };
           })
+          .filter((item) => !itemsSelectedIds.includes(item.value))
       : [];
 
     setItemsSelection(selectableItems);
@@ -41,17 +43,44 @@ export default function Selector({
 
   const getValue = () => {
     if (allowMultipleSelection) {
-      return items.filter(({ value }) => itemsSelectedIds.includes(value));
+      return items
+        .filter((item) => {
+          if (!item) return false;
+          const id = typeof item === 'string' ? item : item.uniqueId;
+          return itemsSelectedIds.includes(id);
+        })
+        .map((item) => {
+          if (typeof item === 'string') {
+            return { value: item, label: item };
+          }
+          return { value: item.uniqueId, label: item.label };
+        });
     }
-    const selectedItem = items.find((item) => item.uniqueId === itemSelectedId);
+    const selectedItem = items.find((item) => {
+      if (!item) return false;
+      if (typeof item === 'string') return item === itemSelectedId;
+      return item.uniqueId === itemSelectedId;
+    });
+
     if (selectedItem) {
+      if (typeof selectedItem === 'string') {
+        return { value: selectedItem, label: selectedItem };
+      }
       return { value: selectedItem.uniqueId, label: selectedItem.label };
     }
     return null;
   };
 
-  const singleSelectedItem = items.find((item) => item.uniqueId === itemSelectedId);
-  const placeholder = singleSelectedItem?.label ?? '';
+  const singleSelectedItem = items.find((item) => {
+    if (!item) return false;
+    if (typeof item === 'string') return item === itemSelectedId;
+    return item.uniqueId === itemSelectedId;
+  });
+  const placeholder = singleSelectedItem
+    ? typeof singleSelectedItem === 'string'
+      ? singleSelectedItem
+      : singleSelectedItem.label
+    : '';
 
   const targetHeight = 65;
   const customStyles = {
@@ -84,6 +113,7 @@ export default function Selector({
       styles={customStyles}
       noOptionsMessage={() => ' '}
       isMulti={allowMultipleSelection}
+      isDisabled={items.length === 0 || items.length === 1}
     />
   );
 }

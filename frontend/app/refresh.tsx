@@ -134,48 +134,63 @@ export default function GameofTheDay() {
         </button>
         <br />
         <hr style={{ width: '300px' }} />
-        {leaguesAvailable.map((league) => (
-          <View
-            key={league}
-            style={{
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginVertical: 25,
+
+        {/* Grid container for league buttons */}
+        <View
+          style={
+            {
+              display: 'grid',
+              gridTemplateColumns: leaguesAvailable.length > 6 ? 'repeat(2, 1fr)' : 'repeat(1, 1fr)',
+              gap: '25px',
               width: '100%',
-            }}
-          >
-            <button
-              onClick={() => refreshGamesLeague(league)}
-              disabled={isLoading}
+              maxWidth: leaguesAvailable.length > 6 ? '700px' : '300px',
+              padding: '20px',
+              justifyItems: 'center',
+            } as any
+          }
+        >
+          {leaguesAvailable.map((league) => (
+            <View
+              key={league}
               style={{
-                padding: '10px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: isLoading ? '#ccc' : '#007bff',
-                color: '#fff',
-                fontSize: '16px',
-                cursor: isLoading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                transition: 'background 0.2s',
-                width: width < 600 ? '100%' : '300px',
-                maxWidth: '300px',
-                minWidth: '300px',
-                display: 'block',
+                justifyContent: 'center',
+                alignItems: 'center',
+                width: '100%',
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                <ThemedText style={{ color: '#fff', fontSize: '16px', marginRight: 10 }}>
-                  {league.toUpperCase()}
-                </ThemedText>
-                <Image
-                  source={leagueLogos[league.toUpperCase()] || leagueLogos.DEFAULT}
-                  style={{ height: 20, width: 40, resizeMode: 'contain' }}
-                  accessibilityLabel={`${league} logo`}
-                />
-              </View>
-            </button>
-          </View>
-        ))}
+              <button
+                onClick={() => refreshGamesLeague(league)}
+                disabled={isLoading}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: isLoading ? '#ccc' : '#007bff',
+                  color: '#fff',
+                  fontSize: '16px',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                  transition: 'background 0.2s',
+                  width: width < 600 ? '100%' : '300px',
+                  maxWidth: '300px',
+                  minWidth: '300px',
+                  display: 'block',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <ThemedText style={{ color: '#fff', fontSize: '16px', marginRight: 10 }}>
+                    {league.toUpperCase()}
+                  </ThemedText>
+                  <Image
+                    source={leagueLogos[league.toUpperCase()] || leagueLogos.DEFAULT}
+                    style={{ height: 20, width: 40, resizeMode: 'contain' }}
+                    accessibilityLabel={`${league} logo`}
+                  />
+                </View>
+              </button>
+            </View>
+          ))}
+        </View>
       </View>
     </ThemedView>
   );

@@ -43,9 +43,9 @@ export class GameService {
 
   async getTeamsLogo(teams: TeamType[]): Promise<{ [key: string]: string }> {
     const logos = {};
-    teams.forEach(({ abbrev, teamLogo }) => {
+    for (const { abbrev, teamLogo } of teams) {
       logos[abbrev] = teamLogo;
-    });
+    }
 
     return logos;
   }
@@ -101,35 +101,21 @@ export class GameService {
     const teams = await this.teamService.findByLeague(league);
     let currentGames = {};
     const leagueLogos = await this.getTeamsLogo(teams);
-    let teamErrorFetch = [];
 
     try {
+      currentGames = await getTeamsSchedule(teams, league, leagueLogos);
+    } catch (error) {
+      console.error(`Error fetching games for league ${league}:`, error);
       if (league === League.NHL) {
         try {
           const hockeyData = new HockeyData();
           currentGames = await hockeyData.getNhlSchedule(teams, leagueLogos);
         } catch (error) {
           console.error('Error fetching NHL data:', error);
-          teamErrorFetch.push(error);
         }
-      } else {
-        currentGames = await getTeamsSchedule(teams, league, leagueLogos);
       }
-
-      if (teamErrorFetch.length) {
-        teamErrorFetch = teamErrorFetch.map(
-          (team) =>
-            (team.id =
-              league === League.NHL ? `${league}-${team.id}` : team.id),
-        );
-        const otherFetchcurrentGames = await getTeamsSchedule(
-          teams,
-          league,
-          leagueLogos,
-        );
-        currentGames = { ...currentGames, ...otherFetchcurrentGames };
-      }
-
+    }
+    try {
       if (Object.keys(currentGames).length) {
         for (const team of teams) {
           await this.unactivateGames(team.uniqueId);
@@ -205,12 +191,26 @@ export class GameService {
     return game;
   }
 
-  async findByTeam(teamSelectedId: string) {
-    return this.filterGames({ teamSelectedIds: teamSelectedId });
+  async findByTeam(teamSelectedId: string, needRefreshData = true) {
+    const games = await this.filterGames({ teamSelectedIds: teamSelectedId });
+    const keys = Object.keys(games);
+    if (
+      needRefreshData &&
+      keys.length === 1 &&
+      !games[keys[0]]?.[0]?.awayTeamShort
+    ) {
+      const league = teamSelectedId.split('-')[0];
+      if (league) {
+        await this.getLeagueGames(league, true);
+      }
+      return this.filterGames({ teamSelectedIds: teamSelectedId });
+    }
+
+    return games;
   }
 
   async findByLeague(league: string, maxResults?: number) {
-    return this.filterGames({ league: league, maxResults });
+    return this.filterGames({ league: league, maxResults, selectedTeam: true });
   }
 
   async filterGames({
@@ -219,8 +219,13 @@ export class GameService {
     teamSelectedIds = undefined,
     league = undefined,
     maxResults = undefined,
+    selectedTeam = undefined,
   }) {
-    const filter: any = {};
+    const filter: any = { isActive: true };
+
+    if (selectedTeam !== undefined) {
+      filter.selectedTeam = selectedTeam;
+    }
 
     if (startDate) {
       filter.gameDate = { $gte: startDate };
@@ -376,9 +381,9 @@ export class GameService {
   async removeDuplicatesAndOlds() {
     console.info('Removing duplicates and old games...');
     const games = await this.gameModel.find().exec();
-    const nowPlus12hours = this.addHours(new Date(), 12);
+    const nowMinus12Hour = this.addHours(new Date(), -12);
     const oldGames = games.filter(({ startTimeUTC }) => {
-      return new Date(startTimeUTC) > new Date(nowPlus12hours);
+      return new Date(startTimeUTC) < new Date(nowMinus12Hour);
     });
     for (const oldGame of oldGames) {
       await this.remove(oldGame.uniqueId);
@@ -409,7 +414,7 @@ export class GameService {
   }
 
   async unactivateGames(teamId: string): Promise<void> {
-    const games = await this.findByTeam(teamId);
+    const games = await this.findByTeam(teamId, false);
 
     for (const date in games) {
       if (Array.isArray(games[date]) && games[date][0]?.awayTeamShort) {

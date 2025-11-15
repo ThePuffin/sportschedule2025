@@ -17,7 +17,7 @@ export default function Accordion({
   const [expanded, setExpanded] = useState(open ?? i === 0);
   const makeCards = () => {
     if (!gamesFiltred?.length) {
-      return <ThemedText>There are no games today</ThemedText>;
+      return <ThemedText>There are no games today</ThemedText>
     }
     if (gamesFiltred.length) {
       return gamesFiltred.map((game) => {
@@ -37,7 +37,7 @@ export default function Accordion({
         );
       });
     }
-    return <ThemedText>{translateWord('noResults')}</ThemedText>;
+    return <ThemedText>{translateWord('noResults')}</ThemedText>
   };
 
   return (

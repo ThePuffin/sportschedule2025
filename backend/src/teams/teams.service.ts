@@ -39,33 +39,43 @@ export class TeamService {
     }
     try {
       this.isFetchingTeams = true;
-
-      const hockeyData = new HockeyData();
-      const activeTeams = await hockeyData.getNhlTeams();
-      const leagues = [League.NFL, League.NBA, League.MLB, League.WNBA];
+      const allActivesTeams: TeamType[] = [];
+      const leagues = Object.values(League);
       for (const league of leagues) {
-        const teams = await getESPNTeams(league);
+        let activeTeams: TeamType[] = [];
+        let teams: TeamType[] = [];
+        try {
+          teams = await getESPNTeams(league);
+        } catch (error) {
+          console.error(`Error fetching teams for league ${league}:`, error);
+          if (league === League.NHL) {
+            const hockeyData = new HockeyData();
+            teams = await hockeyData.getNhlTeams();
+          }
+        }
         if (teams.length) {
           activeTeams.push(...teams);
         }
-      }
-      let updateNumber = 0;
-      for (const activeTeam of activeTeams) {
-        activeTeam.updateDate = new Date().toISOString();
-        await this.create(activeTeam);
-        updateNumber++;
-        console.info(
-          'updated:',
-          activeTeam?.label,
-          '(',
-          updateNumber,
-          '/',
-          activeTeams.length,
-          ')',
-        );
+
+        let updateNumber = 0;
+        for (const activeTeam of activeTeams) {
+          activeTeam.updateDate = new Date().toISOString();
+          await this.create(activeTeam);
+          updateNumber++;
+          console.info(
+            'updated:',
+            activeTeam?.label,
+            '(',
+            updateNumber,
+            '/',
+            activeTeams.length,
+            ')',
+          );
+        }
+        allActivesTeams.push(...activeTeams);
       }
 
-      return activeTeams;
+      return allActivesTeams;
     } catch (error) {
       console.error(error);
       throw new Error('Error fetching teams: ' + error.message);

@@ -8,6 +8,7 @@ import Accordion from '../../components/Accordion';
 import DateRangePicker from '../../components/DatePicker';
 import Loader from '../../components/Loader';
 import { League } from '../../constants/enum';
+import { fetchLeagues } from '../../utils/fetchData';
 import { randomNumber, translateWord } from '../../utils/utils';
 
 interface GameFormatted {
@@ -84,19 +85,6 @@ export default function GameofTheDay() {
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
   let readonly = false;
-
-  const fetchLeagues = async (): Promise<string[]> => {
-    try {
-      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`);
-      const leagues = await response.json();
-      setLeaguesAvailable(leagues);
-      localStorage.setItem('leagues', JSON.stringify(leagues));
-      return leagues;
-    } catch (error) {
-      console.error('Error fetching leagues:', error);
-      return [];
-    }
-  };
 
   const handleGames = (gamesDayExists: GameFormatted[]) => {
     const nowMinusThreeHour = new Date(Date.now() - 3 * 60 * 60 * 1000);
@@ -187,7 +175,7 @@ export default function GameofTheDay() {
 
   const displayGamesCards = (gamesToShow: GameFormatted[]) => {
     if (gamesToShow?.length === 0) {
-      return <ThemedText>{translateWord('noResults')}</ThemedText>;
+      return <ThemedText>{translateWord('noResults')}</ThemedText>
     } else {
       return gamesToShow.map((game) => {
         if (game) {
@@ -234,7 +222,7 @@ export default function GameofTheDay() {
         </View>
       );
     } else {
-      return <ThemedText>{translateWord('noResults')}</ThemedText>;
+      return <ThemedText>{translateWord('noResults')}</ThemedText>
     }
   };
 
@@ -283,19 +271,19 @@ export default function GameofTheDay() {
 
   useEffect(() => {
     async function fetchGames() {
-      fetchLeagues();
+      fetchLeagues(setLeaguesAvailable);
       const storedLeague = localStorage.getItem('league');
       const storedLeagues = localStorage.getItem('leagues');
       const storedLeaguesSelected = localStorage.getItem('leaguesSelected');
-      if (storedLeaguesSelected) {
-        await setSelectLeagues(JSON.parse(storedLeaguesSelected));
-      }
 
       if (storedLeagues) {
         await setLeaguesAvailable(JSON.parse(storedLeagues));
       }
       if (storedLeague) {
         await setLeague(storedLeague as League);
+      }
+      if (storedLeaguesSelected) {
+        await setSelectLeagues(JSON.parse(storedLeaguesSelected));
       }
 
       await getGamesFromApi();

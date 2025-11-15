@@ -3,5 +3,10 @@ export enum League {
   NFL = 'NFL',
   NBA = 'NBA',
   MLB = 'MLB',
+  MLS = 'MLS',
+  NCAAF = 'NCAAF',
+  NCAAB = 'NCAAB',
+  NCCABB = 'NCCABB',
+  WNCAAB = 'WNCAAB',
   WNBA = 'WNBA',
 }

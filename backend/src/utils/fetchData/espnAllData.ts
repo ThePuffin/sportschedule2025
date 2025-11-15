@@ -9,11 +9,15 @@ const { NODE_ENV } = process.env;
 
 const espnAPI = 'https://site.api.espn.com/apis/site/v2/sports/';
 
-const ESPNAbbrevs = {
-  NJ: 'NJD',
-  TB: 'TBL',
-  LA: 'LAK',
-};
+// const ESPNAbbrevs = {
+//   NHL: {
+//     NJ: 'NJD',
+//     TB: 'TBL',
+//     LA: 'LAK',
+//     SJ: 'SJS',
+//     VG: 'VGK',
+//   },
+// };
 
 const leagueConfigs = {
   [League.NHL]: { sport: 'hockey', league: 'nhl' },
@@ -21,6 +25,11 @@ const leagueConfigs = {
   [League.NBA]: { sport: 'basketball', league: 'nba' },
   [League.WNBA]: { sport: 'basketball', league: 'wnba' },
   [League.NFL]: { sport: 'football', league: 'nfl' },
+  [League.NCAAF]: { sport: 'football', league: 'college-football' },
+  [League.NCAAB]: { sport: 'basketball', league: 'mens-college-basketball' },
+  [League.WNCAAB]: { sport: 'basketball', league: 'womens-college-basketball' },
+  [League.MLS]: { sport: 'soccer', league: 'usa.1' },
+  [League.NCCABB]: { sport: 'baseball', league: 'college-baseball' },
 };
 
 const leaguesData = Object.fromEntries(
@@ -196,12 +205,8 @@ const getEachTeamSchedule = async ({
         const awayTeam = competitors.find((team) => team.homeAway === 'away');
         const homeTeam = competitors.find((team) => team.homeAway === 'home');
         number++;
-        const awayAbbrev =
-          ESPNAbbrevs[awayTeam.team.abbreviation] ||
-          `${awayTeam.team.abbreviation}`;
-        const homeAbbrev =
-          ESPNAbbrevs[homeTeam.team.abbreviation] ||
-          `${homeTeam.team.abbreviation}`;
+        const awayAbbrev = `${awayTeam.team.abbreviation}`;
+        const homeAbbrev = `${homeTeam.team.abbreviation}`;
 
         return {
           arenaName: capitalize(venue?.fullName) ?? '',

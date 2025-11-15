@@ -1,5 +1,6 @@
 import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
+import { fetchTeams } from '@/utils/fetchData';
 import React, { useEffect, useState } from 'react';
 import { Dimensions, ScrollView, View } from 'react-native';
 import Buttons from '../../components/Buttons';
@@ -120,8 +121,7 @@ export default function Calendar() {
   const getTeamsFromApi = async (): Promise<Team[]> => {
     setLoadingTeams(true);
     try {
-      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams`);
-      const allTeams = await response.json();
+      const allTeams = await fetchTeams();
       getSelectedTeams(allTeams);
       setLoadingTeams(false);
       return allTeams;

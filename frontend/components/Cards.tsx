@@ -87,27 +87,29 @@ export default function Cards({
         })
       : new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
-  const defaultColors = Colors.default;
-  const colors = Colors[teamSelectedId] ?? {};
-  const defaultColor = color && backgroundColor ? { color, backgroundColor } : defaultColors;
-  const teamColors = colors.backgroundColor && colors.backgroundColor !== '' ? colors : defaultColor;
+
+  const colorsTeamSelected = Colors[teamSelectedId] ?? {};
+  const teamClrs =
+    Object.keys(colorsTeamSelected).length > 0
+      ? { color: colorsTeamSelected.color, backgroundColor: colorsTeamSelected.backgroundColor }
+      : { color: `#${color}`, backgroundColor: `#${backgroundColor}` };
+  const colorTeam = teamClrs.backgroundColor && teamClrs.backgroundColor !== '' ? teamClrs : Colors['default'];
 
   let cardClass = show
     ? {
-        ...teamColors,
+        ...colorTeam,
         fontSize,
       }
     : {
         fontSize,
         opacity: '0.97',
-
         backgroundColor: '#ffffee',
       };
 
   let selectedCard = selected
     ? {
         filter: 'brightness(1.25) saturate(1.5) contrast(1.05)',
-        border: 'double' + teamColors?.color,
+        border: 'double' + colorTeam?.color,
       }
     : {};
 
@@ -126,7 +128,7 @@ export default function Cards({
         <Card.Title style={{ ...cardClass }}>
           <button
             onClick={() => {
-              if (showButtons) generateICSFile(data);
+              if ((showButtons, generateICSFile(data)));
             }}
             style={{
               cursor: 'pointer',
@@ -146,7 +148,7 @@ export default function Cards({
                 type="font-awesome"
                 style={{ paddingRight: isSmallDevice ? 5 : 10 }}
                 size={isSmallDevice ? 10 : 15}
-                color={teamColors.color}
+                color={colorTeam?.color}
               />
             )}
             {displayDate}
@@ -191,29 +193,80 @@ export default function Cards({
               margin: 0,
             }}
           >
-            <Image
+            {/* Away Team Logo Container */}
+            <div
               style={{
+                position: 'relative',
                 width: '50%',
                 height: 50,
-                filter:
-                  'drop-shadow(-1px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
               }}
-              resizeMode="contain"
-              source={awayTeamLogo ? { uri: awayTeamLogo } : defaultLogo}
-            />
-            <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>{teamNameAway}</Text>
-            <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>@</Text>
-            <Text style={{ ...cardClass, backgroundColor: 'transparent' }}>{teamNameHome}</Text>
-            <Image
+            >
+              <Image
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  filter:
+                    'drop-shadow(-1px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+                }}
+                resizeMode="contain"
+                source={awayTeamLogo ? { uri: awayTeamLogo } : defaultLogo}
+              />
+              {!awayTeamLogo && (
+                <Text
+                  style={{
+                    position: 'absolute',
+                    fontWeight: 'bold',
+                    fontSize: isSmallDevice ? 10 : 12,
+                    color: '#ffffff',
+                    textAlign: 'center',
+                  }}
+                >
+                  {awayTeamShort}
+                </Text>
+              )}
+            </div>
+            <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold' }}>{teamNameAway}</Text>
+            <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold' }}>@</Text>
+            <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold' }}>{teamNameHome}</Text>
+
+            {/* Home Team Logo Container */}
+            <div
               style={{
+                position: 'relative',
                 width: '50%',
                 height: 50,
-                filter:
-                  'drop-shadow(-1.5px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
               }}
-              resizeMode="contain"
-              source={homeTeamLogo ? { uri: homeTeamLogo } : defaultLogo}
-            />
+            >
+              <Image
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  filter:
+                    'drop-shadow(-1.5px 0 0 #101518) drop-shadow(0 -1px 0 #101518) drop-shadow(-0.1px 0 0 #101518) drop-shadow(0 0.1px 0 #101518)',
+                }}
+                resizeMode="contain"
+                source={homeTeamLogo ? { uri: homeTeamLogo } : defaultLogo}
+              />
+              {!homeTeamLogo && (
+                <Text
+                  style={{
+                    position: 'absolute',
+                    fontWeight: 'bold',
+                    fontSize: isSmallDevice ? 10 : 12,
+                    color: '#ffffff',
+                    textAlign: 'center',
+                  }}
+                >
+                  {homeTeamShort}
+                </Text>
+              )}
+            </div>
             <br />
           </button>
           <Text
@@ -316,7 +369,7 @@ export default function Cards({
         >
           {displayTitle()}
         </Card.Title>
-        <Card.Divider style={{ backgroundColor: teamColors.color }} />
+        <Card.Divider style={{ backgroundColor: colorTeam?.color }} />
         {displayContent()}
       </Card>
     </div>
