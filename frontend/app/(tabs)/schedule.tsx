@@ -224,7 +224,7 @@ export default function Schedule() {
       );
     } else if (games) {
       const filteredGames = Object.keys(games).filter((day: string) => {
-        return games[day]?.some((game: GameFormatted) => game.updateDate);
+        return Array.isArray(games[day]) && games[day].some((game: GameFormatted) => game.updateDate);
       });
 
       const months = filteredGames.reduce((acc: { [key: string]: string[] }, day: string) => {
@@ -239,12 +239,13 @@ export default function Schedule() {
       if (Object.keys(months).length) {
         return Object.entries(months).map(([month, daysInMonth], monthIndex) => {
           const gamesForThisMonth: GameFormatted[] = daysInMonth.reduce((acc: GameFormatted[], day: string) => {
+            const dayGames = Array.isArray(games[day]) ? games[day] : [];
             if (teamSelectedId === 'all') {
-              if (games[day]) {
-                acc.push(...games[day]);
+              if (dayGames.length) {
+                acc.push(...dayGames);
               }
             } else {
-              const gameOnDay = games[day]?.find((game: GameFormatted) => game.teamSelectedId === teamSelectedId);
+              const gameOnDay = dayGames.find((game: GameFormatted) => game.teamSelectedId === teamSelectedId);
               if (gameOnDay) {
                 acc.push(gameOnDay);
               }

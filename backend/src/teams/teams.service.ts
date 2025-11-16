@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { League } from '../utils/enum';
+import { CollegeLeague, League } from '../utils/enum';
 import { getESPNTeams } from '../utils/fetchData/espnAllData';
 import { HockeyData } from '../utils/fetchData/hockeyData';
 import { TeamType } from '../utils/interface/team';
@@ -40,17 +40,29 @@ export class TeamService {
     try {
       this.isFetchingTeams = true;
       const allActivesTeams: TeamType[] = [];
-      const leagues = Object.values(League);
+      const collegeLeagueValues = Object.values(
+        CollegeLeague,
+      ) as CollegeLeague[];
+      const leagues = Object.values(League).filter(
+        (league) =>
+          !collegeLeagueValues.includes(league as unknown as CollegeLeague),
+      );
+      console.log('Fetching teams for leagues:', leagues);
       for (const league of leagues) {
         let activeTeams: TeamType[] = [];
         let teams: TeamType[] = [];
         try {
-          teams = await getESPNTeams(league);
+          if (league === League.PWHL) {
+            const hockeyData = new HockeyData();
+            teams = await hockeyData.getPWHLTeams();
+          } else {
+            teams = await getESPNTeams(league);
+          }
         } catch (error) {
           console.error(`Error fetching teams for league ${league}:`, error);
           if (league === League.NHL) {
             const hockeyData = new HockeyData();
-            teams = await hockeyData.getNhlTeams();
+            teams = await hockeyData.getNHLTeams();
           }
         }
         if (teams.length) {

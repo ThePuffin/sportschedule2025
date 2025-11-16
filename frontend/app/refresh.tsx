@@ -15,6 +15,8 @@ const leagueLogos = {
   NFL: require('../assets/images/NFL.png'),
   NHL: require('../assets/images/NHL.png'),
   WNBA: require('../assets/images/WNBA.png'),
+  MLS: require('../assets/images/MLS.png'),
+  PWHL: require('../assets/images/PWHL.png'),
   DEFAULT: require('../assets/images/DEFAULT.png'),
 };
 
@@ -75,6 +77,10 @@ export default function GameofTheDay() {
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
+  const isTwoColumns = leaguesAvailable.length > 6;
+  const gridTemplateColumns = isTwoColumns ? 'repeat(2, minmax(0, 1fr))' : 'repeat(1, 1fr)';
+  const containerMaxWidth = isTwoColumns ? (width < 700 ? '100%' : '700px') : '300px';
+  const buttonMaxWidth = isTwoColumns ? (width < 700 ? '100%' : '300px') : width < 600 ? '100%' : '300px';
 
   const displayNoContent = () => {
     if (isLoading) {
@@ -107,6 +113,7 @@ export default function GameofTheDay() {
           alignItems: 'center',
           width: '100%',
           minHeight: '100vh',
+          padding: '20px',
         }}
       >
         <button
@@ -122,9 +129,9 @@ export default function GameofTheDay() {
             cursor: isLoading ? 'not-allowed' : 'pointer',
             boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
             transition: 'background 0.2s',
-            width: width < 600 ? '100%' : '300px',
-            maxWidth: '300px',
-            minWidth: '300px',
+            width: '100%',
+            maxWidth: buttonMaxWidth,
+            minWidth: buttonMaxWidth === '100%' ? undefined : '300px',
             display: 'block',
           }}
         >
@@ -134,17 +141,20 @@ export default function GameofTheDay() {
         </button>
         <br />
         <hr style={{ width: '300px' }} />
+        <br />
 
         {/* Grid container for league buttons */}
         <View
           style={
             {
               display: 'grid',
-              gridTemplateColumns: leaguesAvailable.length > 6 ? 'repeat(2, 1fr)' : 'repeat(1, 1fr)',
+              gridTemplateColumns: gridTemplateColumns,
               gap: '25px',
               width: '100%',
-              maxWidth: leaguesAvailable.length > 6 ? '700px' : '300px',
-              padding: '20px',
+              maxWidth: containerMaxWidth,
+
+              alignItems: 'center',
+
               justifyItems: 'center',
             } as any
           }
@@ -171,9 +181,9 @@ export default function GameofTheDay() {
                   cursor: isLoading ? 'not-allowed' : 'pointer',
                   boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
                   transition: 'background 0.2s',
-                  width: width < 600 ? '100%' : '300px',
-                  maxWidth: '300px',
-                  minWidth: '300px',
+                  width: '100%',
+                  maxWidth: buttonMaxWidth,
+                  minWidth: buttonMaxWidth === '100%' ? undefined : '300px',
                   display: 'block',
                 }}
               >

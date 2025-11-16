@@ -547,6 +547,39 @@ export const Colors = {
     color: '#c8102e',
     backgroundColor: '#041e42',
   },
+  'PWHL-BOS': {
+    color: '#b3e2d8',
+    backgroundColor: '#153f36',
+  },
+  'PWHL-TOR': {
+    color: '#0067B9',
+    backgroundColor: '#0C2340',
+  },
+  'PWHL-OTT': {
+    color: '##a51b2f',
+    backgroundColor: '#fdb81e',
+  },
+  'PWHL-MIN': {
+    color: '#9e7dc5',
+    backgroundColor: ' #ffffff',
+  },
+  'PWHL-MTL': {
+    color: '#852734',
+    backgroundColor: ' #e2d4c4',
+  },
+  'PWHL-NY': {
+    backgroundColor: '#00b9b3',
+    color: '#eb8b04',
+  },
+  'PWHL-SEA': {
+    color: '#0C5256',
+    backgroundColor: '#E1DBC9',
+  },
+  'PWHL-VAN': {
+    color: '#0F4777',
+    backgroundColor: '#EEE9D8',
+  },
+
   'WNBA-ATL': {
     color: '#e31837',
     backgroundColor: '#5091cc',

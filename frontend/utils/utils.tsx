@@ -86,112 +86,123 @@ export const translateWord = (word: string) => {
   switch (language) {
     case 'de':
       translation = {
-        translatedLeague: 'ALLE',
+        all: 'alle',
         gamesOfDay: 'Spiele des Tages',
         remainingGames: 'Verbleibende Spiele',
         calendars: 'Kalender',
         noResults: 'Keine Ergebnisse',
         inProgress: 'In Bearbeitung',
+        noOptionsAvailable: 'Keine Optionen verfügbar',
       };
       break;
     case 'es':
       translation = {
-        translatedLeague: 'TODOS',
+        all: 'TODOS',
         gamesOfDay: 'Juegos del día',
         remainingGames: 'Juegos restantes',
         calendars: 'Calendarios',
         noResults: 'Sin resultados',
         inProgress: 'En progreso',
+        noOptionsAvailable: 'No hay opciones disponibles',
       };
       break;
     case 'fr':
       translation = {
-        translatedLeague: 'TOUS',
+        all: 'TOUS',
         gamesOfDay: 'Programme du jour',
         remainingGames: 'Matchs restants',
         calendars: 'Calendriers',
         noResults: 'Pas de résultats',
         inProgress: 'En cours',
+        noOptionsAvailable: 'Aucune option disponible',
       };
       break;
     case 'it':
       translation = {
-        translatedLeague: 'TUTTI',
+        all: 'TUTTI',
         gamesOfDay: 'Giochi del giorno',
         remainingGames: 'Giochi rimanenti',
         calendars: 'Calendari',
         noResults: 'Nessun risultato',
         inProgress: 'In corso',
+        noOptionsAvailable: 'Nessuna opzione disponibile',
       };
       break;
     case 'ja':
       translation = {
-        translatedLeague: 'すべて',
+        all: 'すべて',
         gamesOfDay: 'その日のゲーム',
         remainingGames: '残りのゲーム',
         calendars: 'カレンダー',
         noResults: '結果なし',
         inProgress: '進行中',
+        noOptionsAvailable: '利用可能なオプションはありません',
       };
       break;
     case 'ko':
       translation = {
-        translatedLeague: '전체',
+        all: '전체',
         gamesOfDay: '그날의 게임',
         remainingGames: '남은 게임',
         calendars: '달력',
         noResults: '결과 없음',
         inProgress: '진행 중',
+        noOptionsAvailable: '사용 가능한 옵션이 없습니다',
       };
       break;
     case 'nl':
       translation = {
-        translatedLeague: 'ALLE',
+        all: 'ALLE',
         gamesOfDay: 'Spelkalender',
         remainingGames: 'Resterende spellen',
         calendars: 'Kalenders',
         noResults: 'Geen resultaten',
         inProgress: 'In afwachting',
+        noOptionsAvailable: 'Geen opties beschikbaar',
       };
       break;
     case 'pt':
       translation = {
-        translatedLeague: 'TODOS',
+        all: 'TODOS',
         gamesOfDay: 'Jogos do dia',
         remainingGames: 'Jogos restantes',
         calendars: 'Calendários',
         noResults: 'Sem resultados',
         inProgress: 'Em andamento',
+        noOptionsAvailable: 'Nenhuma opção disponível',
       };
       break;
     case 'ru':
       translation = {
-        translatedLeague: 'ВСЕ',
+        all: 'ВСЕ',
         gamesOfDay: 'Игры дня',
         remainingGames: 'Оставшиеся игры',
         calendars: 'Календари',
         noResults: 'Нет результатов',
         inProgress: 'В процессе',
+        noOptionsAvailable: 'Нет доступных вариантов',
       };
       break;
     case 'zh':
       translation = {
-        translatedLeague: '所有',
+        all: '所有',
         gamesOfDay: '当天的比赛',
         remainingGames: '剩余比赛',
         calendars: '日历',
         noResults: '没有结果',
         inProgress: '进行中',
+        noOptionsAvailable: '没有可用选项',
       };
       break;
     default:
       translation = {
-        translatedLeague: 'ALL',
+        all: 'ALL',
         gamesOfDay: 'Games of the day',
         remainingGames: 'Remaining games',
         calendars: 'Calendars',
         noResults: 'No results',
         inProgress: 'In progress',
+        noOptionsAvailable: 'No options available',
       };
       break;
   }

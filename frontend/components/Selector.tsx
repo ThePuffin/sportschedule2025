@@ -1,4 +1,6 @@
+import { emoticonEnum } from '@/constants/enum';
 import { SelectorProps } from '@/utils/types';
+import { translateWord } from '@/utils/utils';
 import React, { useEffect, useState } from 'react';
 import Select from 'react-select';
 
@@ -28,17 +30,19 @@ export default function Selector({
 
   useEffect(() => {
     const selectableItems = items.length
-      ? (items.filter((i) => i) as any[])
-          .map((item) => {
-            if (typeof item === 'string') {
-              return { value: item, label: item };
-            }
-            return { value: item.uniqueId, label: item.label };
-          })
-          .filter((item) => !itemsSelectedIds.includes(item.value))
+      ? (items.filter((i) => i) as any[]).map((item) => {
+          if (typeof item === 'string') {
+            const icon = ' ' + (emoticonEnum[item as keyof typeof emoticonEnum] || '');
+            return { value: item, label: item + icon };
+          }
+          const league = item.league || item.value || '';
+          const icon = league ? ' ' + (emoticonEnum[league as keyof typeof emoticonEnum] || '') : '';
+          const label = item.label !== 'All' ? item.label : translateWord('all');
+          return { value: item.uniqueId, label: label + icon };
+        })
       : [];
-
-    setItemsSelection(selectableItems);
+    const filteredItems = selectableItems.filter((item) => !itemsSelectedIds.includes(item.value));
+    setItemsSelection(filteredItems);
   }, [items, itemsSelectedIds]);
 
   const getValue = () => {
@@ -50,11 +54,17 @@ export default function Selector({
           return itemsSelectedIds.includes(id);
         })
         .map((item) => {
+          const league = typeof item === 'string' ? item : item.league || item.value;
+          const icon = league ? ' ' + emoticonEnum[league as keyof typeof emoticonEnum] || '' : '';
           if (typeof item === 'string') {
-            return { value: item, label: item };
+            return { value: item, label: item + icon };
           }
-          return { value: item.uniqueId, label: item.label };
+
+          const base = item.label !== 'All' ? item.label : translateWord('all');
+          return { value: item.uniqueId, label: base + icon };
         });
+    } else {
+      console.log('itemSelectedId', itemSelectedId);
     }
     const selectedItem = items.find((item) => {
       if (!item) return false;
@@ -63,10 +73,15 @@ export default function Selector({
     });
 
     if (selectedItem) {
+      const league = typeof selectedItem === 'string' ? selectedItem : selectedItem.league;
+      const icon = league ? ' ' + emoticonEnum[league as keyof typeof emoticonEnum] || '' : '';
+
       if (typeof selectedItem === 'string') {
-        return { value: selectedItem, label: selectedItem };
+        return { value: selectedItem, label: selectedItem + icon };
       }
-      return { value: selectedItem.uniqueId, label: selectedItem.label };
+
+      const base = selectedItem.label !== 'All' ? selectedItem.label : translateWord('all');
+      return { value: selectedItem.uniqueId, label: base + icon };
     }
     return null;
   };
@@ -78,8 +93,10 @@ export default function Selector({
   });
   const placeholder = singleSelectedItem
     ? typeof singleSelectedItem === 'string'
-      ? singleSelectedItem
-      : singleSelectedItem.label
+      ? singleSelectedItem +
+        (singleSelectedItem ? ' ' + (emoticonEnum[singleSelectedItem as keyof typeof emoticonEnum] || '') : '')
+      : singleSelectedItem.label +
+        (' ' + emoticonEnum[(singleSelectedItem as any).league as keyof typeof emoticonEnum] || '')
     : '';
 
   const targetHeight = 65;
@@ -111,7 +128,7 @@ export default function Selector({
       options={itemsSelection}
       onChange={changeItem}
       styles={customStyles}
-      noOptionsMessage={() => ' '}
+      noOptionsMessage={() => translateWord('noOptionsAvailable')}
       isMulti={allowMultipleSelection}
       isDisabled={items.length === 0 || items.length === 1}
     />
