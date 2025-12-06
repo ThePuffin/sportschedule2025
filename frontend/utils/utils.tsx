@@ -93,6 +93,8 @@ export const translateWord = (word: string) => {
         noResults: 'Keine Ergebnisse',
         inProgress: 'In Bearbeitung',
         noOptionsAvailable: 'Keine Optionen verfügbar',
+        wrongPage: 'Diese Seite existiert nicht.',
+        homeScreen: 'Zur Startseite gehen!',
       };
       break;
     case 'es':
@@ -104,6 +106,8 @@ export const translateWord = (word: string) => {
         noResults: 'Sin resultados',
         inProgress: 'En progreso',
         noOptionsAvailable: 'No hay opciones disponibles',
+        wrongPage: 'Esta página no existe.',
+        homeScreen: 'Ir a la pantalla de inicio!',
       };
       break;
     case 'fr':
@@ -115,6 +119,8 @@ export const translateWord = (word: string) => {
         noResults: 'Pas de résultats',
         inProgress: 'En cours',
         noOptionsAvailable: 'Aucune option disponible',
+        wrongPage: "Cette page n'existe pas.",
+        homeScreen: "Aller à la page d'accueil!",
       };
       break;
     case 'it':
@@ -126,6 +132,8 @@ export const translateWord = (word: string) => {
         noResults: 'Nessun risultato',
         inProgress: 'In corso',
         noOptionsAvailable: 'Nessuna opzione disponibile',
+        wrongPage: 'Questa pagina non esiste.',
+        homeScreen: 'Vai alla pagina iniziale!',
       };
       break;
     case 'ja':
@@ -137,6 +145,8 @@ export const translateWord = (word: string) => {
         noResults: '結果なし',
         inProgress: '進行中',
         noOptionsAvailable: '利用可能なオプションはありません',
+        wrongPage: 'このページは存在しません。',
+        homeScreen: 'ホーム画面に移動します！',
       };
       break;
     case 'ko':
@@ -148,6 +158,8 @@ export const translateWord = (word: string) => {
         noResults: '결과 없음',
         inProgress: '진행 중',
         noOptionsAvailable: '사용 가능한 옵션이 없습니다',
+        wrongPage: '이 페이지는 존재하지 않습니다.',
+        homeScreen: '홈 화면으로 이동하세요!',
       };
       break;
     case 'nl':
@@ -159,6 +171,8 @@ export const translateWord = (word: string) => {
         noResults: 'Geen resultaten',
         inProgress: 'In afwachting',
         noOptionsAvailable: 'Geen opties beschikbaar',
+        wrongPage: 'Deze pagina bestaat niet.',
+        homeScreen: 'Ga naar de thuispagina!',
       };
       break;
     case 'pt':
@@ -170,6 +184,8 @@ export const translateWord = (word: string) => {
         noResults: 'Sem resultados',
         inProgress: 'Em andamento',
         noOptionsAvailable: 'Nenhuma opção disponível',
+        wrongPage: 'Esta página não existe.',
+        homeScreen: 'Ir para a página inicial!',
       };
       break;
     case 'ru':
@@ -181,6 +197,8 @@ export const translateWord = (word: string) => {
         noResults: 'Нет результатов',
         inProgress: 'В процессе',
         noOptionsAvailable: 'Нет доступных вариантов',
+        wrongPage: 'Эта страница не существует.',
+        homeScreen: 'Перейти на главную страницу!',
       };
       break;
     case 'zh':
@@ -192,6 +210,8 @@ export const translateWord = (word: string) => {
         noResults: '没有结果',
         inProgress: '进行中',
         noOptionsAvailable: '没有可用选项',
+        wrongPage: '此页面不存在。',
+        homeScreen: '前往首页！',
       };
       break;
     default:
@@ -203,6 +223,8 @@ export const translateWord = (word: string) => {
         noResults: 'No results',
         inProgress: 'In progress',
         noOptionsAvailable: 'No options available',
+        wrongPage: "This screen doesn't exist.",
+        homeScreen: 'Go to home screen!',
       };
       break;
   }

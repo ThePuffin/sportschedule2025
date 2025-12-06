@@ -1,12 +1,13 @@
 import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
 import { fetchTeams } from '@/utils/fetchData';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, ScrollView, View } from 'react-native';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import GamesSelected from '../../components/GamesSelected';
 import Loader from '../../components/Loader';
+import { ScrollToTopButton, ScrollToTopButtonRef } from '../../components/ScrollToTopButton';
 import Selector from '../../components/Selector';
 import { ButtonsKind } from '../../constants/enum';
 import { addDays, readableDate } from '../../utils/date';
@@ -22,6 +23,8 @@ export default function Calendar() {
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [maxTeamsNumber, setMaxTeamsNumber] = useState(6);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollToTopButtonRef = useRef<ScrollToTopButtonRef>(null);
 
   const beginDate = new Date();
   beginDate.setHours(23, 59, 59, 999);
@@ -306,34 +309,41 @@ export default function Calendar() {
   }, []);
 
   return (
-    <ScrollView>
-      <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={false} />
-      <Buttons
-        onClicks={handleButtonClick}
-        data={{
-          selectedTeamsNumber: teamsSelected.length,
-          selectedGamesNumber: gamesSelected.length,
-          loadingTeams,
-          maxTeamsNumber,
-        }}
-      />
-      {!!gamesSelected.length && (
-        <GamesSelected
-          onAction={handleGamesSelection}
-          data={gamesSelected}
-          teamNumber={maxTeamsNumber > teamsSelected.length ? teamsSelected.length : maxTeamsNumber}
+    <ThemedView style={{ flex: 1 }}>
+      <ScrollView
+        ref={scrollViewRef}
+        onScroll={(event) => scrollToTopButtonRef.current?.handleScroll(event)}
+        scrollEventThrottle={16}
+      >
+        <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} noEnd={false} />
+        <Buttons
+          onClicks={handleButtonClick}
+          data={{
+            selectedTeamsNumber: teamsSelected.length,
+            selectedGamesNumber: gamesSelected.length,
+            loadingTeams,
+            maxTeamsNumber,
+          }}
         />
-      )}
-      {!teamsSelected.length && (
-        <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
-          <Loader />
-        </View>
-      )}
-      <table style={{ tableLayout: 'fixed', width: '100%' }}>
-        <tbody>
-          <tr>{displayTeamSelector()}</tr>
-        </tbody>
-      </table>
-    </ScrollView>
+        {!!gamesSelected.length && (
+          <GamesSelected
+            onAction={handleGamesSelection}
+            data={gamesSelected}
+            teamNumber={maxTeamsNumber > teamsSelected.length ? teamsSelected.length : maxTeamsNumber}
+          />
+        )}
+        {!teamsSelected.length && (
+          <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
+            <Loader />
+          </View>
+        )}
+        <table style={{ tableLayout: 'fixed', width: '100%' }}>
+          <tbody>
+            <tr>{displayTeamSelector()}</tr>
+          </tbody>
+        </table>
+      </ScrollView>
+      <ScrollToTopButton ref={scrollToTopButtonRef} scrollViewRef={scrollViewRef} />
+    </ThemedView>
   );
 }

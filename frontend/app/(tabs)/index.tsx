@@ -2,11 +2,12 @@ import Cards from '@/components/Cards';
 import Selector from '@/components/Selector';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, View, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion';
 import DateRangePicker from '../../components/DatePicker';
 import Loader from '../../components/Loader';
+import { ScrollToTopButton, ScrollToTopButtonRef } from '../../components/ScrollToTopButton';
 import { League } from '../../constants/enum';
 import { fetchLeagues } from '../../utils/fetchData';
 import { randomNumber, translateWord } from '../../utils/utils';
@@ -81,6 +82,8 @@ export default function GameofTheDay() {
   const [selectLeagues, setSelectLeagues] = useState<League[]>(LeaguesWithoutAll);
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollToTopButtonRef = useRef<ScrollToTopButtonRef>(null);
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
@@ -296,11 +299,16 @@ export default function GameofTheDay() {
   }, [selectDate]);
 
   return (
-    <>
+    <ThemedView style={{ flex: 1 }}>
       <DateRangePicker readonly={readonly} onDateChange={handleDateChange} selectDate={selectDate} />
-      <ScrollView>
+      <ScrollView
+        ref={scrollViewRef}
+        onScroll={(event) => scrollToTopButtonRef.current?.handleScroll(event)}
+        scrollEventThrottle={16}
+      >
         <ThemedView>{width > 768 ? displayLargeDeviceContent() : displaySmallDeviceContent()}</ThemedView>
       </ScrollView>
-    </>
+      <ScrollToTopButton ref={scrollToTopButtonRef} scrollViewRef={scrollViewRef} />
+    </ThemedView>
   );
 }

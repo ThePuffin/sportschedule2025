@@ -1,9 +1,9 @@
 import { readableDate } from '../../utils/date';
 import { League } from '../../utils/enum';
-import type { MLBGameAPI } from '../../utils/interface/gameMLB';
-import type { NBAGameAPI } from '../../utils/interface/gameNBA';
-import type { NFLGameAPI } from '../../utils/interface/gameNFL';
+import type { MLSGameAPI } from '../../utils/interface/gameMLS';
+import { CollegeRanking } from '../interface/college-ranking';
 import type { ESPNTeam, TeamESPN, TeamType } from '../interface/team';
+import { TeamDetailed } from '../interface/teamDetails';
 import { capitalize } from '../utils';
 const { NODE_ENV } = process.env;
 
@@ -54,7 +54,10 @@ const getDivision = async (
   const url = leaguesData[leagueName].fetchDetails + id;
   const fetchedTeams = await fetch(url);
   const fetchTeams = await fetchedTeams.json();
-  const { standingSummary = '' } = fetchTeams.team;
+  const { standingSummary = '' } = fetchTeams?.team;
+  if (standingSummary === '') {
+    return { conferenceName: '', divisionName: '' };
+  }
   const cut = standingSummary.split(' ');
   if (leagueName === League.NFL) {
     return { conferenceName: cut[3] || '', divisionName: cut[2] || '' };
@@ -172,12 +175,20 @@ const getEachTeamSchedule = async ({
     try {
       const link = leaguesData[leagueName].fetchGames.replace('${id}', id);
       const fetchedGames = await fetch(link);
-      const fetchGames: MLBGameAPI | NBAGameAPI | NFLGameAPI =
-        await fetchedGames.json();
-      games =
-        fetchGames?.events?.length && fetchGames.events[0]
-          ? fetchGames.events
-          : [];
+      const fetchGames: MLSGameAPI = await fetchedGames.json();
+      const { events, team } = fetchGames;
+
+      games = events && events?.length && events[0] ? events : [];
+
+      const now = new Date();
+      let gamesFilter = games.filter(({ date }) => new Date(date) >= now);
+      if (gamesFilter.length === 0) {
+        const link = leaguesData[leagueName].fetchTeam + '/' + id;
+        const fetchedTeams = await fetch(link);
+        const fetchTeams: TeamDetailed = await fetchedTeams.json();
+        games = fetchTeams?.team?.nextEvent || [];
+      }
+
       console.info('yes', value);
     } catch (error) {
       console.info('no', value, error);
@@ -202,30 +213,32 @@ const getEachTeamSchedule = async ({
         const gameDate = readableDate(new Date(currentDate));
         const isActive = true;
 
-        const awayTeam = competitors.find((team) => team.homeAway === 'away');
-        const homeTeam = competitors.find((team) => team.homeAway === 'home');
+        const {team :awayTeam} = competitors.find((team) => team.homeAway === 'away');
+        const {team : homeTeam} = competitors.find((team) => team.homeAway === 'home');
         number++;
-        const awayAbbrev = `${awayTeam.team.abbreviation}`;
-        const homeAbbrev = `${homeTeam.team.abbreviation}`;
+        const awayAbbrev = `${awayTeam.abbreviation}`;
+        const homeAbbrev = `${homeTeam.abbreviation}`;
 
         return {
           arenaName: capitalize(venue?.fullName) ?? '',
-          awayTeam: capitalize(awayTeam.team.displayName),
+          awayTeam: capitalize(awayTeam.displayName),
           awayTeamId: `${leagueName}-${awayAbbrev}`,
-          awayTeamLogo: leagueLogos[awayAbbrev],
+          awayTeamLogo:
+            awayTeam?.logos?.[2]?.href || leagueLogos[awayAbbrev],
           awayTeamShort: awayAbbrev,
           backgroundColor: backgroundColor ?? undefined,
           color: color ?? undefined,
           gameDate: gameDate,
-          homeTeam: capitalize(homeTeam.team.displayName),
+          homeTeam: capitalize(homeTeam.displayName),
           homeTeamId: `${leagueName}-${homeAbbrev}`,
-          homeTeamLogo: leagueLogos[homeAbbrev],
+          homeTeamLogo:
+            homeTeam?.logos?.[2]?.href || leagueLogos[homeAbbrev],
           homeTeamShort: homeAbbrev,
           league: leagueName.toUpperCase(),
           placeName: capitalize(venue?.address?.city) ?? '',
           selectedTeam: homeAbbrev === abbrev,
           show: homeAbbrev === abbrev,
-          startTimeUTC: date,
+          startTimeUTC: new Date(date).toISOString(),
           teamSelectedId: value,
           isActive,
           uniqueId: id ? `${value}-${id}` : `${value}-${gameDate}-${number}`,

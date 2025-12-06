@@ -17,6 +17,10 @@ const leagueLogos = {
   WNBA: require('../assets/images/WNBA.png'),
   MLS: require('../assets/images/MLS.png'),
   PWHL: require('../assets/images/PWHL.png'),
+  NCAAF: require('../assets/images/ncaa-football.png'),
+  NCAAB: require('../assets/images/ncaa-basketball.png'),
+  NCCABB: require('../assets/images/ncaa-baseball.png'),
+  WNCAAB: require('../assets/images/ncaa-basketball-woman.png'),
   DEFAULT: require('../assets/images/DEFAULT.png'),
 };
 

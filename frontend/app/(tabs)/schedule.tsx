@@ -2,10 +2,11 @@ import Selector from '@/components/Selector';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, ScrollView, View } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
 import Loader from '../../components/Loader';
+import { ScrollToTopButton, ScrollToTopButtonRef } from '../../components/ScrollToTopButton';
 import {
   fetchLeagues,
   fetchRemainingGamesByLeague,
@@ -23,6 +24,8 @@ export default function Schedule() {
   const [isSmallDevice, setIsSmallDevice] = useState(false);
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [leagueOfSelectedTeam, setleagueOfSelectedTeam] = useState<string>('');
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollToTopButtonRef = useRef<ScrollToTopButtonRef>(null);
 
   const allOption = {
     uniqueId: 'all',
@@ -83,7 +86,7 @@ export default function Schedule() {
       }
       fetchGames();
     }
-  }, [teamSelected]);
+  }, [teamSelected, leagueOfSelectedTeam]);
 
   useEffect(() => {
     if (leaguesAvailable.length === 0) {
@@ -283,6 +286,17 @@ export default function Schedule() {
     );
   };
 
+  const removeOldGames = (games: FilterGames) => {
+    const today = new Date().toISOString().split('T')[0];
+    const keys = Object.keys(games);
+    keys.forEach((key) => {
+      if (key < today) {
+        delete games[key];
+      }
+    });
+    return games;
+  };
+
   const getGamesFromApi = async (): Promise<FilterGames> => {
     if (teamSelected && teamSelected.length !== 0) {
       try {
@@ -295,7 +309,7 @@ export default function Schedule() {
           const scheduleLeague = scheduleDataStored[scheduleKeys[0]]?.[0]?.league;
           const teamSelected = localStorage.getItem('teamSelected') || '';
           if (scheduleTeam === teamSelected || (teamSelected === 'all' && scheduleLeague === leagueOfSelectedTeam)) {
-            setGames(scheduleDataStored);
+            setGames(removeOldGames(scheduleDataStored));
           } else {
             setGames({});
           }
@@ -306,7 +320,7 @@ export default function Schedule() {
           const selectionLeague = storedLeague || leaguesAvailable[0];
           const smallScheduleData = await smallFetchRemainingGamesByLeague(selectionLeague);
           localStorage.setItem('scheduleData', JSON.stringify(smallScheduleData));
-          setGames(smallScheduleData);
+          setGames(removeOldGames(smallScheduleData));
           setleagueOfSelectedTeam(selectionLeague);
           scheduleData = await fetchRemainingGamesByLeague(selectionLeague);
         } else {
@@ -318,10 +332,10 @@ export default function Schedule() {
           const now = new Date().toISOString().split('T')[0];
           scheduleData[now] = [];
         }
-
+        
         localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
 
-        setGames(scheduleData);
+        setGames(removeOldGames(scheduleData));
       } catch (error) {
         console.error('fetch games failed, using cached schedule if available', error);
         const scheduleDataRaw = localStorage.getItem('scheduleData');
@@ -384,13 +398,20 @@ export default function Schedule() {
   }
 
   return (
-    <ScrollView>
-      {!teamSelected.length && (
-        <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
-          <Loader />
-        </View>
-      )}
-      {display()}
-    </ScrollView>
+    <ThemedView style={{ flex: 1 }}>
+      <ScrollView
+        ref={scrollViewRef}
+        onScroll={(event) => scrollToTopButtonRef.current?.handleScroll(event)}
+        scrollEventThrottle={16}
+      >
+        {!teamSelected.length && (
+          <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
+            <Loader />
+          </View>
+        )}
+        {display()}
+      </ScrollView>
+      <ScrollToTopButton ref={scrollToTopButtonRef} scrollViewRef={scrollViewRef} />
+    </ThemedView>
   );
 }
