@@ -8,6 +8,7 @@ export default function Selector({
   data,
   onItemSelectionChange,
   allowMultipleSelection = false,
+  isClearable,
 }: Readonly<SelectorProps>) {
   const { items, i, itemSelectedId } = data;
   let { itemsSelectedIds = [] } = data;
@@ -31,10 +32,12 @@ export default function Selector({
       } else {
         onItemSelectionChange((newValue as { value: string }).value, i);
       }
-    } else { // newValue is null
+    } else {
+      // newValue is null
       if (allowMultipleSelection) {
         onItemSelectionChange([], i);
-      } else { // Single selection cleared, send empty string
+      } else {
+        // Single selection cleared, send empty string
         onItemSelectionChange('', i);
       }
     }
@@ -48,7 +51,8 @@ export default function Selector({
             return { value: item, label: item + icon };
           }
           const league = item.league || item.value || '';
-          const icon = league ? ' ' + (emoticonEnum[league as keyof typeof emoticonEnum] || '') : '';
+          const isAll = item.label === 'All' || item.uniqueId === 'ALL';
+          const icon = !isAll && league ? ' ' + (emoticonEnum[league as keyof typeof emoticonEnum] || '') : '';
           const label = item.label !== 'All' ? item.label : translateWord('all');
           return { value: item.uniqueId, label: label + icon };
         })
@@ -56,7 +60,7 @@ export default function Selector({
     const filteredItems = selectableItems.filter((item) => !itemsSelectedIds.includes(item.value));
 
     if (allowMultipleSelection && items.length > itemsSelectedIds.length) {
-      filteredItems.unshift({ value: 'select-all', label: translateWord('selectAll') });
+      filteredItems.unshift({ value: 'select-all', label: translateWord('all') });
     }
     setItemsSelection(filteredItems);
   }, [items, itemsSelectedIds, allowMultipleSelection]);
@@ -71,7 +75,8 @@ export default function Selector({
         })
         .map((item) => {
           const league = typeof item === 'string' ? item : item.league || item.value;
-          const icon = league ? ' ' + emoticonEnum[league as keyof typeof emoticonEnum] || '' : '';
+          const isAll = typeof item === 'string' ? false : item.label === 'All' || item.uniqueId === 'ALL';
+          const icon = !isAll && league ? ' ' + emoticonEnum[league as keyof typeof emoticonEnum] || '' : '';
           if (typeof item === 'string') {
             return { value: item, label: item + icon };
           }
@@ -88,7 +93,9 @@ export default function Selector({
 
     if (selectedItem) {
       const league = typeof selectedItem === 'string' ? selectedItem : selectedItem.league;
-      const icon = league ? ' ' + emoticonEnum[league as keyof typeof emoticonEnum] || '' : '';
+      const isAll =
+        typeof selectedItem === 'string' ? false : selectedItem.label === 'All' || selectedItem.uniqueId === 'ALL';
+      const icon = !isAll && league ? ' ' + emoticonEnum[league as keyof typeof emoticonEnum] || '' : '';
 
       if (typeof selectedItem === 'string') {
         return { value: selectedItem, label: selectedItem + icon };
@@ -109,9 +116,11 @@ export default function Selector({
     ? typeof singleSelectedItem === 'string'
       ? singleSelectedItem +
         (singleSelectedItem ? ' ' + (emoticonEnum[singleSelectedItem as keyof typeof emoticonEnum] || '') : '')
-      : singleSelectedItem.label +
+      : (singleSelectedItem as any).label === 'All' || (singleSelectedItem as any).uniqueId === 'ALL'
+      ? (singleSelectedItem as any).label
+      : (singleSelectedItem as any).label +
         (' ' + emoticonEnum[(singleSelectedItem as any).league as keyof typeof emoticonEnum] || '')
-    : '';
+    : translateWord('Filter');
 
   const targetHeight = 65;
   type OptionType = { value: string; label: string };
@@ -146,7 +155,7 @@ export default function Selector({
       isMulti={allowMultipleSelection}
       isDisabled={items.length === 0 || items.length === 1}
       maxMenuHeight={220}
-      isClearable={!allowMultipleSelection}
+      isClearable={isClearable !== undefined ? isClearable : !allowMultipleSelection}
     />
   );
 }

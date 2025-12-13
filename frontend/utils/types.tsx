@@ -56,6 +56,7 @@ export type AccordionProps = {
   readonly gamesFiltred: readonly GameFormatted[];
   readonly open?: boolean;
   readonly isCounted?: boolean;
+  readonly disableToggle?: boolean;
   readonly showDate?: boolean;
 };
 
@@ -98,6 +99,7 @@ export interface SelectorProps {
   };
   onItemSelectionChange: (itemSelectedId: string | string[], i: number) => void;
   allowMultipleSelection?: boolean;
+  isClearable?: boolean;
 }
 
 export interface CardsProps {

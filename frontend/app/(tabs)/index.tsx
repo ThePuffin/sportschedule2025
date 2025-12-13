@@ -1,6 +1,6 @@
 import Cards from '@/components/Cards';
+import NoResults from '@/components/NoResults';
 import Selector from '@/components/Selector';
-import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, useWindowDimensions } from 'react-native';
@@ -36,7 +36,7 @@ const getNextGamesFromApi = async (date: Date): Promise<{ [key: string]: GameFor
     const nextYYYYMMDD = nextDate.toISOString().split('T')[0];
     newFetch[nextYYYYMMDD] = await fetchGames(nextYYYYMMDD);
   }
-  saveCache('gamesDay', newFetch);
+  // Return fetched days to caller so caller (component) can merge into its cache and persist
   return newFetch;
 };
 
@@ -60,6 +60,7 @@ export default function GameofTheDay() {
       .map((game) => ({
         label: game.homeTeam,
         uniqueId: game.homeTeamId,
+        league: game.league,
       }))
       .concat(
         games
@@ -67,6 +68,7 @@ export default function GameofTheDay() {
           .map((game) => ({
             label: game.awayTeam,
             uniqueId: game.awayTeamId,
+            league: game.league,
           }))
       );
     return Array.from(new Set(filtredTeamsAvailable));
@@ -76,6 +78,14 @@ export default function GameofTheDay() {
   const gamesDayCache = useRef<{ [key: string]: GameFormatted[] }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollToTopButtonRef = useRef<ScrollToTopButtonRef>(null);
+
+  const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const prunedEntries = Object.fromEntries(Object.entries(cache).filter(([date]) => date >= today)) as {
+      [key: string]: GameFormatted[];
+    };
+    return prunedEntries;
+  };
 
   const { width: windowWidth } = useWindowDimensions();
 
@@ -123,10 +133,17 @@ export default function GameofTheDay() {
       try {
         const gamesOfTheDay = await fetchGames(YYYYMMDD);
         gamesDayCache.current[YYYYMMDD] = gamesOfTheDay;
+        // prune old entries and persist
+        const pruned = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
+        gamesDayCache.current = pruned;
+        saveCache('gamesDay', pruned);
         handleGames(gamesOfTheDay);
       } catch (error) {
         console.error(error);
         gamesDayCache.current[YYYYMMDD] = [];
+        const prunedEmpty = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
+        gamesDayCache.current = prunedEmpty;
+        saveCache('gamesDay', prunedEmpty);
         handleGames([]);
       }
     },
@@ -153,9 +170,16 @@ export default function GameofTheDay() {
             teamSelectedId &&
             gamesForLeagues.some((g) => g.homeTeamId === teamSelectedId || g.awayTeamId === teamSelectedId);
 
-          if (!teamHasGames && teamSelectedId) {
+          if (teamHasGames && teamSelectedId) {
+            // Keep team filter and update filtered games
+            const filteredGames = gamesForLeagues.filter(
+              (g) => g.homeTeamId === teamSelectedId || g.awayTeamId === teamSelectedId
+            );
+            setGamesFiltred(filteredGames);
+          } else if (!teamHasGames && teamSelectedId) {
             // Reset team filter if no games for this team
             setTeamSelectedId('');
+            setGamesFiltred(gamesForLeagues);
           }
 
           return prevGames;
@@ -222,7 +246,7 @@ export default function GameofTheDay() {
 
   const displayGamesCards = useCallback((gamesToShow: GameFormatted[]) => {
     if (gamesToShow?.length === 0) {
-      return <ThemedText>{translateWord('noResults')}</ThemedText>;
+      return <NoResults />;
     } else {
       return gamesToShow.map((game) => {
         if (game) {
@@ -260,6 +284,7 @@ export default function GameofTheDay() {
           data={leaguesData as any}
           onItemSelectionChange={handleLeagueSelectionChange}
           allowMultipleSelection={true}
+          isClearable={false}
         />
         <Selector
           data={{
@@ -270,6 +295,7 @@ export default function GameofTheDay() {
           }}
           onItemSelectionChange={handleTeamSelectionChange}
           allowMultipleSelection={false}
+          isClearable={true}
         />
         {displayGamesCards(gamesFiltred)}
       </ThemedView>
@@ -290,7 +316,7 @@ export default function GameofTheDay() {
     if (isLoading) {
       return <LoadingView />;
     } else {
-      return <ThemedText>{translateWord('noResults')}</ThemedText>;
+      return <NoResults />;
     }
   }, [isLoading]);
 
@@ -304,6 +330,8 @@ export default function GameofTheDay() {
   const displayAccordion = useCallback(() => {
     return leaguesAvailable.map((league, i) => {
       let gamesFiltred: GameFormatted[] = [...games];
+      const leaguesNumber = Array.from(new Set(games.map((game) => game.league))).length || 0;
+      const showSingleColumn = leaguesNumber === 1 || teamSelectedId !== '';
       if (league !== League.ALL) {
         gamesFiltred = gamesFiltred.filter((game) => game.league === league && game.awayTeamLogo && game.homeTeamLogo);
       }
@@ -314,12 +342,19 @@ export default function GameofTheDay() {
 
       let translatedLeague = league;
       if (league === League.ALL) {
-        translatedLeague = translateWord('all');
+        translatedLeague = translateWord('selectAll');
       }
       if (gamesFiltred.length > 0) {
         return (
           <td key={league} style={{ verticalAlign: 'baseline' }}>
-            <Accordion filter={translatedLeague} i={i} gamesFiltred={gamesFiltred} open={true} isCounted={false} />
+            <Accordion
+              filter={translatedLeague}
+              i={i}
+              gamesFiltred={gamesFiltred}
+              open={true}
+              isCounted={false}
+              disableToggle={showSingleColumn}
+            />
           </td>
         );
       }
@@ -344,6 +379,7 @@ export default function GameofTheDay() {
           }}
           onItemSelectionChange={handleTeamSelectionChange}
           allowMultipleSelection={false}
+          isClearable={true}
         />
         <table style={{ tableLayout: 'fixed', width: showSingleColumn ? '50%' : '100%', margin: 'auto' }}>
           <tbody>
@@ -368,6 +404,11 @@ export default function GameofTheDay() {
 
     async function initializeGames() {
       fetchLeagues(setLeaguesAvailable);
+      // restore persisted games cache (current day + next 10 days)
+      const localStorageGamesDay = getCache<{ [key: string]: GameFormatted[] }>('gamesDay');
+      if (localStorageGamesDay) {
+        gamesDayCache.current = localStorageGamesDay;
+      }
       const storedLeague = getCache<League>('league');
       const storedLeagues = getCache<string[]>('leagues');
       const storedLeaguesSelected = getCache<League[]>('leaguesSelected');
@@ -388,7 +429,12 @@ export default function GameofTheDay() {
 
         const now = new Date();
         if (!lastGamesUpdateRef.current || lastGamesUpdateRef.current.toDateString() !== now.toDateString()) {
-          await getNextGamesFromApi(selectDate);
+          const nextFetch = await getNextGamesFromApi(selectDate);
+          // merge, prune and persist fetched next days
+          const merged = { ...(gamesDayCache.current || {}), ...(nextFetch || {}) };
+          const mergedPruned = pruneOldGamesCache(merged);
+          gamesDayCache.current = mergedPruned;
+          saveCache('gamesDay', mergedPruned);
           lastGamesUpdateRef.current = now;
         }
       } finally {

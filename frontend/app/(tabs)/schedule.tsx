@@ -1,7 +1,7 @@
+import NoResults from '@/components/NoResults';
 import Selector from '@/components/Selector';
-import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
+import { getRandomTeamId, randomNumber } from '@/utils/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, ScrollView } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
@@ -219,7 +219,7 @@ export default function Schedule() {
       return (
         <div>
           <br />
-          <ThemedText>{translateWord('noResults')}</ThemedText>
+          <NoResults />
         </div>
       );
     } else if (games) {
@@ -274,7 +274,7 @@ export default function Schedule() {
     return Object.keys(games).length ? (
       <div>
         <br />
-        <ThemedText>{translateWord('noResults')}</ThemedText>
+        <NoResults />
       </div>
     ) : (
       <div>

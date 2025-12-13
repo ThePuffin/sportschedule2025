@@ -1,9 +1,9 @@
+import NoResults from '@/components/NoResults';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import React, { useEffect, useState } from 'react';
 import { Image, View, useWindowDimensions } from 'react-native';
 import LoadingView from '../components/LoadingView';
-import { translateWord } from '../utils/utils';
 
 let width: number;
 const EXPO_PUBLIC_API_BASE_URL =
@@ -85,7 +85,7 @@ export default function GameofTheDay() {
     if (isLoading) {
       return <LoadingView />;
     } else {
-      return <ThemedText>{translateWord('noResults')}</ThemedText>;
+      return <NoResults />;
     }
   };
 

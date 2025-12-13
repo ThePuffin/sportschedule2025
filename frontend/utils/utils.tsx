@@ -96,6 +96,7 @@ export const translateWord = (word: string) => {
         wrongPage: 'Diese Seite existiert nicht.',
         homeScreen: 'Zur Startseite gehen!',
         selectAll: 'Alle auswählen',
+        Filter: 'Filtern',
       };
       break;
     case 'es':
@@ -110,6 +111,7 @@ export const translateWord = (word: string) => {
         wrongPage: 'Esta página no existe.',
         homeScreen: 'Ir a la pantalla de inicio!',
         selectAll: 'Seleccionar todo',
+        Filter: 'Filtrar',
       };
       break;
     case 'fr':
@@ -124,6 +126,7 @@ export const translateWord = (word: string) => {
         wrongPage: "Cette page n'existe pas.",
         homeScreen: "Aller à la page d'accueil!",
         selectAll: 'Tout sélectionner',
+        Filter: 'Filtrer',
       };
       break;
     case 'it':
@@ -138,6 +141,7 @@ export const translateWord = (word: string) => {
         wrongPage: 'Questa pagina non esiste.',
         homeScreen: 'Vai alla pagina iniziale!',
         selectAll: 'Seleziona tutto',
+        Filter: 'Filtrare',
       };
       break;
     case 'ja':
@@ -152,6 +156,7 @@ export const translateWord = (word: string) => {
         wrongPage: 'このページは存在しません。',
         homeScreen: 'ホーム画面に移動します！',
         selectAll: 'すべて選択',
+        Filter: 'フィルター',
       };
       break;
     case 'ko':
@@ -166,6 +171,7 @@ export const translateWord = (word: string) => {
         wrongPage: '이 페이지는 존재하지 않습니다.',
         homeScreen: '홈 화면으로 이동하세요!',
         selectAll: '모두 선택',
+        Filter: '필터',
       };
       break;
     case 'nl':
@@ -180,6 +186,7 @@ export const translateWord = (word: string) => {
         wrongPage: 'Deze pagina bestaat niet.',
         homeScreen: 'Ga naar de thuispagina!',
         selectAll: 'Alles selecteren',
+        Filter: 'Filteren',
       };
       break;
     case 'pt':
@@ -194,6 +201,7 @@ export const translateWord = (word: string) => {
         wrongPage: 'Esta página não existe.',
         homeScreen: 'Ir para a página inicial!',
         selectAll: 'Selecionar tudo',
+        Filter: 'Filtrar',
       };
       break;
     case 'ru':
@@ -208,6 +216,7 @@ export const translateWord = (word: string) => {
         wrongPage: 'Эта страница не существует.',
         homeScreen: 'Перейти на главную страницу!',
         selectAll: 'Выбрать все',
+        Filter: 'Фильтровать',
       };
       break;
     case 'zh':
@@ -222,6 +231,7 @@ export const translateWord = (word: string) => {
         wrongPage: '此页面不存在。',
         homeScreen: '前往首页！',
         selectAll: '全选',
+        Filter: '筛选',
       };
       break;
     default:
@@ -236,6 +246,7 @@ export const translateWord = (word: string) => {
         wrongPage: "This screen doesn't exist.",
         homeScreen: 'Go to home screen!',
         selectAll: 'Select All',
+        Filter: 'Filter',
       };
       break;
   }
