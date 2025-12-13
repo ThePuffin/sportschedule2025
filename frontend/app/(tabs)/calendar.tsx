@@ -2,7 +2,7 @@ import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import React, { useEffect, useRef, useState } from 'react';
-import { Dimensions, ScrollView, View } from 'react-native';
+import { Dimensions, ScrollView } from 'react-native';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import GamesSelected from '../../components/GamesSelected';
@@ -235,7 +235,7 @@ export default function Calendar() {
       return (
         <td key={`${teamSelectedId}-${teamsSelected.length}`}>
           <ThemedView>
-            <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} />
+            <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} isClearable={false} />
             {displayGamesCards(teamSelectedId)}
           </ThemedView>
         </td>
@@ -253,7 +253,7 @@ export default function Calendar() {
             const gameId = game?._id ?? randomNumber(999999);
             const isSelected = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
             return (
-              <td key={gameId}>
+              <div key={gameId} style={{ display: 'inline-block', width: '100%' }}>
                 <ThemedView>
                   <Cards
                     data={game}
@@ -263,7 +263,7 @@ export default function Calendar() {
                     selected={isSelected}
                   />
                 </ThemedView>
-              </td>
+              </div>
             );
           }
           return null;

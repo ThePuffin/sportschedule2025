@@ -1,13 +1,16 @@
 import NoResults from '@/components/NoResults';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import {
+  fetchLeagues,
+  refreshGamesLeague as refreshGamesLeagueApi,
+  refreshTeams as refreshTeamsApi,
+} from '@/utils/fetchData';
 import React, { useEffect, useState } from 'react';
 import { Image, View, useWindowDimensions } from 'react-native';
 import LoadingView from '../components/LoadingView';
 
 let width: number;
-const EXPO_PUBLIC_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 const leagueLogos = {
   MLB: require('../assets/images/MLB.png'),
@@ -25,54 +28,41 @@ const leagueLogos = {
 };
 
 export default function GameofTheDay() {
-  const fetchLeagues = async (): Promise<void> => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`);
-      const leagues = await response.json();
-      setLeaguesAvailable(leagues);
-      return;
-    } catch (error) {
-      console.error('Error fetching leagues:', error);
-      return;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const refreshGamesLeague = async (league: string): Promise<void> => {
-    setIsLoading(true);
-
-    try {
-      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/refresh/${league.toUpperCase()}`, {
-        method: 'POST',
-      });
-      return;
-    } catch (error) {
-      return;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const refreshTeams = async (): Promise<void> => {
-    setIsLoading(true);
-
-    try {
-      const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams/refresh`, {
-        method: 'POST',
-      });
-      return;
-    } catch (error) {
-      console.error(`Error fetching games for teams:`, error);
-      return;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const handleFetchLeagues = async () => {
+    setIsLoading(true);
+    try {
+      await fetchLeagues(setLeaguesAvailable);
+    } catch (error) {
+      console.error('Error in handleFetchLeagues:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefreshGamesLeague = async (league: string) => {
+    setIsLoading(true);
+    try {
+      await refreshGamesLeagueApi(league);
+    } catch (error) {
+      console.error('Error refreshing games for league:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefreshTeams = async () => {
+    setIsLoading(true);
+    try {
+      await refreshTeamsApi();
+    } catch (error) {
+      console.error('Error refreshing teams:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
@@ -91,7 +81,7 @@ export default function GameofTheDay() {
 
   useEffect(() => {
     async function getLeagues() {
-      await fetchLeagues();
+      await handleFetchLeagues();
     }
     getLeagues();
   }, []);
@@ -111,9 +101,18 @@ export default function GameofTheDay() {
           padding: '20px',
         }}
       >
-        <button
-          onClick={() => refreshTeams()}
-          disabled={isLoading}
+        <div
+          role="button"
+          tabIndex={isLoading ? -1 : 0}
+          aria-disabled={isLoading}
+          onClick={() => !isLoading && handleRefreshTeams()}
+          onKeyDown={(e) => {
+            if (isLoading) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleRefreshTeams();
+            }
+          }}
           style={{
             padding: '10px 20px',
             borderRadius: '8px',
@@ -133,7 +132,7 @@ export default function GameofTheDay() {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
             <ThemedText style={{ color: '#fff', fontSize: '16px', marginRight: 10 }}>TEAMS</ThemedText>
           </View>
-        </button>
+        </div>
         <br />
         <hr style={{ width: '300px' }} />
         <br />
@@ -163,9 +162,18 @@ export default function GameofTheDay() {
                 width: '100%',
               }}
             >
-              <button
-                onClick={() => refreshGamesLeague(league)}
-                disabled={isLoading}
+              <div
+                role="button"
+                tabIndex={isLoading ? -1 : 0}
+                aria-disabled={isLoading}
+                onClick={() => !isLoading && handleRefreshGamesLeague(league)}
+                onKeyDown={(e) => {
+                  if (isLoading) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleRefreshGamesLeague(league);
+                  }
+                }}
                 style={{
                   padding: '10px 20px',
                   borderRadius: '8px',
@@ -192,7 +200,7 @@ export default function GameofTheDay() {
                     accessibilityLabel={`${league} logo`}
                   />
                 </View>
-              </button>
+              </div>
             </View>
           ))}
         </View>

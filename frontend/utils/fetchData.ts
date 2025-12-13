@@ -57,12 +57,14 @@ const retryFetch = async <T>(fetchFn: () => Promise<T>, retries: number = 1, del
   }
 };
 
-// Helper to add timeout to fetch
-const fetchWithTimeout = (url: string, timeoutMs: number = 10000) => {
+// Helper to add timeout to fetch (accepts RequestInit options)
+const fetchWithTimeout = (url: string, timeoutMs: number = 10000, options: RequestInit = {}) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  return fetch(url, { signal: controller.signal })
+  const mergedOptions: RequestInit = { ...options, signal: controller.signal };
+
+  return fetch(url, mergedOptions)
     .then((res) => {
       clearTimeout(timeout);
       return res;
@@ -178,4 +180,26 @@ export const fetchRemainingGamesByLeague = async (league: string, limit?: number
 
 export const smallFetchRemainingGamesByLeague = async (league: string) => {
   return fetchRemainingGamesByLeague(league, 50);
+};
+
+export const refreshGamesLeague = async (league: string): Promise<void> => {
+  try {
+    await fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/refresh/${league.toUpperCase()}`, 60000, {
+      method: 'POST',
+    }).then(() => null);
+    return;
+  } catch (error) {
+    console.error(`Error refreshing games for league ${league}:`, error);
+    return;
+  }
+};
+
+export const refreshTeams = async (): Promise<void> => {
+  try {
+    await fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams/refresh`, 60000, { method: 'POST' }).then(() => null);
+    return;
+  } catch (error) {
+    console.error(`Error refreshing teams:`, error);
+    return;
+  }
 };

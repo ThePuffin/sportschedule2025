@@ -8,7 +8,7 @@ export default function Selector({
   data,
   onItemSelectionChange,
   allowMultipleSelection = false,
-  isClearable,
+  isClearable = false,
 }: Readonly<SelectorProps>) {
   const { items, i, itemSelectedId } = data;
   let { itemsSelectedIds = [] } = data;

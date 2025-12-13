@@ -132,10 +132,19 @@ export default function Cards({
     if (arenaName && arenaName !== '') {
       return (
         <Card.Title style={{ ...cardClass }}>
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => {
-              if ((showButtons, generateICSFile(data)));
+              if (showButtons) generateICSFile(data);
             }}
+            onKeyDown={(e: any) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (showButtons) generateICSFile(data);
+              }
+            }}
+            aria-label="Generate ICS file"
             style={{
               cursor: 'pointer',
               textDecoration: showButtons ? 'underline' : 'none',
@@ -145,8 +154,10 @@ export default function Cards({
               font: 'inherit',
               padding: 0,
               margin: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: isSmallDevice ? 5 : 10,
             }}
-            aria-label="Generate ICS file"
           >
             {showButtons && (
               <Icon
@@ -158,7 +169,7 @@ export default function Cards({
               />
             )}
             {displayDate}
-          </button>
+          </div>
         </Card.Title>
       );
     }
@@ -180,12 +191,21 @@ export default function Cards({
       }
       return (
         <View>
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => {
               if (showDate) {
                 onSelection(data);
               }
             }}
+            onKeyDown={(e: any) => {
+              if ((e.key === 'Enter' || e.key === ' ') && showDate) {
+                e.preventDefault();
+                onSelection(data);
+              }
+            }}
+            aria-disabled={!showDate}
             style={{
               cursor: show ? 'pointer' : 'not-allowed',
               display: 'flex',
@@ -193,7 +213,6 @@ export default function Cards({
               alignItems: 'center',
               flexDirection: 'column',
               height: 160,
-              border: 'none',
               backgroundColor: 'transparent',
               padding: 0,
               margin: 0,
@@ -274,7 +293,7 @@ export default function Cards({
               )}
             </div>
             <br />
-          </button>
+          </div>
           <Text
             style={{
               display: 'flex',
