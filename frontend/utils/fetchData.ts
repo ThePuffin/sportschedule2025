@@ -1,4 +1,5 @@
 import { FilterGames, Team } from '@/utils/types';
+import * as fflate from 'fflate';
 
 const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
@@ -13,20 +14,31 @@ const isCacheValid = (cacheKey: string, maxDuration: number = 1): boolean => {
   return now - cached < oneDayMs;
 };
 
-// Helper to save data with timestamp
-const saveCache = (cacheKey: string, data: unknown): void => {
-  localStorage.setItem(cacheKey, JSON.stringify(data));
+// Helper to save data with timestamp and compression
+export const saveCache = (cacheKey: string, data: unknown): void => {
+  const jsonString = JSON.stringify(data);
+  const compressed = fflate.compressSync(fflate.strToU8(jsonString));
+  // Use strFromU8 with true to create a binary string for localStorage
+  const storableString = fflate.strFromU8(compressed, true);
+  localStorage.setItem(cacheKey, storableString);
   localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
 };
 
-// Helper to get cached data
-const getCache = <T>(cacheKey: string): T | null => {
-  const data = localStorage.getItem(cacheKey);
-  if (!data) return null;
+// Helper to get cached and decompressed data
+export const getCache = <T>(cacheKey: string): T | null => {
+  const storableString = localStorage.getItem(cacheKey);
+  if (!storableString) return null;
   try {
-    return JSON.parse(data) as T;
+    // Use strToU8 with true to convert binary string back to Uint8Array
+    const compressed = fflate.strToU8(storableString, true);
+    const decompressed = fflate.decompressSync(compressed);
+    const jsonString = fflate.strFromU8(decompressed);
+    return JSON.parse(jsonString) as T;
   } catch (e) {
-    console.error(`Failed to parse cache for ${cacheKey}`, e);
+    console.error(`Failed to parse or decompress cache for ${cacheKey}`, e);
+    // Clear corrupted cache
+    localStorage.removeItem(cacheKey);
+    localStorage.removeItem(`${cacheKey}_timestamp`);
     return null;
   }
 };

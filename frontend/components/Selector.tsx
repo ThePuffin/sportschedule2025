@@ -2,7 +2,7 @@ import { emoticonEnum } from '@/constants/enum';
 import { SelectorProps } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import React, { useEffect, useState } from 'react';
-import Select from 'react-select';
+import Select, { StylesConfig } from 'react-select';
 
 export default function Selector({
   data,
@@ -10,7 +10,7 @@ export default function Selector({
   allowMultipleSelection = false,
 }: Readonly<SelectorProps>) {
   const { items, i, itemSelectedId } = data;
-  let { itemsSelectedIds } = data;
+  let { itemsSelectedIds = [] } = data;
 
   const [itemsSelection, setItemsSelection] = useState<{ value: string; label: string }[]>([]);
 
@@ -19,11 +19,23 @@ export default function Selector({
   ) => {
     if (newValue) {
       if (Array.isArray(newValue)) {
-        itemsSelectedIds = newValue;
-        const values = newValue.map((val) => val.value);
-        onItemSelectionChange(values, i);
+        const selectAllWasClicked = newValue.some((option) => option.value === 'select-all');
+
+        if (selectAllWasClicked) {
+          const allItemIds = items.map((item) => (typeof item === 'string' ? item : item.uniqueId)).filter(Boolean);
+          onItemSelectionChange(allItemIds, i);
+        } else {
+          const values = newValue.map((val) => val.value);
+          onItemSelectionChange(values, i);
+        }
       } else {
         onItemSelectionChange((newValue as { value: string }).value, i);
+      }
+    } else { // newValue is null
+      if (allowMultipleSelection) {
+        onItemSelectionChange([], i);
+      } else { // Single selection cleared, send empty string
+        onItemSelectionChange('', i);
       }
     }
   };
@@ -42,8 +54,12 @@ export default function Selector({
         })
       : [];
     const filteredItems = selectableItems.filter((item) => !itemsSelectedIds.includes(item.value));
+
+    if (allowMultipleSelection && items.length > itemsSelectedIds.length) {
+      filteredItems.unshift({ value: 'select-all', label: translateWord('selectAll') });
+    }
     setItemsSelection(filteredItems);
-  }, [items, itemsSelectedIds]);
+  }, [items, itemsSelectedIds, allowMultipleSelection]);
 
   const getValue = () => {
     if (allowMultipleSelection) {
@@ -63,8 +79,6 @@ export default function Selector({
           const base = item.label !== 'All' ? item.label : translateWord('all');
           return { value: item.uniqueId, label: base + icon };
         });
-    } else {
-      console.log('itemSelectedId', itemSelectedId);
     }
     const selectedItem = items.find((item) => {
       if (!item) return false;
@@ -100,21 +114,21 @@ export default function Selector({
     : '';
 
   const targetHeight = 65;
-  const customStyles = {
-    control: (base: React.CSSProperties) => ({
+  type OptionType = { value: string; label: string };
+  const customStyles: StylesConfig<OptionType, boolean> = {
+    control: (base) => ({
       ...base,
-      minHeight: 'initial',
+      minHeight: `${targetHeight}px`,
     }),
-    valueContainer: (base: React.CSSProperties) => ({
+    valueContainer: (base) => ({
       ...base,
-      height: `${targetHeight - 1 - 1}px`,
       padding: '0 8px',
     }),
-    clearIndicator: (base: React.CSSProperties) => ({
+    clearIndicator: (base) => ({
       ...base,
       padding: `${(targetHeight - 20 - 1 - 1) / 2}px`,
     }),
-    dropdownIndicator: (base: React.CSSProperties) => ({
+    dropdownIndicator: (base) => ({
       ...base,
       padding: `${(targetHeight - 20 - 1 - 1) / 3}px`,
     }),
@@ -131,6 +145,8 @@ export default function Selector({
       noOptionsMessage={() => translateWord('noOptionsAvailable')}
       isMulti={allowMultipleSelection}
       isDisabled={items.length === 0 || items.length === 1}
+      maxMenuHeight={220}
+      isClearable={!allowMultipleSelection}
     />
   );
 }

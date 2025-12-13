@@ -59,7 +59,11 @@ export default function DateRangePicker({
 
   useEffect(() => {
     const userLocale = navigator.language || '';
-    userLocale === 'fr-FR' ? registerLocale('fr', fr) : registerLocale('en', en);
+    if (userLocale === 'fr-FR') {
+      registerLocale('fr', fr);
+    } else {
+      registerLocale('en', en);
+    }
     setLocale(userLocale === 'fr-FR' ? 'fr' : 'en');
   }, []);
 

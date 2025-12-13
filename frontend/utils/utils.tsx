@@ -81,7 +81,7 @@ export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, p
 };
 
 export const translateWord = (word: string) => {
-  let translation = {};
+  let translation: { [key: string]: string } = {};
   const language = navigator.language.split('-')[0];
   switch (language) {
     case 'de':
@@ -95,6 +95,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'Keine Optionen verfügbar',
         wrongPage: 'Diese Seite existiert nicht.',
         homeScreen: 'Zur Startseite gehen!',
+        selectAll: 'Alle auswählen',
       };
       break;
     case 'es':
@@ -108,6 +109,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'No hay opciones disponibles',
         wrongPage: 'Esta página no existe.',
         homeScreen: 'Ir a la pantalla de inicio!',
+        selectAll: 'Seleccionar todo',
       };
       break;
     case 'fr':
@@ -121,6 +123,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'Aucune option disponible',
         wrongPage: "Cette page n'existe pas.",
         homeScreen: "Aller à la page d'accueil!",
+        selectAll: 'Tout sélectionner',
       };
       break;
     case 'it':
@@ -134,6 +137,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'Nessuna opzione disponibile',
         wrongPage: 'Questa pagina non esiste.',
         homeScreen: 'Vai alla pagina iniziale!',
+        selectAll: 'Seleziona tutto',
       };
       break;
     case 'ja':
@@ -147,6 +151,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: '利用可能なオプションはありません',
         wrongPage: 'このページは存在しません。',
         homeScreen: 'ホーム画面に移動します！',
+        selectAll: 'すべて選択',
       };
       break;
     case 'ko':
@@ -160,6 +165,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: '사용 가능한 옵션이 없습니다',
         wrongPage: '이 페이지는 존재하지 않습니다.',
         homeScreen: '홈 화면으로 이동하세요!',
+        selectAll: '모두 선택',
       };
       break;
     case 'nl':
@@ -173,6 +179,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'Geen opties beschikbaar',
         wrongPage: 'Deze pagina bestaat niet.',
         homeScreen: 'Ga naar de thuispagina!',
+        selectAll: 'Alles selecteren',
       };
       break;
     case 'pt':
@@ -186,6 +193,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'Nenhuma opção disponível',
         wrongPage: 'Esta página não existe.',
         homeScreen: 'Ir para a página inicial!',
+        selectAll: 'Selecionar tudo',
       };
       break;
     case 'ru':
@@ -199,6 +207,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'Нет доступных вариантов',
         wrongPage: 'Эта страница не существует.',
         homeScreen: 'Перейти на главную страницу!',
+        selectAll: 'Выбрать все',
       };
       break;
     case 'zh':
@@ -209,9 +218,10 @@ export const translateWord = (word: string) => {
         calendars: '日历',
         noResults: '没有结果',
         inProgress: '进行中',
-        noOptionsAvailable: '没有可用选项',
+        noOptionsAvailable: '沒有可用選項',
         wrongPage: '此页面不存在。',
         homeScreen: '前往首页！',
+        selectAll: '全选',
       };
       break;
     default:
@@ -225,6 +235,7 @@ export const translateWord = (word: string) => {
         noOptionsAvailable: 'No options available',
         wrongPage: "This screen doesn't exist.",
         homeScreen: 'Go to home screen!',
+        selectAll: 'Select All',
       };
       break;
   }

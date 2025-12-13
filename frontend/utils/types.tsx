@@ -53,7 +53,7 @@ export interface FilterGames {
 export type AccordionProps = {
   readonly i?: number;
   readonly filter?: string;
-  readonly gamesFiltred: ReadonlyArray<GameFormatted>;
+  readonly gamesFiltred: readonly GameFormatted[];
   readonly open?: boolean;
   readonly isCounted?: boolean;
   readonly showDate?: boolean;
@@ -96,7 +96,7 @@ export interface SelectorProps {
     i: number;
     itemSelectedId: string;
   };
-  onItemSelectionChange: (itemmSelectedId: League | League[], i: number) => void;
+  onItemSelectionChange: (itemSelectedId: string | string[], i: number) => void;
   allowMultipleSelection?: boolean;
 }
 

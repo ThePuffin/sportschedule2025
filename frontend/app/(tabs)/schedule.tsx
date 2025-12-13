@@ -3,15 +3,18 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
 import React, { useEffect, useRef, useState } from 'react';
-import { Dimensions, ScrollView, View } from 'react-native';
+import { Dimensions, ScrollView } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
 import Loader from '../../components/Loader';
+import LoadingView from '../../components/LoadingView';
 import { ScrollToTopButton, ScrollToTopButtonRef } from '../../components/ScrollToTopButton';
 import {
   fetchLeagues,
   fetchRemainingGamesByLeague,
   fetchRemainingGamesByTeam,
   fetchTeams,
+  getCache,
+  saveCache,
   smallFetchRemainingGamesByLeague,
 } from '../../utils/fetchData';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
@@ -44,10 +47,9 @@ export default function Schedule() {
   useEffect(() => {
     async function fetchTeamsAndRestore() {
       // try cached teams first
-      const cachedTeamsRaw = localStorage.getItem('teams');
-      const cachedTeams = safeParse<Team[]>(cachedTeamsRaw);
-      const teamSelected = localStorage.getItem('teamSelected') || '';
-      const selectedTeam = cachedTeams?.find((t) => t.uniqueId === teamSelected) || ({} as Team);
+      const cachedTeams = getCache<Team[]>('teams');
+      const teamSelectedLS = localStorage.getItem('teamSelected') || '';
+      const selectedTeam = cachedTeams?.find((t) => t.uniqueId === teamSelectedLS) || ({} as Team);
 
       try {
         if (cachedTeams) {
@@ -58,7 +60,7 @@ export default function Schedule() {
         const teamsData: Team[] = await fetchTeams();
         setTeams(teamsData);
         // cache teams for offline/cold-start
-        localStorage.setItem('teams', JSON.stringify(teamsData));
+        saveCache('teams', teamsData);
         // restore selection using freshly fetched teams
         getSelectedTeams(teamsData);
       } catch (err) {
@@ -80,19 +82,13 @@ export default function Schedule() {
   }, []);
 
   useEffect(() => {
-    if (teamSelected.length > 0) {
+    if (teamSelected && teamSelected.length > 0 && leagueOfSelectedTeam && leagueOfSelectedTeam.length > 0) {
       async function fetchGames() {
         await getGamesFromApi();
       }
       fetchGames();
     }
-  }, [teamSelected, leagueOfSelectedTeam]);
-
-  useEffect(() => {
-    if (leaguesAvailable.length === 0) {
-      fetchLeagues(setLeaguesAvailable);
-    }
-  }, []);
+  }, [teamSelected]);
 
   useEffect(() => {
     const updateDeviceType = () => {
@@ -110,9 +106,9 @@ export default function Schedule() {
   const getSelectedTeams = (allTeams: Team[]) => {
     let selection = localStorage.getItem('teamSelected') || '';
     if (selection.length === 0) {
-      const selectedTeams = localStorage.getItem('teamsSelected') || '';
+      const teamsSelected = getCache<Team[]>('teamsSelected');
 
-      let teamsSelectedIds = selectedTeams.length > 0 ? JSON.parse(selectedTeams) : [];
+      let teamsSelectedIds = teamsSelected || [];
       let randomTeam = getRandomTeamId(allTeams) || '';
 
       if (teamsSelectedIds.length > 0) {
@@ -132,9 +128,9 @@ export default function Schedule() {
     if (teamSelection) {
       // if called when teams are already loaded, pass them to derive league
       storeTeamSelected(teamSelection, teams);
-      const scheduleData = localStorage.getItem('scheduleData');
+      const scheduleData = getCache<FilterGames>('scheduleData');
       if (scheduleData) {
-        const storedGames = JSON.parse(scheduleData);
+        const storedGames = scheduleData;
         const today = new Date().toISOString().split('T')[0];
         const filteredGames = Object.fromEntries(
           Object.entries(storedGames)
@@ -149,32 +145,33 @@ export default function Schedule() {
   };
 
   const persistTeamForLeague = (league: string, teamSelectedId: string) => {
-    const storedTeamsLeagues = localStorage.getItem('teamsSelectedLeagues') || '{}';
-    const leaguesTeams: { [key: string]: string } = JSON.parse(storedTeamsLeagues);
+    const leaguesTeams = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
     leaguesTeams[league] = teamSelectedId;
-    localStorage.setItem('teamsSelectedLeagues', JSON.stringify(leaguesTeams));
+    saveCache('teamsSelectedLeagues', leaguesTeams);
   };
 
-  const handleTeamSelectionChange = (teamSelectedId: string, i: number) => {
-    if (teamSelectedId === 'all') {
+  const handleTeamSelectionChange = (teamSelectedId: string | string[], i: number) => {
+    const finalTeamId = Array.isArray(teamSelectedId) ? teamSelectedId[0] : teamSelectedId;
+    if (finalTeamId === 'all') {
       localStorage.setItem('teamSelected', 'all');
       setTeamSelected('all');
     } else {
-      storeTeamSelected(teamSelectedId);
+      storeTeamSelected(finalTeamId);
     }
-    persistTeamForLeague(leagueOfSelectedTeam, teamSelectedId);
+    persistTeamForLeague(leagueOfSelectedTeam, finalTeamId);
   };
 
-  const handleLeagueSelectionChange = (leagueSelectedId: string, i: number) => {
-    localStorage.setItem('leagueSelected', leagueSelectedId);
-    const teamsAvailableInLeague = teams.filter(({ league }) => league === leagueSelectedId);
-    allOption.league = leagueSelectedId;
+  const handleLeagueSelectionChange = (leagueSelectedId: string | string[], i: number) => {
+    const finalLeagueId = Array.isArray(leagueSelectedId) ? leagueSelectedId[0] : leagueSelectedId;
+    localStorage.setItem('leagueSelected', finalLeagueId);
+    const teamsAvailableInLeague = teams.filter(({ league }) => league === finalLeagueId);
+    allOption.league = finalLeagueId;
     setLeagueTeams([allOption, ...teamsAvailableInLeague]);
-    setleagueOfSelectedTeam(leagueSelectedId);
-    const storedTeamsLeagues = JSON.parse(localStorage.getItem('teamsSelectedLeagues') || '{}');
+    setleagueOfSelectedTeam(finalLeagueId);
+    const storedTeamsLeagues = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
     let team = '';
-    if (storedTeamsLeagues[leagueSelectedId]) {
-      team = storedTeamsLeagues[leagueSelectedId];
+    if (storedTeamsLeagues[finalLeagueId]) {
+      team = storedTeamsLeagues[finalLeagueId];
     }
 
     if (team.length === 0) {
@@ -301,7 +298,7 @@ export default function Schedule() {
     if (teamSelected && teamSelected.length !== 0) {
       try {
         let scheduleData: FilterGames;
-        const scheduleDataStored = JSON.parse(localStorage.getItem('scheduleData') || '{}');
+        const scheduleDataStored = getCache<FilterGames>('scheduleData') || {};
         const scheduleKeys = Object.keys(scheduleDataStored);
         let thisLeagueTeams = JSON.parse(JSON.stringify(leagueTeams));
         if (scheduleKeys) {
@@ -319,7 +316,7 @@ export default function Schedule() {
           const storedLeague = localStorage.getItem('leagueSelected');
           const selectionLeague = storedLeague || leaguesAvailable[0];
           const smallScheduleData = await smallFetchRemainingGamesByLeague(selectionLeague);
-          localStorage.setItem('scheduleData', JSON.stringify(smallScheduleData));
+          saveCache('scheduleData', smallScheduleData);
           setGames(removeOldGames(smallScheduleData));
           setleagueOfSelectedTeam(selectionLeague);
           scheduleData = await fetchRemainingGamesByLeague(selectionLeague);
@@ -332,22 +329,21 @@ export default function Schedule() {
           const now = new Date().toISOString().split('T')[0];
           scheduleData[now] = [];
         }
-        
-        localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+
+        saveCache('scheduleData', scheduleData);
 
         setGames(removeOldGames(scheduleData));
       } catch (error) {
         console.error('fetch games failed, using cached schedule if available', error);
-        const scheduleDataRaw = localStorage.getItem('scheduleData');
-        const scheduleData = safeParse<FilterGames>(scheduleDataRaw);
+        const scheduleData = getCache<FilterGames>('scheduleData');
         if (scheduleData) setGames(scheduleData);
       }
     } else {
       // if no team selected yet, try to restore cached schedule so UI can show something
-      const scheduleDataRaw = localStorage.getItem('scheduleData');
+      const scheduleDataRaw = getCache<FilterGames>('scheduleData');
       if (scheduleDataRaw) {
         try {
-          setGames(JSON.parse(scheduleDataRaw));
+          setGames(scheduleDataRaw);
         } catch (e) {
           console.error('cached schedule parse failed', e);
         }
@@ -387,16 +383,6 @@ export default function Schedule() {
     setLeagueTeams([allOption, ...leagueFilter]);
   };
 
-  function safeParse<T>(raw: string | null): T | null {
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as T;
-    } catch (e) {
-      console.error('safeParse failed', e);
-      return null;
-    }
-  }
-
   return (
     <ThemedView style={{ flex: 1 }}>
       <ScrollView
@@ -404,11 +390,7 @@ export default function Schedule() {
         onScroll={(event) => scrollToTopButtonRef.current?.handleScroll(event)}
         scrollEventThrottle={16}
       >
-        {!teamSelected.length && (
-          <View style={{ height: '100vh', display: 'grid', placeItems: 'center' }}>
-            <Loader />
-          </View>
-        )}
+        {!teamSelected.length && <LoadingView />}
         {display()}
       </ScrollView>
       <ScrollToTopButton ref={scrollToTopButtonRef} scrollViewRef={scrollViewRef} />
