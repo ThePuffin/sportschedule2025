@@ -26,16 +26,30 @@ export enum ButtonsKind {
   REMOVEGAMES = 'remove games',
 }
 
-export enum emoticonEnum {
-  NHL = '🏒',
-  PWHL = '🏒',
-  NFL = '🏈',
-  NCAAF = '🏈',
-  MLB = '⚾',
-  NCCABB = '⚾',
-  NBA = '🏀',
-  NCAAB = '🏀',
-  WNCAAB = '⛹️‍♀️',
-  WNBA = '⛹️‍♀️',
-  MLS = '⚽',
-}
+export const emoticonEnum = {
+  NHL: '🏒',
+  PWHL: '⚫',
+  NFL: '🏈',
+  NCAAF: '🏈',
+  MLB: '⚾',
+  NCCABB: '⚾',
+  NBA: '🏀',
+  NCAAB: '🏀',
+  WNCAAB: '⛹️‍♀️',
+  WNBA: '⛹️‍♀️',
+  MLS: '⚽',
+};
+
+export const timeDurationEnum = {
+  NHL: 3,
+  PWHL: 3,
+  NFL: 3.25,
+  NCAAF: 3.5,
+  MLB: 2.75,
+  NCCABB: 2.75,
+  NBA: 2.5,
+  NCAAB: 2.5,
+  WNCAAB: 2.5,
+  WNBA: 2.5,
+  MLS: 2,
+};

@@ -1,4 +1,5 @@
 import { emoticonEnum } from '@/constants/enum';
+import { getCache } from '@/utils/fetchData';
 import { SelectorProps } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import React, { useEffect, useState } from 'react';
@@ -12,6 +13,19 @@ export default function Selector({
 }: Readonly<SelectorProps>) {
   const { items, i, itemSelectedId } = data;
   let { itemsSelectedIds = [] } = data;
+  const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => {
+    return getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
+  });
+
+  useEffect(() => {
+    const updateFavorites = () => {
+      setFavoriteTeams(getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || []);
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('favoritesUpdated', updateFavorites);
+      return () => globalThis.window.removeEventListener('favoritesUpdated', updateFavorites);
+    }
+  }, []);
 
   const [itemsSelection, setItemsSelection] = useState<{ value: string; label: string }[]>([]);
 
@@ -53,7 +67,7 @@ export default function Selector({
           const league = item.league || item.value || '';
           const isAll = item.label === 'All' || item.uniqueId === 'ALL';
           const icon = !isAll && league ? ' ' + (emoticonEnum[league as keyof typeof emoticonEnum] || '') : '';
-          const label = item.label !== 'All' ? item.label : translateWord('all');
+          const label = item.label === 'All' ? translateWord('all') : item.label;
           return { value: item.uniqueId, label: label + icon };
         })
       : [];
@@ -62,8 +76,16 @@ export default function Selector({
     if (allowMultipleSelection && items.length > itemsSelectedIds.length) {
       filteredItems.unshift({ value: 'select-all', label: translateWord('all') });
     }
+    // If favorite teams exist, prioritize them at the top
+    if (favoriteTeams.length > 0) {
+      filteredItems.sort((a, b) => {
+        const aIsFav = favoriteTeams.includes(a.value) ? -1 : 1;
+        const bIsFav = favoriteTeams.includes(b.value) ? -1 : 1;
+        return aIsFav - bIsFav;
+      });
+    }
     setItemsSelection(filteredItems);
-  }, [items, itemsSelectedIds, allowMultipleSelection]);
+  }, [items, itemsSelectedIds, allowMultipleSelection, favoriteTeams]);
 
   const getValue = () => {
     if (allowMultipleSelection) {

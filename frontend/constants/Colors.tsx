@@ -6,7 +6,28 @@
 const tintColorLight = '#0a7ea4';
 const tintColorDark = '#fff';
 
-export const Colors = {
+interface ThemeColors {
+  text: string;
+  background: string;
+  tint: string;
+  icon: string;
+  tabIconDefault: string;
+  tabIconSelected: string;
+}
+
+interface TeamColors {
+  color: string;
+  backgroundColor: string;
+}
+
+interface ColorsType {
+  light: ThemeColors;
+  dark: ThemeColors;
+  default: TeamColors;
+  [key: string]: ThemeColors | TeamColors; // Index signature for dynamic team keys
+}
+
+export const Colors: ColorsType = {
   light: {
     text: '#11181C',
     background: '#fff',
@@ -156,8 +177,8 @@ export const Colors = {
     color: '#ffffff',
   },
   'NBA-BKN': {
+    color: '#fffffe',
     backgroundColor: '#000000',
-    color: '#ffffff',
   },
   'NBA-CHA': {
     color: '#008ca8',
@@ -569,7 +590,7 @@ export const Colors = {
   },
   'PWHL-NY': {
     backgroundColor: '#00b9b3',
-    color: '#eb8b04',
+    color: '#011e42',
   },
   'PWHL-SEA': {
     color: '#0C5256',

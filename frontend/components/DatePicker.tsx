@@ -77,7 +77,7 @@ export default function DateRangePicker({
     <>
       {!selectDate && (
         <div className="date-range-picker">
-          <div className="date-picker-container">
+          <div className="date-picker-container left">
             <DatePicker
               selected={startDate}
               onChange={handleStartDateChange}
@@ -92,7 +92,7 @@ export default function DateRangePicker({
               closeOnScroll={true}
             />
           </div>
-          <div className="date-picker-container">
+          <div className="date-picker-container right">
             <DatePicker
               selected={endDate}
               onChange={handleEndDateChange}

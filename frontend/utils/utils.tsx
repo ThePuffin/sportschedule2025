@@ -84,6 +84,25 @@ export const translateWord = (word: string) => {
   let translation: { [key: string]: string } = {};
   const language = navigator.language.split('-')[0];
   switch (language) {
+    case 'fr':
+      translation = {
+        all: 'TOUS',
+        gamesOfDay: 'Programme du jour',
+        remainingGames: 'Matchs restants',
+        calendars: 'Calendriers',
+        noResults: 'Pas de résultats',
+        inProgress: 'En cours',
+        noOptionsAvailable: 'Aucune option disponible',
+        wrongPage: "Cette page n'existe pas.",
+        homeScreen: "Aller à la page d'accueil!",
+        selectAll: 'Tout sélectionner',
+        Filter: 'Filtrer',
+        ended: 'Terminé',
+        yourFav: 'Vos équipes favorites',
+        register: 'Sauvegarder',
+        cancel: 'Annuler',
+      };
+      break;
     case 'de':
       translation = {
         all: 'alle',
@@ -97,6 +116,10 @@ export const translateWord = (word: string) => {
         homeScreen: 'Zur Startseite gehen!',
         selectAll: 'Alle auswählen',
         Filter: 'Filtern',
+        ended: 'Beendet',
+        yourFav: 'Deine Lieblingsteams',
+        register: 'Speichern',
+        cancel: 'Abbrechen',
       };
       break;
     case 'es':
@@ -112,23 +135,13 @@ export const translateWord = (word: string) => {
         homeScreen: 'Ir a la pantalla de inicio!',
         selectAll: 'Seleccionar todo',
         Filter: 'Filtrar',
+        ended: 'Finalizado',
+        yourFav: 'Tus equipos favoritos',
+        register: 'Guardar',
+        cancel: 'Cancelar',
       };
       break;
-    case 'fr':
-      translation = {
-        all: 'TOUS',
-        gamesOfDay: 'Programme du jour',
-        remainingGames: 'Matchs restants',
-        calendars: 'Calendriers',
-        noResults: 'Pas de résultats',
-        inProgress: 'En cours',
-        noOptionsAvailable: 'Aucune option disponible',
-        wrongPage: "Cette page n'existe pas.",
-        homeScreen: "Aller à la page d'accueil!",
-        selectAll: 'Tout sélectionner',
-        Filter: 'Filtrer',
-      };
-      break;
+
     case 'it':
       translation = {
         all: 'TUTTI',
@@ -142,6 +155,10 @@ export const translateWord = (word: string) => {
         homeScreen: 'Vai alla pagina iniziale!',
         selectAll: 'Seleziona tutto',
         Filter: 'Filtrare',
+        ended: 'Terminato',
+        yourFav: 'Le tue squadre preferite',
+        register: 'Salva',
+        cancel: 'Annulla',
       };
       break;
     case 'ja':
@@ -157,6 +174,10 @@ export const translateWord = (word: string) => {
         homeScreen: 'ホーム画面に移動します！',
         selectAll: 'すべて選択',
         Filter: 'フィルター',
+        ended: '終了',
+        yourFav: 'お気に入りのチーム',
+        register: '保存',
+        cancel: 'キャンセル',
       };
       break;
     case 'ko':
@@ -172,6 +193,10 @@ export const translateWord = (word: string) => {
         homeScreen: '홈 화면으로 이동하세요!',
         selectAll: '모두 선택',
         Filter: '필터',
+        ended: '종료됨',
+        yourFav: '좋아하는 팀',
+        register: '저장',
+        cancel: '취소'
       };
       break;
     case 'nl':
@@ -187,6 +212,10 @@ export const translateWord = (word: string) => {
         homeScreen: 'Ga naar de thuispagina!',
         selectAll: 'Alles selecteren',
         Filter: 'Filteren',
+        ended: 'Afgerond',
+        yourFav: 'Je favoriete teams',
+        register: 'Opslaan',
+        cancel: 'Annuleren'
       };
       break;
     case 'pt':
@@ -202,6 +231,10 @@ export const translateWord = (word: string) => {
         homeScreen: 'Ir para a página inicial!',
         selectAll: 'Selecionar tudo',
         Filter: 'Filtrar',
+        ended: 'Encerrado',
+        yourFav: 'Seus times favoritos',
+        register: 'Salvar',
+        cancel: 'Cancelar'
       };
       break;
     case 'ru':
@@ -217,6 +250,10 @@ export const translateWord = (word: string) => {
         homeScreen: 'Перейти на главную страницу!',
         selectAll: 'Выбрать все',
         Filter: 'Фильтровать',
+        ended: 'Завершено',
+        yourFav: 'Ваши любимые команды',
+        register: 'Сохранить',
+        cancel: 'Отмена'
       };
       break;
     case 'zh':
@@ -232,6 +269,10 @@ export const translateWord = (word: string) => {
         homeScreen: '前往首页！',
         selectAll: '全选',
         Filter: '筛选',
+        ended: '已结束',
+        yourFav: '你最喜欢的球队',
+        register: '保存',
+        cancel: '取消'
       };
       break;
     default:
@@ -247,6 +288,10 @@ export const translateWord = (word: string) => {
         homeScreen: 'Go to home screen!',
         selectAll: 'Select All',
         Filter: 'Filter',
+        ended: 'Ended',
+        yourFav: 'Your favorite teams',
+        register: 'Save',
+        cancel: 'Cancel',
       };
       break;
   }

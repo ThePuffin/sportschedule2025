@@ -1,14 +1,56 @@
-import { FilterGames, Team } from '@/utils/types';
+import { FilterGames, GameFormatted, Team } from '@/utils/types';
 import * as fflate from 'fflate';
 
 const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
+type TeamGamesCacheEntry = {
+  data: FilterGames;
+  timestamp: number;
+};
+
+type TeamGamesCache = Record<string, TeamGamesCacheEntry>;
+
+const TEAM_GAMES_CACHE_KEY = 'games_team_map';
+const TEAM_GAMES_CACHE_TTL_HOURS = 0.1;
+const TEAM_GAMES_CACHE_TTL_MS = TEAM_GAMES_CACHE_TTL_HOURS * 60 * 60 * 1000;
+
+let teamGamesCacheStore: TeamGamesCache | null = null;
+
+const loadTeamGamesCache = (): TeamGamesCache => {
+  if (!teamGamesCacheStore) {
+    teamGamesCacheStore = getCache<TeamGamesCache>(TEAM_GAMES_CACHE_KEY) ?? {};
+    pruneTeamGamesCache(teamGamesCacheStore);
+    saveCache(TEAM_GAMES_CACHE_KEY, teamGamesCacheStore);
+  }
+  return teamGamesCacheStore;
+};
+
+const persistTeamGamesCache = (cache: TeamGamesCache): void => {
+  teamGamesCacheStore = cache;
+  pruneTeamGamesCache(teamGamesCacheStore);
+  saveCache(TEAM_GAMES_CACHE_KEY, teamGamesCacheStore);
+};
+
+const pruneTeamGamesCache = (cache: TeamGamesCache): void => {
+  const now = Date.now();
+  for (const teamId of Object.keys(cache)) {
+    if (now - cache[teamId].timestamp >= TEAM_GAMES_CACHE_TTL_MS) {
+      delete cache[teamId];
+    }
+  }
+};
+
+const isTeamGamesEntryFresh = (entry?: TeamGamesCacheEntry): entry is TeamGamesCacheEntry => {
+  if (!entry) return false;
+  return Date.now() - entry.timestamp < TEAM_GAMES_CACHE_TTL_MS;
+};
+
 // Helper to check if cache is still valid (less than 1 hours old or defined maxDuration)
 const isCacheValid = (cacheKey: string, maxDuration: number = 1): boolean => {
   const timestamp = localStorage.getItem(`${cacheKey}_timestamp`);
   if (!timestamp) return false;
-  const cached = parseInt(timestamp, 10);
+  const cached = Number.parseInt(timestamp, 10);
   const now = Date.now();
   const oneDayMs = maxDuration * 60 * 60 * 1000;
   return now - cached < oneDayMs;
@@ -44,7 +86,7 @@ export const getCache = <T>(cacheKey: string): T | null => {
 };
 
 // Helper function to retry after delay
-const retryFetch = async <T>(fetchFn: () => Promise<T>, retries: number = 1, delayMs: number = 10000): Promise<T> => {
+const retryFetch = async <T>(fetchFn: () => Promise<T>, retries: number = 1, delayMs: number = 6000): Promise<T> => {
   try {
     return await fetchFn();
   } catch (error) {
@@ -58,7 +100,7 @@ const retryFetch = async <T>(fetchFn: () => Promise<T>, retries: number = 1, del
 };
 
 // Helper to add timeout to fetch (accepts RequestInit options)
-const fetchWithTimeout = (url: string, timeoutMs: number = 10000, options: RequestInit = {}) => {
+const fetchWithTimeout = (url: string, timeoutMs: number = 6000, options: RequestInit = {}) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -133,28 +175,27 @@ export const fetchTeams = async () => {
 };
 
 export const fetchRemainingGamesByTeam = async (teamSelected: string) => {
-  const cacheKey = `games_team_${teamSelected}`;
+  const teamGamesCache = loadTeamGamesCache();
+  const cachedEntry = teamGamesCache[teamSelected];
 
-  if (isCacheValid(cacheKey, 0.1)) {
-    const cached = getCache<FilterGames>(cacheKey);
-    if (cached) {
-      console.info(`Using cached games for team ${teamSelected}`);
-      return cached;
-    }
+  if (isTeamGamesEntryFresh(cachedEntry)) {
+    console.info(`Using cached games for team ${teamSelected}`);
+    return cachedEntry.data;
   }
+
+  const fallbackData = cachedEntry?.data;
 
   try {
     const games = await retryFetch(async () => {
       const response = await fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/team/${teamSelected}`, 60000);
       return (await response.json()) || {};
     });
-    saveCache(cacheKey, games);
+    teamGamesCache[teamSelected] = { data: games, timestamp: Date.now() };
+    persistTeamGamesCache(teamGamesCache);
     return games;
   } catch (error) {
     console.error('Error fetching remaining games by team:', error);
-    // Fallback to stale cache if available
-    const staleCache = getCache<FilterGames>(cacheKey);
-    if (staleCache) return staleCache;
+    if (fallbackData) return fallbackData;
     return {};
   }
 };
@@ -201,5 +242,17 @@ export const refreshTeams = async (): Promise<void> => {
   } catch (error) {
     console.error(`Error refreshing teams:`, error);
     return;
+  }
+};
+
+export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
+  try {
+    date = date || new Date().toISOString().split('T')[0];
+    const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`);
+    const dayGames = await response.json();
+    return dayGames;
+  } catch (error) {
+    console.error(`Error fetching games for date ${date}:`, error);
+    return [];
   }
 };

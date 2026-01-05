@@ -2,33 +2,58 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1rem;
+  gap: 0.1rem;
+  width: 100%;
+  /* Ensure the parent takes full width */
 }
 
 .date-picker-container {
   flex: 1;
+  /* This forces each container to take exactly 50% width */
+  width: 100%;
 }
 
+/* React Datepicker creates several wrapper divs. 
+   These MUST be forced to 100% width or the input will shrink.
+*/
+.react-datepicker-wrapper,
+.react-datepicker__input-container,
+.react-datepicker__input-container input,
 .custom-datepicker {
-  width: 100%;
-  padding: 1rem;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  font-size: 16px;
-}
-
-.react-datepicker-wrapper {
-  width: 100%;
-}
-
-.react-datepicker__input-container {
-  width: 100%;
+  display: block;
+  /* Overrides inline-block default */
+  width: 100% !important;
+  box-sizing: border-box;
+  /* Ensures padding doesn't push it off-screen */
 }
 
 .react-datepicker__input-container input {
-  width: 100%;
   padding: 1rem;
   border-radius: 5px;
   border: 1px solid #ccc;
   font-size: 16px;
+}
+
+
+/* This applies to screens smaller than 768px (tablets/phones) */
+@media (max-width: 768px) {
+  .date-range-picker {
+    flex-direction: column;
+    /* Stacks items vertically */
+    align-items: stretch;
+    /* Makes inputs fill the full width of the screen */
+
+  }
+
+  .date-picker-container {
+    width: 100%;
+    /* Ensures the container spans the full width */
+  }
+
+  /* Reset any specific alignments from previous steps */
+  .left, .right {
+    justify-content: flex-start;
+    order: unset;
+    /* Ensures natural HTML order (Left then Right) */
+  }
 }

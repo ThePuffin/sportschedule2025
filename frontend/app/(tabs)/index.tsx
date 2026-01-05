@@ -2,31 +2,17 @@ import Cards from '@/components/Cards';
 import NoResults from '@/components/NoResults';
 import Selector from '@/components/Selector';
 import { ThemedView } from '@/components/ThemedView';
+import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion';
+import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import DateRangePicker from '../../components/DatePicker';
 import LoadingView from '../../components/LoadingView';
-import { ScrollToTopButton, ScrollToTopButtonRef } from '../../components/ScrollToTopButton';
 import { League } from '../../constants/enum';
-import { fetchLeagues, getCache, saveCache } from '../../utils/fetchData';
-import { GameFormatted } from '../../utils/types';
+import { fetchGames, fetchLeagues, getCache, saveCache } from '../../utils/fetchData';
+import { GameFormatted, Team } from '../../utils/types';
 import { randomNumber, translateWord } from '../../utils/utils';
-
-const EXPO_PUBLIC_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
-
-const fetchGames = async (date: string): Promise<GameFormatted[]> => {
-  try {
-    date = date || new Date().toISOString().split('T')[0];
-    const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`);
-    const dayGames = await response.json();
-    return dayGames;
-  } catch (error) {
-    console.error(`Error fetching games for date ${date}:`, error);
-    return [];
-  }
-};
 
 const getNextGamesFromApi = async (date: Date): Promise<{ [key: string]: GameFormatted[] }> => {
   const newFetch: { [key: string]: GameFormatted[] } = {};
@@ -54,6 +40,10 @@ export default function GameofTheDay() {
   const lastGamesUpdateRef = useRef<Date | null>(null);
   const hasInitializedRef = useRef(false);
 
+  const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>(
+    () => getCache<GameFormatted[]>('gameSelected') || []
+  );
+
   const teamsOfTheDay = useMemo(() => {
     const filtredTeamsAvailable = games
       .filter((game) => selectLeagues.includes(game.league as League))
@@ -70,14 +60,15 @@ export default function GameofTheDay() {
             uniqueId: game.awayTeamId,
             league: game.league,
           }))
-      );
+      )
+      .sort((a, b) => a.label.localeCompare(b.label));
     return Array.from(new Set(filtredTeamsAvailable));
   }, [games, selectLeagues]);
 
   const [teamSelectedId, setTeamSelectedId] = useState<string>('');
   const gamesDayCache = useRef<{ [key: string]: GameFormatted[] }>({});
   const scrollViewRef = useRef<ScrollView>(null);
-  const scrollToTopButtonRef = useRef<ScrollToTopButtonRef>(null);
+  const ActionButtonRef = useRef<ActionButtonRef>(null);
 
   const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
     const today = new Date().toISOString().split('T')[0];
@@ -244,35 +235,42 @@ export default function GameofTheDay() {
     [selectLeagues]
   );
 
-  const displayGamesCards = useCallback((gamesToShow: GameFormatted[]) => {
-    if (gamesToShow?.length === 0) {
-      return <NoResults />;
-    } else {
-      return gamesToShow.map((game) => {
-        if (game) {
-          const gameId = game?._id ?? randomNumber(999999);
-          return (
-            <Cards
-              key={gameId}
-              data={game}
-              numberSelected={1}
-              showButtons={true}
-              showDate={false}
-              onSelection={() => {}}
-              selected={true}
-            />
-          );
-        }
-      });
-    }
-  }, []);
+  const displayGamesCards = useCallback(
+    (gamesToShow: GameFormatted[]) => {
+      if (gamesToShow?.length === 0) {
+        return <NoResults />;
+      } else {
+        return gamesToShow.map((game) => {
+          if (game) {
+            const gameId = game?._id ?? randomNumber(999999);
+
+            const isSelected = gamesSelected.some(
+              (gameSelect) => game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC
+            );
+            return (
+              <Cards
+                key={gameId}
+                data={game}
+                numberSelected={1}
+                showButtons={true}
+                showDate={false}
+                onSelection={() => {}}
+                selected={isSelected}
+              />
+            );
+          }
+        });
+      }
+    },
+    [gamesSelected]
+  );
 
   const displaySelect = useCallback(() => {
     const leagues = leaguesAvailable.map((league: string) => {
       return { label: league, uniqueId: league, value: league };
     });
     const leaguesData = {
-      i: 0,
+      i: 'leagues',
       items: leagues as any,
       itemsSelectedIds: selectLeagues,
       itemSelectedId: league,
@@ -288,7 +286,7 @@ export default function GameofTheDay() {
         />
         <Selector
           data={{
-            i: 1,
+            i: randomNumber(999999),
             items: teamsOfTheDay as any,
             itemSelectedId: teamSelectedId,
             itemsSelectedIds: [],
@@ -354,12 +352,13 @@ export default function GameofTheDay() {
               open={true}
               isCounted={false}
               disableToggle={showSingleColumn}
+              gamesSelected={gamesSelected}
             />
           </td>
         );
       }
     });
-  }, [leaguesAvailable, games, teamSelectedId]);
+  }, [leaguesAvailable, games, teamSelectedId, gamesSelected]);
 
   const displayLargeDeviceContent = useCallback(() => {
     if (!games || games.length === 0 || !leaguesAvailable || leaguesAvailable.length === 0) {
@@ -423,7 +422,14 @@ export default function GameofTheDay() {
         setSelectLeagues(storedLeaguesSelected);
       }
 
-      setIsLoading(true);
+      // Only show loader if there's no cached data for today
+      const YYYYMMDD = new Date(selectDate).toISOString().split('T')[0];
+      const hasCachedDataForToday = gamesDayCache.current[YYYYMMDD]?.length > 0;
+
+      if (!hasCachedDataForToday) {
+        setIsLoading(true);
+      }
+
       try {
         await getGamesFromApi(selectDate);
 
@@ -445,17 +451,27 @@ export default function GameofTheDay() {
     initializeGames();
   }, []); // Only run once on mount
 
+  useFocusEffect(
+    useCallback(() => {
+      setGamesSelected(getCache<Team[]>('gameSelected') || []);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
+
   return (
     <ThemedView style={{ flex: 1 }}>
-      <DateRangePicker readonly={readonlyRef.current} onDateChange={handleDateChange} selectDate={selectDate} />
-      <ScrollView
-        ref={scrollViewRef}
-        onScroll={(event) => scrollToTopButtonRef.current?.handleScroll(event)}
-        scrollEventThrottle={16}
-      >
-        <ThemedView>{windowWidth > 768 ? displayLargeDeviceContent() : displaySmallDeviceContent()}</ThemedView>
-      </ScrollView>
-      <ScrollToTopButton ref={scrollToTopButtonRef} scrollViewRef={scrollViewRef} />
+      <>
+        <DateRangePicker readonly={readonlyRef.current} onDateChange={handleDateChange} selectDate={selectDate} />
+        <ScrollView
+          ref={scrollViewRef}
+          onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
+          scrollEventThrottle={16}
+        >
+          <ThemedView>{windowWidth > 768 ? displayLargeDeviceContent() : displaySmallDeviceContent()}</ThemedView>
+        </ScrollView>
+      </>
+
+      <ActionButton ref={ActionButtonRef} scrollViewRef={scrollViewRef} />
     </ThemedView>
   );
 }

@@ -1,14 +1,14 @@
 import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
-import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dimensions, ScrollView } from 'react-native';
+import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
 import GamesSelected from '../../components/GamesSelected';
-import Loader from '../../components/Loader';
 import LoadingView from '../../components/LoadingView';
-import { ScrollToTopButton, ScrollToTopButtonRef } from '../../components/ScrollToTopButton';
 import Selector from '../../components/Selector';
 import { ButtonsKind } from '../../constants/enum';
 import { addDays, readableDate } from '../../utils/date';
@@ -25,7 +25,7 @@ export default function Calendar() {
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [maxTeamsNumber, setMaxTeamsNumber] = useState(6);
   const scrollViewRef = useRef<ScrollView>(null);
-  const scrollToTopButtonRef = useRef<ScrollToTopButtonRef>(null);
+  const ActionButtonRef = useRef<ActionButtonRef>(null);
 
   const beginDate = new Date();
   beginDate.setHours(23, 59, 59, 999);
@@ -77,6 +77,14 @@ export default function Calendar() {
   const getSelectedTeams = (allTeams: Team[]) => {
     const selection = getCache<Team[]>('teamsSelected')?.map((team) => team.uniqueId) ?? teamsSelected ?? [];
     if (!selection.length) {
+      const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
+      if (favoriteTeams.length) {
+        for (const favTeamId of favoriteTeams) {
+          if (allTeams.some((team) => team.uniqueId === favTeamId)) {
+            selection.push(favTeamId);
+          }
+        }
+      }
       while (selection.length < 2) {
         addNewTeamId(selection, allTeams);
       }
@@ -270,12 +278,18 @@ export default function Calendar() {
         });
       }
     }
-    return <Loader />;
+    return <LoadingView />;
   };
   useEffect(() => {
     initializeDateRange();
     getStoredTeams();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   useEffect(() => {
     async function fetchTeams() {
@@ -311,7 +325,7 @@ export default function Calendar() {
     <ThemedView style={{ flex: 1 }}>
       <ScrollView
         ref={scrollViewRef}
-        onScroll={(event) => scrollToTopButtonRef.current?.handleScroll(event)}
+        onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
         scrollEventThrottle={16}
       >
         <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
@@ -328,7 +342,7 @@ export default function Calendar() {
           <GamesSelected
             onAction={handleGamesSelection}
             data={gamesSelected}
-            teamNumber={maxTeamsNumber > teamsSelected.length ? teamsSelected.length : maxTeamsNumber}
+            teamNumber={maxTeamsNumber > teamsSelected?.length ? teamsSelected.length : maxTeamsNumber}
           />
         )}
         {!teamsSelected.length && <LoadingView />}
@@ -338,7 +352,7 @@ export default function Calendar() {
           </tbody>
         </table>
       </ScrollView>
-      <ScrollToTopButton ref={scrollToTopButtonRef} scrollViewRef={scrollViewRef} />
+      <ActionButton ref={ActionButtonRef} scrollViewRef={scrollViewRef} />
     </ThemedView>
   );
 }
