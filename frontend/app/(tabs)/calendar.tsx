@@ -237,15 +237,24 @@ export default function Calendar() {
     saveCache('gameSelected', newSelection);
   };
 
-  const displayTeamSelector = () => {
+  const displaySelectors = () => {
     return teamsSelected.map((teamSelectedId, i) => {
       const data = { i, items: teams, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
       return (
-        <td key={`${teamSelectedId}-${teamsSelected.length}`}>
+        <td key={`selector-${teamSelectedId}-${teamsSelected.length}`}>
           <ThemedView>
             <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} isClearable={false} />
-            {displayGamesCards(teamSelectedId)}
           </ThemedView>
+        </td>
+      );
+    });
+  };
+
+  const displayGamesGrid = () => {
+    return teamsSelected.map((teamSelectedId) => {
+      return (
+        <td key={`games-${teamSelectedId}-${teamsSelected.length}`} style={{ verticalAlign: 'top' }}>
+          <ThemedView>{displayGamesCards(teamSelectedId)}</ThemedView>
         </td>
       );
     });
@@ -328,27 +337,36 @@ export default function Calendar() {
         onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
         scrollEventThrottle={16}
       >
-        <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
-        <Buttons
-          onClicks={handleButtonClick}
-          data={{
-            selectedTeamsNumber: teamsSelected.length,
-            selectedGamesNumber: gamesSelected.length,
-            loadingTeams,
-            maxTeamsNumber,
-          }}
-        />
-        {!!gamesSelected.length && (
-          <GamesSelected
-            onAction={handleGamesSelection}
-            data={gamesSelected}
-            teamNumber={maxTeamsNumber > teamsSelected?.length ? teamsSelected.length : maxTeamsNumber}
-          />
-        )}
-        {!teamsSelected.length && <LoadingView />}
+        <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+          <ThemedView>
+            <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
+            <Buttons
+              onClicks={handleButtonClick}
+              data={{
+                selectedTeamsNumber: teamsSelected.length,
+                selectedGamesNumber: gamesSelected.length,
+                loadingTeams,
+                maxTeamsNumber,
+              }}
+            />
+            {!!gamesSelected.length && (
+              <GamesSelected
+                onAction={handleGamesSelection}
+                data={gamesSelected}
+                teamNumber={maxTeamsNumber > teamsSelected?.length ? teamsSelected.length : maxTeamsNumber}
+              />
+            )}
+            {!teamsSelected.length && <LoadingView />}
+            <table style={{ tableLayout: 'fixed', width: '100%' }}>
+              <tbody>
+                <tr>{displaySelectors()}</tr>
+              </tbody>
+            </table>
+          </ThemedView>
+        </div>
         <table style={{ tableLayout: 'fixed', width: '100%' }}>
           <tbody>
-            <tr>{displayTeamSelector()}</tr>
+            <tr>{displayGamesGrid()}</tr>
           </tbody>
         </table>
       </ScrollView>

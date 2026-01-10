@@ -44,6 +44,7 @@ export default function Accordion({
             showDate={showDate}
             showButtons={true}
             selected={isSelected}
+            disableSelection={true}
           />
         );
       });

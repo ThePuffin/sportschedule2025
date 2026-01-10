@@ -1,5 +1,6 @@
 import NoResults from '@/components/NoResults';
 import Selector from '@/components/Selector';
+import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getRandomTeamId, randomNumber } from '@/utils/utils';
 import { useFocusEffect } from 'expo-router';
@@ -104,7 +105,7 @@ export default function Schedule() {
   useEffect(() => {
     const updateDeviceType = () => {
       const { width } = Dimensions.get('window');
-      if (width <= 1075) {
+      if (width <= 768) {
         setIsSmallDevice(true);
       } else {
         setIsSmallDevice(false);
@@ -277,10 +278,56 @@ export default function Schedule() {
     return (
       <div key={`${teamSelected}-${teamSelected.length}`}>
         <ThemedView>
-          <div style={{ width: isSmallDevice ? '100%' : '50%', margin: '0 auto', alignContent: 'center' }}>
-            <Selector data={dataLeagues} onItemSelectionChange={handleLeagueSelectionChange} isClearable={false} />
-            <Selector data={dataTeams} onItemSelectionChange={handleTeamSelectionChange} isClearable={false} />
-            <Selector data={dataTeamsFilter} onItemSelectionChange={handleTeamFilterChange} isClearable={true} />
+          <div
+            style={{
+              width: '100%',
+              margin: '0 auto',
+              alignContent: 'center',
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+            }}
+          >
+            <ThemedView>
+              <div
+                style={
+                  !isSmallDevice
+                    ? { display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%' }
+                    : { width: '100%' }
+                }
+              >
+                <div style={{ width: !isSmallDevice ? '32%' : '100%' }}>
+                  <Selector
+                    data={dataLeagues}
+                    onItemSelectionChange={handleLeagueSelectionChange}
+                    isClearable={false}
+                  />
+                </div>
+                <div style={{ width: !isSmallDevice ? '32%' : '100%' }}>
+                  <Selector data={dataTeams} onItemSelectionChange={handleTeamSelectionChange} isClearable={false} />
+                </div>
+                {!isSmallDevice && (
+                  <div style={{ width: '4%', display: 'flex', justifyContent: 'center' }}>
+                    <div
+                      style={{
+                        backgroundColor: 'white',
+                        border: '1px solid black',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <ThemedText style={{ fontWeight: 'bold', color: 'black' }}>VS</ThemedText>
+                    </div>
+                  </div>
+                )}
+                <div style={{ width: !isSmallDevice ? '32%' : '100%' }}>
+                  <Selector data={dataTeamsFilter} onItemSelectionChange={handleTeamFilterChange} isClearable={true} />
+                </div>
+              </div>
+            </ThemedView>
           </div>
           {displayGamesCards(teamSelected, teamFilter)}
         </ThemedView>

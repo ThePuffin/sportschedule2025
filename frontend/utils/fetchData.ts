@@ -85,6 +85,31 @@ export const getCache = <T>(cacheKey: string): T | null => {
   }
 };
 
+export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: GameFormatted[] }> => {
+  const cacheKey = `games_hour_${date}`;
+  // 1 minute cache
+  if (isCacheValid(cacheKey, 1 / 60)) {
+    const cached = getCache<{ [key: string]: GameFormatted[] }>(cacheKey);
+    if (cached) return cached;
+  }
+
+  try {
+    const data = await retryFetch(() =>
+      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/hour/${date}`).then(
+        (res) => res.json() as Promise<{ [key: string]: GameFormatted[] }>
+      )
+    );
+    saveCache(cacheKey, data);
+    return data;
+  } catch (error) {
+    console.error(error);
+    // Fallback to stale cache if available
+    const staleCache = getCache<{ [key: string]: GameFormatted[] }>(cacheKey);
+    if (staleCache) return staleCache;
+    return {};
+  }
+};
+
 // Helper function to retry after delay
 const retryFetch = async <T>(fetchFn: () => Promise<T>, retries: number = 1, delayMs: number = 6000): Promise<T> => {
   try {
@@ -248,8 +273,11 @@ export const refreshTeams = async (): Promise<void> => {
 export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
   try {
     date = date || new Date().toISOString().split('T')[0];
-    const response = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`);
-    const dayGames = await response.json();
+    const dayGames = await retryFetch(() =>
+      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`).then(
+        (res) => res.json() as Promise<GameFormatted[]>
+      )
+    );
     return dayGames;
   } catch (error) {
     console.error(`Error fetching games for date ${date}:`, error);

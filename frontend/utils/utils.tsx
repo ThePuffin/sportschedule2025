@@ -101,6 +101,9 @@ export const translateWord = (word: string) => {
         yourFav: 'Vos équipes favorites',
         register: 'Sauvegarder',
         cancel: 'Annuler',
+        deleteSelection: 'Supprimer la sélection',
+        addColumn: 'Ajouter une colonne',
+        removeColumn: 'Supprimer une colonne',
       };
       break;
     case 'de':
@@ -120,6 +123,9 @@ export const translateWord = (word: string) => {
         yourFav: 'Deine Lieblingsteams',
         register: 'Speichern',
         cancel: 'Abbrechen',
+        deleteSelection: 'Auswahl löschen',
+        addColumn: 'Spalte hinzufügen',
+        removeColumn: 'Spalte entfernen',
       };
       break;
     case 'es':
@@ -139,6 +145,9 @@ export const translateWord = (word: string) => {
         yourFav: 'Tus equipos favoritos',
         register: 'Guardar',
         cancel: 'Cancelar',
+        deleteSelection: 'Eliminar selección',
+        addColumn: 'Añadir columna',
+        removeColumn: 'Eliminar columna',
       };
       break;
 
@@ -159,6 +168,9 @@ export const translateWord = (word: string) => {
         yourFav: 'Le tue squadre preferite',
         register: 'Salva',
         cancel: 'Annulla',
+        deleteSelection: 'Elimina selezione',
+        addColumn: 'Aggiungi colonna',
+        removeColumn: 'Rimuovi colonna',
       };
       break;
     case 'ja':
@@ -178,6 +190,9 @@ export const translateWord = (word: string) => {
         yourFav: 'お気に入りのチーム',
         register: '保存',
         cancel: 'キャンセル',
+        deleteSelection: '選択を削除',
+        addColumn: '列を追加',
+        removeColumn: '列を削除',
       };
       break;
     case 'ko':
@@ -196,7 +211,10 @@ export const translateWord = (word: string) => {
         ended: '종료됨',
         yourFav: '좋아하는 팀',
         register: '저장',
-        cancel: '취소'
+        cancel: '취소',
+        deleteSelection: '선택 삭제',
+        addColumn: '열 추가',
+        removeColumn: '열 제거',
       };
       break;
     case 'nl':
@@ -215,7 +233,10 @@ export const translateWord = (word: string) => {
         ended: 'Afgerond',
         yourFav: 'Je favoriete teams',
         register: 'Opslaan',
-        cancel: 'Annuleren'
+        cancel: 'Annuleren',
+        deleteSelection: 'Selectie verwijderen',
+        addColumn: 'Kolom toevoegen',
+        removeColumn: 'Kolom verwijderen',
       };
       break;
     case 'pt':
@@ -234,7 +255,10 @@ export const translateWord = (word: string) => {
         ended: 'Encerrado',
         yourFav: 'Seus times favoritos',
         register: 'Salvar',
-        cancel: 'Cancelar'
+        cancel: 'Cancelar',
+        deleteSelection: 'Excluir seleção',
+        addColumn: 'Adicionar coluna',
+        removeColumn: 'Remover coluna',
       };
       break;
     case 'ru':
@@ -253,7 +277,10 @@ export const translateWord = (word: string) => {
         ended: 'Завершено',
         yourFav: 'Ваши любимые команды',
         register: 'Сохранить',
-        cancel: 'Отмена'
+        cancel: 'Отмена',
+        deleteSelection: 'Удалить выделение',
+        addColumn: 'Добавить столбец',
+        removeColumn: 'Удалить столбец',
       };
       break;
     case 'zh':
@@ -272,7 +299,10 @@ export const translateWord = (word: string) => {
         ended: '已结束',
         yourFav: '你最喜欢的球队',
         register: '保存',
-        cancel: '取消'
+        cancel: '取消',
+        deleteSelection: '删除选择',
+        addColumn: '添加列',
+        removeColumn: '删除列',
       };
       break;
     default:
@@ -292,6 +322,9 @@ export const translateWord = (word: string) => {
         yourFav: 'Your favorite teams',
         register: 'Save',
         cancel: 'Cancel',
+        deleteSelection: 'Delete Selection',
+        addColumn: 'Add Column',
+        removeColumn: 'Remove Column',
       };
       break;
   }

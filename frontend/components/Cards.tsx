@@ -35,7 +35,8 @@ export default function Cards({
   onSelection = () => {},
   numberSelected = 0,
   selected: isSelected = false,
-}: Readonly<CardsProps>) {
+  disableSelection = false,
+}: Readonly<CardsProps & { disableSelection?: boolean }>) {
   const {
     homeTeam,
     awayTeam,
@@ -195,13 +196,19 @@ export default function Cards({
           <div
             role="button"
             tabIndex={0}
-            onClick={() => {
-              if (showButtons) generateICSFile(data);
+            onClick={(e) => {
+              if (showButtons) {
+                e.stopPropagation();
+                generateICSFile(data);
+              }
             }}
             onKeyDown={(e: any) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                if (showButtons) generateICSFile(data);
+                if (showButtons) {
+                  e.stopPropagation();
+                  generateICSFile(data);
+                }
               }
             }}
             aria-label="Generate ICS file"
@@ -239,13 +246,7 @@ export default function Cards({
   const renderTeamStar = () => (
     <View style={{ marginLeft: 5, justifyContent: 'center', alignItems: 'center' }}>
       <Icon name="star" type="font-awesome" size={12} color="#ffd900c0" />
-      <Icon
-        name="star"
-        type="font-awesome"
-        size={10}
-        color="#FFD700"
-        containerStyle={{ position: 'absolute' }}
-      />
+      <Icon name="star" type="font-awesome" size={10} color="#FFD700" containerStyle={{ position: 'absolute' }} />
     </View>
   );
 
@@ -268,19 +269,23 @@ export default function Cards({
             role="button"
             tabIndex={0}
             onClick={() => {
-              if (showDate && show) {
+              if (showDate && show && !disableSelection) {
                 onSelection(data);
               }
             }}
             onKeyDown={(e: any) => {
-              if ((e.key === 'Enter' || e.key === ' ') && showDate && show) {
+              if ((e.key === 'Enter' || e.key === ' ') && showDate && show && !disableSelection) {
                 e.preventDefault();
                 onSelection(data);
               }
             }}
             aria-disabled={!showDate}
             style={{
-              cursor: show ? 'pointer' : 'not-allowed',
+              cursor: show
+                ? (showDate || !showButtons || isSelected) && !disableSelection
+                  ? 'pointer'
+                  : 'default'
+                : 'not-allowed',
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
@@ -392,6 +397,7 @@ export default function Cards({
               }}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
             >
               <Icon
                 name="map-marker"
@@ -451,7 +457,7 @@ export default function Cards({
     <div className={cardClass}>
       <Card
         onClick={() => {
-          if (show && !showButtons) {
+          if (show && (!showButtons || isSelected) && !disableSelection) {
             onSelection(data);
           }
         }}
