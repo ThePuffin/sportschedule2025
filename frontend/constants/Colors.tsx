@@ -15,7 +15,7 @@ interface ThemeColors {
   tabIconSelected: string;
 }
 
-interface TeamColors {
+export interface TeamColors {
   color: string;
   backgroundColor: string;
 }

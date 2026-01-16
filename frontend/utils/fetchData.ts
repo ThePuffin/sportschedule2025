@@ -156,7 +156,9 @@ export const fetchLeagues = async (setLeaguesAvailable: (leagues: string[]) => v
 
   try {
     const leagues = await retryFetch(() =>
-      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`).then((res) => res.json() as Promise<string[]>)
+      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`, 60000).then(
+        (res) => res.json() as Promise<string[]>
+      )
     );
     setLeaguesAvailable(leagues);
     saveCache(cacheKey, leagues);
@@ -186,7 +188,7 @@ export const fetchTeams = async () => {
 
   try {
     const teams = await retryFetch(() =>
-      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams`).then((res) => res.json() as Promise<Team[]>)
+      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams`, 60000).then((res) => res.json() as Promise<Team[]>)
     );
     saveCache(cacheKey, teams);
     return teams;
@@ -233,7 +235,7 @@ export const fetchRemainingGamesByLeague = async (league: string, limit?: number
     if (limit) {
       url += `?maxResults=${limit}`;
     }
-    const data = await retryFetch(() => fetchWithTimeout(url).then((res) => res.json() as Promise<FilterGames>));
+    const data = await retryFetch(() => fetchWithTimeout(url, 60000).then((res) => res.json() as Promise<FilterGames>));
     return data;
   } catch (error: unknown) {
     console.error('Error fetching remaining games by league:', error);

@@ -34,17 +34,17 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="calendar"
-        options={{
-          title: translateWord('calendars'),
-          tabBarIcon: ({ color }) => <Icon size={28} name="calendar" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="schedule"
         options={{
           title: translateWord('remainingGames'),
           tabBarIcon: ({ color }) => <Icon size={28} name="table" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: translateWord('calendars'),
+          tabBarIcon: ({ color }) => <Icon size={28} name="calendar" color={color} />,
         }}
       />
     </Tabs>

@@ -65,7 +65,7 @@ const ActionButtonWithRef: React.ForwardRefRenderFunction<ActionButtonRef, Actio
     setFavoriteTeams(newTeams);
 
     saveCache('favoriteTeams', newTeams);
-    if (typeof window !== 'undefined') window.dispatchEvent(new Event('favoritesUpdated'));
+    if (globalThis.window !== undefined) globalThis.window.dispatchEvent(new Event('favoritesUpdated'));
   };
 
   return (

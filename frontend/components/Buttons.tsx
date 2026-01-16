@@ -12,7 +12,7 @@ export default function Buttons({
   const { selectedTeamsNumber, selectedGamesNumber, loadingTeams, maxTeamsNumber = 6 } = data;
 
   const disabledAdd = loadingTeams || selectedTeamsNumber >= maxTeamsNumber;
-  const disabledRemove = loadingTeams || selectedTeamsNumber <= 2;
+  const disabledRemove = loadingTeams || selectedTeamsNumber <= 1;
   const isGamesSelected = selectedGamesNumber > 0;
 
   return (

@@ -19,39 +19,30 @@ const IconButton: React.FC<ExtendedIconButtonProps> = ({
   text,
 }) => {
   const [iconSize, setIconSize] = useState<number>(24);
-  const [isHovered, setIsHovered] = useState(false);
   const [isLargeDevice, setIsLargeDevice] = useState(false);
 
   useEffect(() => {
     const updateSize = () => {
-      const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
+      const w = globalThis.window === undefined ? 1024 : globalThis.window.innerWidth;
       if (w <= 400) setIconSize(18);
       else if (w <= 800) setIconSize(26);
       else setIconSize(30);
       setIsLargeDevice(w > 768);
     };
     updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    globalThis.window?.addEventListener('resize', updateSize);
+    return () => globalThis.window?.removeEventListener('resize', updateSize);
   }, []);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disabled) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onPress && onPress();
-    }
-  };
-
-  const handleClick = () => {
-    if (disabled) return;
-    onPress && onPress();
+    onPress?.(e as any);
   };
 
   const showText = isLargeDevice && !!text;
 
   const containerStyle: React.CSSProperties = {
-    width: showText ? '100%' : isHovered && text ? 'auto' : 'clamp(48px, 20vw, 160px)',
+    width: showText ? '100%' : 'clamp(48px, 20vw, 160px)',
     flex: showText ? 1 : undefined,
     height: 'clamp(48px, 8vw, 60px)',
     borderRadius: 5,
@@ -65,7 +56,7 @@ const IconButton: React.FC<ExtendedIconButtonProps> = ({
     cursor: disabled ? 'not-allowed' : 'pointer',
     marginLeft: '1vw',
     marginRight: '1vw',
-    padding: showText || (isHovered && text) ? '0 10px' : 0,
+    padding: showText ? '0 10px' : 0,
   };
 
   return (
@@ -74,9 +65,6 @@ const IconButton: React.FC<ExtendedIconButtonProps> = ({
       tabIndex={disabled ? -1 : 0}
       aria-disabled={disabled}
       onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={containerStyle}
       title={text}
     >
@@ -95,9 +83,7 @@ const IconButton: React.FC<ExtendedIconButtonProps> = ({
             color={iconColor}
           />
         )}
-        {(showText || (isHovered && text)) && (
-          <span style={{ color: iconColor, fontWeight: 'bold', whiteSpace: 'nowrap' }}>{text}</span>
-        )}
+        {showText && <span style={{ color: iconColor, fontWeight: 'bold', whiteSpace: 'nowrap' }}>{text}</span>}
       </div>
     </div>
   );

@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "prestart": "node updateLeagues.js",
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "prestart:frontend": "node updateLeagues.js",
     "start:frontend": "npx react-native start",
     "start:backend": "nest start"
   },

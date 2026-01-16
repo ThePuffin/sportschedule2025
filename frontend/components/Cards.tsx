@@ -1,32 +1,13 @@
-import { League, timeDurationEnum } from '@/constants/enum';
+import { League, leagueLogos, timeDurationEnum } from '@/constants/enum';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Image, ImageSourcePropType, Text, View } from 'react-native';
+import { Dimensions, Image, Text, View } from 'react-native';
 import { Colors, TeamColors } from '../constants/Colors';
 import { getCache } from '../utils/fetchData';
 import { CardsProps } from '../utils/types';
 import { generateICSFile, translateWord } from '../utils/utils';
 const defaultLogo = require('../assets/images/default_logo.png');
-
-interface LeagueLogosType {
-  [key: string]: ImageSourcePropType;
-}
-
-const leagueLogos: LeagueLogosType = {
-  MLB: require('../assets/images/MLB.png'),
-  NBA: require('../assets/images/NBA.png'),
-  NFL: require('../assets/images/NFL.png'),
-  NHL: require('../assets/images/NHL.png'),
-  WNBA: require('../assets/images/WNBA.png'),
-  PWHL: require('../assets/images/PWHL.png'),
-  MLS: require('../assets/images/MLS.png'),
-  NCAAF: require('../assets/images/ncaa-football.png'),
-  NCAAB: require('../assets/images/ncaa-basketball.png'),
-  NCCABB: require('../assets/images/ncaa-baseball.png'),
-  WNCAAB: require('../assets/images/ncaa-basketball-woman.png'),
-  DEFAULT: require('../assets/images/DEFAULT.png'),
-};
 
 export default function Cards({
   data,
@@ -81,6 +62,7 @@ export default function Cards({
   const [teamNameAway, setTeamNameAway] = useState(awayTeam);
   const [isSmallDevice, setIsSmallDevice] = useState(false);
   const [fontSize, setFontSize] = useState('1rem');
+  const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
     const updateDeviceType = () => {
@@ -88,9 +70,12 @@ export default function Cards({
       setTeamNameHome(homeTeam);
       setTeamNameAway(awayTeam);
       if (width <= 1075) {
-        if (numberSelected > 2) {
-          setTeamNameHome(homeTeamShort);
-          setTeamNameAway(awayTeamShort);
+        if (width <= 768) {
+          setTeamNameHome(homeTeam);
+          setTeamNameAway(awayTeam);
+        } else {
+          setTeamNameHome(homeTeamShort || homeTeam);
+          setTeamNameAway(awayTeamShort || awayTeam);
         }
         setIsSmallDevice(true);
         setFontSize('0.75rem');
@@ -175,7 +160,7 @@ export default function Cards({
         }
       : {};
 
-  const displayTitle = () => {
+  const renderTitleContent = () => {
     const now = new Date();
     const todayEnd = new Date(data.startTimeUTC);
     todayEnd.setHours(todayEnd.getHours() + timeDurationEnum[data.league as keyof typeof timeDurationEnum]);
@@ -192,55 +177,55 @@ export default function Cards({
 
     if (arenaName && arenaName !== '') {
       return (
-        <Card.Title style={{ ...cardClass }}>
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            if (showButtons) {
+              e.stopPropagation();
+              generateICSFile(data);
+            }
+          }}
+          onKeyDown={(e: any) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
               if (showButtons) {
                 e.stopPropagation();
                 generateICSFile(data);
               }
-            }}
-            onKeyDown={(e: any) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                if (showButtons) {
-                  e.stopPropagation();
-                  generateICSFile(data);
-                }
-              }
-            }}
-            aria-label="Generate ICS file"
-            style={{
-              cursor: 'pointer',
-              textDecoration: showButtons ? 'underline' : 'none',
-              color: 'inherit',
-              backgroundColor: 'inherit',
-              border: 'none',
-              font: 'inherit',
-              padding: 0,
-              margin: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: isSmallDevice ? 5 : 10,
-            }}
-          >
-            {showButtons && (
-              <Icon
-                name="calendar"
-                type="font-awesome"
-                style={{ paddingRight: isSmallDevice ? 5 : 10 }}
-                size={isSmallDevice ? 10 : 15}
-                color={colorTeam?.color}
-              />
-            )}
-            {displayDate}
-          </div>
-        </Card.Title>
+            }
+          }}
+          aria-label="Generate ICS file"
+          style={{
+            cursor: 'pointer',
+            textDecoration: showButtons ? 'underline' : 'none',
+            color: 'inherit',
+            backgroundColor: 'inherit',
+            border: 'none',
+            font: 'inherit',
+            padding: 0,
+            margin: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: isSmallDevice ? 5 : 10,
+            justifyContent: 'center',
+            width: '100%',
+          }}
+        >
+          {showButtons && (
+            <Icon
+              name="calendar"
+              type="font-awesome"
+              style={{ paddingRight: isSmallDevice ? 5 : 10 }}
+              size={isSmallDevice ? 10 : 15}
+              color={colorTeam?.color}
+            />
+          )}
+          {displayDate}
+        </div>
       );
     }
-    return <Card.Title style={{ fontSize }}>{gameDate}</Card.Title>;
+    return gameDate;
   };
 
   const renderTeamStar = () => (
@@ -253,16 +238,8 @@ export default function Cards({
   const displayContent = () => {
     if (homeTeam && awayTeam) {
       const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
-      let shortArenaName = arenaName;
-      if (numberSelected > 1) {
-        shortArenaName =
-          arenaName && numberSelected > 3 && arenaName.length > 5 ? arenaName.split(' ')[0] + ' ...' : arenaName || '';
-        shortArenaName = isSmallDevice ? shortArenaName.split(' ').slice(0, -1).join(' ') : shortArenaName;
-        shortArenaName =
-          isSmallDevice && shortArenaName.length > 7 && numberSelected > 5
-            ? shortArenaName.slice(0, 6) + ' ...'
-            : shortArenaName;
-      }
+      const showAwayStar = (!showButtons || !isFavorite) && favoriteTeams.includes(awayTeamId);
+      const showHomeStar = (!showButtons || !isFavorite) && favoriteTeams.includes(homeTeamId);
       return (
         <View>
           <div
@@ -331,13 +308,19 @@ export default function Cards({
               )}
             </div>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold' }}>{teamNameAway}</Text>
-              {(!showButtons || !isFavorite) && favoriteTeams.includes(awayTeamId) && renderTeamStar()}
+              {showAwayStar && <View style={{ width: 17 }} />}
+              <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold', textAlign: 'center' }}>
+                {teamNameAway}
+              </Text>
+              {showAwayStar && renderTeamStar()}
             </View>
             <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold' }}>@</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold' }}>{teamNameHome}</Text>
-              {(!showButtons || !isFavorite) && favoriteTeams.includes(homeTeamId) && renderTeamStar()}
+              {showHomeStar && <View style={{ width: 17 }} />}
+              <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold', textAlign: 'center' }}>
+                {teamNameHome}
+              </Text>
+              {showHomeStar && renderTeamStar()}
             </View>
 
             {/* Home Team Logo Container */}
@@ -383,6 +366,8 @@ export default function Cards({
               alignItems: 'center',
               flexDirection: 'column',
               height: 20,
+              width: '100%',
+              paddingHorizontal: 5,
             }}
           >
             <a
@@ -394,6 +379,9 @@ export default function Cards({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 5,
+                width: '100%',
+                overflow: 'hidden',
+                justifyContent: 'center',
               }}
               target="_blank"
               rel="noopener noreferrer"
@@ -411,12 +399,11 @@ export default function Cards({
                   textOverflow: 'ellipsis',
                   overflow: 'hidden',
                   whiteSpace: 'nowrap',
-                  width: '100%',
                   margin: 0,
                   padding: 0,
                 }}
               >
-                {arenaName ? shortArenaName : 'Stadium not found'}
+                {arenaName || 'Stadium not found'}
               </span>
             </a>
           </Text>
@@ -433,25 +420,30 @@ export default function Cards({
     );
   };
 
-  const renderIcon = (name: string, iconColor: string, right: number) => (
+  const renderIcon = (name: string, iconColor: string) => (
     <View
       style={{
-        position: 'absolute',
-        top: -10,
-        right,
-        zIndex: 10,
+        marginLeft: 5,
+        width: 22,
+        height: 22,
       }}
     >
-      <Icon
-        name={name}
-        type="font-awesome"
-        color="#000"
-        size={22}
-        containerStyle={{ position: 'absolute', top: -1, left: -1 }}
-      />
       <Icon name={name} type="font-awesome" color={iconColor} size={20} />
     </View>
   );
+
+  const renderActionIcons = () => (
+    <View style={{ flexDirection: 'row' }}>
+      {show &&
+        (isSelected || isSelectable) &&
+        !(isFavorite && isCardSelected) &&
+        renderIcon(isSelected ? 'check-square' : 'plus-square-o', colorTeam?.color || 'white')}
+      {isFavorite && renderIcon('star', '#FFD700')}
+    </View>
+  );
+
+  const hasLeagueLogo = !!startTimeUTC && !showDate;
+  const isWideLayout = !isSmallDevice && containerWidth > 320;
 
   return (
     <div className={cardClass}>
@@ -471,39 +463,64 @@ export default function Cards({
         }}
         wrapperStyle={cardClass}
       >
-        {!!startTimeUTC && !showDate && (
-          <Image
-            source={leagueLogos[league as keyof typeof leagueLogos] || leagueLogos.DEFAULT}
-            style={{
-              height: 20,
-              width: 40,
-              resizeMode: 'contain',
-              position: 'absolute',
-              top: -10,
-              left: -10,
-              backgroundColor: league === League.WNBA ? '#F0F0F0' : 'transparent',
-            }}
-            accessibilityLabel={`${league} logo`}
-          />
-        )}
-        {isFavorite && renderIcon('star', '#FFD700', -10)}
-        {show &&
-          (isSelected || isSelectable) &&
-          !(isFavorite && isCardSelected) &&
-          renderIcon(isSelected ? 'check-square' : 'plus-square-o', colorTeam?.color || 'white', isFavorite ? 15 : -10)}
-        <Card.Title
+        <View
+          onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
           style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: showDate ? '' : 'flex',
-            whiteSpace: showDate ? '' : 'nowrap',
-            alignItems: showDate ? '' : 'center',
-            justifyContent: showDate ? '' : 'center',
+            flexDirection: isWideLayout ? 'row' : 'column',
+            justifyContent: isWideLayout ? 'space-between' : 'center',
+            alignItems: isWideLayout ? 'center' : 'stretch',
+            marginBottom: 5,
+            marginTop: -10,
+            marginLeft: -10,
+            marginRight: -10,
+            minHeight: 30,
           }}
         >
-          {displayTitle()}
-        </Card.Title>
-        <Card.Divider style={{ backgroundColor: colorTeam?.color }} />
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              marginBottom: isWideLayout ? 0 : 5,
+            }}
+          >
+            <View>
+              {hasLeagueLogo && (
+                <Image
+                  source={leagueLogos[league as keyof typeof leagueLogos] || leagueLogos.DEFAULT}
+                  style={{
+                    height: 20,
+                    width: 40,
+                    resizeMode: 'contain',
+                    backgroundColor: league === League.WNBA ? '#F0F0F0' : 'transparent',
+                  }}
+                  accessibilityLabel={`${league} logo`}
+                />
+              )}
+            </View>
+            {!isWideLayout && renderActionIcons()}
+          </View>
+
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Card.Title
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: showDate ? '' : 'flex',
+                whiteSpace: showDate ? '' : 'nowrap',
+                alignItems: showDate ? '' : 'center',
+                justifyContent: showDate ? '' : 'center',
+                marginBottom: 0,
+                ...(arenaName && arenaName !== '' ? cardClass : { fontSize }),
+              }}
+            >
+              {renderTitleContent()}
+            </Card.Title>
+          </View>
+
+          {isWideLayout && renderActionIcons()}
+        </View>
+        <Card.Divider style={{ backgroundColor: colorTeam?.color, marginBottom: 5 }} />
         {displayContent()}
       </Card>
     </div>

@@ -1,10 +1,12 @@
 import Selector from '@/components/Selector';
+import { LeaguesEnum } from '@/constants/Leagues';
 import { TeamsEnum } from '@/constants/Teams';
-import { getCache } from '@/utils/fetchData';
+import { fetchLeagues, getCache, saveCache } from '@/utils/fetchData';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
+import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const maxFavorites = 5;
 
@@ -21,11 +23,33 @@ const FavModal = ({
 }) => {
   const [isSmallDevice, setIsSmallDevice] = useState(Dimensions.get('window').width < 768);
   const [localFavorites, setLocalFavorites] = useState<string[]>(favoriteTeams);
+  const [localLeagues, setLocalLeagues] = useState<string[]>([]);
+  const [allLeagues, setAllLeagues] = useState<string[]>(() => {
+    const cached = getCache<string[]>('allLeagues');
+    return cached && cached.length > 0 ? cached : Object.values(LeaguesEnum);
+  });
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       const cached = getCache<string[]>('favoriteTeams');
       setLocalFavorites(cached || favoriteTeams);
+
+      const cachedLeagues = getCache<string[]>('leaguesSelected');
+      if (cachedLeagues && cachedLeagues.length > 0) {
+        setLocalLeagues(cachedLeagues);
+      } else {
+        setLocalLeagues(Object.values(LeaguesEnum));
+      }
+
+      fetchLeagues((leagues: string[]) => {
+        const filtered = leagues.filter((l) => l !== 'ALL');
+        setAllLeagues(filtered);
+        saveCache('allLeagues', filtered);
+        const cachedLeagues = getCache<string[]>('leaguesSelected');
+        // Si pas de cache, on sélectionne tout par défaut
+        setLocalLeagues(cachedLeagues && cachedLeagues.length > 0 ? cachedLeagues : filtered);
+      });
     }
   }, [isOpen]);
 
@@ -71,48 +95,170 @@ const FavModal = ({
 
   const handleSave = () => {
     onSave(localFavorites);
+    saveCache('leaguesSelected', localLeagues);
     if (globalThis.window !== undefined) {
       globalThis.window.dispatchEvent(new Event('favoritesUpdated'));
+      globalThis.window.dispatchEvent(new Event('leaguesUpdated'));
     }
     onClose();
   };
 
-  return (
-    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.centeredView} onPress={onClose}>
-        <Pressable style={[styles.modalView, isSmallDevice && { width: '90%' }]} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.modalText}>{translateWord('yourFav')}:</Text>
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
 
+  const handleDragOver = (e: any) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (index: number) => {
+    if (draggedIndex === null || draggedIndex === index) return;
+    const newFavorites = [...localFavorites];
+    const item = newFavorites[draggedIndex];
+    newFavorites.splice(draggedIndex, 1);
+    newFavorites.splice(index, 0, item);
+    setLocalFavorites(newFavorites);
+    setDraggedIndex(null);
+  };
+
+  const moveItem = (index: number, direction: -1 | 1) => {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= localFavorites.length) return;
+    const newFavorites = [...localFavorites];
+    const item = newFavorites[index];
+    newFavorites.splice(index, 1);
+    newFavorites.splice(newIndex, 0, item);
+    setLocalFavorites(newFavorites);
+  };
+
+  const hasFavorites = favoriteTeams.length > 0;
+  const hasSelection = localFavorites.some((t) => !!t);
+
+  return (
+    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => hasFavorites && onClose()}>
+      <Pressable style={styles.centeredView} onPress={() => hasFavorites && onClose()}>
+        <Pressable
+          style={[styles.modalView, isSmallDevice && { width: '90%', maxHeight: '90%' }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text style={styles.modalText}>{translateWord('leagueSurveilled')}:</Text>
+
+          <View style={{ marginBottom: 15, zIndex: 20, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ marginRight: 5, width: 20 }} />
+            <View style={{ flex: 1 }}>
+              <Selector
+                key={`league-selector-${isOpen}`}
+                data={{
+                  i: 999,
+                  items: allLeagues,
+                  itemsSelectedIds: localLeagues,
+                  itemSelectedId: '',
+                }}
+                onItemSelectionChange={(ids) => {
+                  const newIds = Array.isArray(ids) ? ids : [];
+                  if (newIds.length > 0) setLocalLeagues(newIds);
+                }}
+                allowMultipleSelection={true}
+                isClearable={false}
+                placeholder={translateWord('filterLeagues')}
+                startOpen={!hasFavorites}
+              />
+            </View>
+          </View>
+
+          <Text style={styles.modalText}>{translateWord('yourFav')}:</Text>
           <View style={styles.selector}>
             {Array.from({ length: Math.min(localFavorites.filter((t) => !!t).length + 1, maxFavorites) }).map(
               (_, index) => {
                 const selectedId = localFavorites[index] || '';
                 const filteredItems = teamsForFavorites.filter(
-                  (team) => !localFavorites.includes(team.uniqueId) || team.uniqueId === selectedId
+                  (team) =>
+                    (!localFavorites.includes(team.uniqueId) || team.uniqueId === selectedId) &&
+                    (localLeagues.length === 0 || localLeagues.includes(team.league))
                 );
+                const isFilled = !!selectedId;
+                const countFilled = localFavorites.filter((t) => !!t).length;
+
                 return (
-                  <Selector
+                  <div
                     key={selectedId || 'new-entry'}
-                    data={{
-                      i: index,
-                      items: filteredItems,
-                      itemsSelectedIds: selectedId ? [selectedId] : [],
-                      itemSelectedId: selectedId,
-                    }}
-                    onItemSelectionChange={(id) => handleSelection(index, id)}
-                    allowMultipleSelection={false}
-                    isClearable={true}
-                  />
+                    draggable={!!selectedId}
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop(index)}
+                    onDragEnd={() => setDraggedIndex(null)}
+                    style={{ cursor: selectedId ? 'grab' : 'default' }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        zIndex: 100 - index,
+                        opacity: draggedIndex === index ? 0.5 : 1,
+                      }}
+                    >
+                      <View style={{ marginRight: 5, width: 20, alignItems: 'center' }}>
+                        {isFilled &&
+                          (isSmallDevice ? (
+                            <View>
+                              {index > 0 && (
+                                <TouchableOpacity onPress={() => moveItem(index, -1)}>
+                                  <Icon
+                                    name="chevron-up"
+                                    type="font-awesome"
+                                    size={14}
+                                    color="#333"
+                                    style={{ marginBottom: 2 }}
+                                  />
+                                </TouchableOpacity>
+                              )}
+                              {index < countFilled - 1 && (
+                                <TouchableOpacity onPress={() => moveItem(index, 1)}>
+                                  <Icon
+                                    name="chevron-down"
+                                    type="font-awesome"
+                                    size={14}
+                                    color="#333"
+                                    style={{ marginTop: 2 }}
+                                  />
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          ) : (
+                            <Icon name="bars" type="font-awesome" size={14} color="#ccc" />
+                          ))}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Selector
+                          data={{
+                            i: index,
+                            items: filteredItems,
+                            itemsSelectedIds: selectedId ? [selectedId] : [],
+                            itemSelectedId: selectedId,
+                          }}
+                          onItemSelectionChange={(id) => handleSelection(index, id)}
+                          allowMultipleSelection={false}
+                          isClearable={true}
+                          placeholder={translateWord('findTeam')}
+                        />
+                      </View>
+                    </View>
+                  </div>
                 );
               }
             )}
           </View>
 
           <View style={styles.buttonsContainer}>
-            <Pressable style={[styles.button, styles.buttonClose, styles.buttonCancel]} onPress={onClose}>
-              <Text style={[styles.textStyle, styles.textStyleCancel]}>{translateWord('cancel')}</Text>
-            </Pressable>
-            <Pressable style={[styles.button, styles.buttonClose]} onPress={handleSave}>
+            {hasFavorites && (
+              <Pressable style={[styles.button, styles.buttonClose, styles.buttonCancel]} onPress={onClose}>
+                <Text style={[styles.textStyle, styles.textStyleCancel]}>{translateWord('cancel')}</Text>
+              </Pressable>
+            )}
+            <Pressable
+              style={[styles.button, styles.buttonClose, !hasSelection && { opacity: 0.5 }]}
+              onPress={() => hasSelection && handleSave()}
+            >
               <Text style={styles.textStyle}>{translateWord('register')}</Text>
             </Pressable>
           </View>

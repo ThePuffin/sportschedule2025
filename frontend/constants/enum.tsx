@@ -28,7 +28,7 @@ export enum ButtonsKind {
 
 export const emoticonEnum = {
   NHL: '🏒',
-  PWHL: '⚫',
+  PWHL: '⛸️',
   NFL: '🏈',
   NCAAF: '🏈',
   MLB: '⚾',
@@ -47,9 +47,24 @@ export const timeDurationEnum = {
   NCAAF: 3.5,
   MLB: 2.75,
   NCCABB: 2.75,
-  NBA: 2.5,
-  NCAAB: 2.5,
-  WNCAAB: 2.5,
-  WNBA: 2.5,
-  MLS: 2,
+  NBA: 2.75,
+  NCAAB: 2.75,
+  WNCAAB: 2.75,
+  WNBA: 2.75,
+  MLS: 2.25,
+};
+
+export const leagueLogos = {
+  MLB: require('../assets/images/MLB.png'),
+  NBA: require('../assets/images/NBA.png'),
+  NFL: require('../assets/images/NFL.png'),
+  NHL: require('../assets/images/NHL.png'),
+  WNBA: require('../assets/images/WNBA.png'),
+  PWHL: require('../assets/images/PWHL.png'),
+  MLS: require('../assets/images/MLS.png'),
+  NCAAF: require('../assets/images/ncaa-football.png'),
+  NCAAB: require('../assets/images/ncaa-basketball.png'),
+  NCCABB: require('../assets/images/ncaa-baseball.png'),
+  WNCAAB: require('../assets/images/ncaa-basketball-woman.png'),
+  DEFAULT: require('../assets/images/DEFAULT.png'),
 };

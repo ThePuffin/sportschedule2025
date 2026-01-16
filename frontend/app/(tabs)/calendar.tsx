@@ -3,7 +3,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Dimensions, ScrollView } from 'react-native';
+import { Dimensions, ScrollView, useWindowDimensions } from 'react-native';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import Buttons from '../../components/Buttons';
 import Cards from '../../components/Cards';
@@ -13,7 +13,7 @@ import Selector from '../../components/Selector';
 import { ButtonsKind } from '../../constants/enum';
 import { addDays, readableDate } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
-import { addNewTeamId, randomNumber, removeLastTeamId } from '../../utils/utils';
+import { addNewTeamId, randomNumber, removeLastTeamId, translateWord } from '../../utils/utils';
 const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
@@ -26,6 +26,34 @@ export default function Calendar() {
   const [maxTeamsNumber, setMaxTeamsNumber] = useState(6);
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
+  const [allowedLeagues, setAllowedLeagues] = useState<string[]>([]);
+  const { width } = useWindowDimensions();
+  const isSmallDevice = width <= 768;
+
+  useEffect(() => {
+    const updateLeagues = () => {
+      const stored = getCache<string[]>('leaguesSelected');
+      setAllowedLeagues(stored || []);
+    };
+    updateLeagues();
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('leaguesUpdated', updateLeagues);
+      return () => globalThis.window.removeEventListener('leaguesUpdated', updateLeagues);
+    }
+  }, []);
+
+  useEffect(() => {
+    const updateDeviceType = () => {
+      const { width } = Dimensions.get('window');
+      if (width <= 1075) {
+        setMaxTeamsNumber(6);
+      } else {
+        setMaxTeamsNumber(8);
+      }
+    };
+
+    updateDeviceType();
+  }, []);
 
   const beginDate = new Date();
   beginDate.setHours(23, 59, 59, 999);
@@ -107,7 +135,8 @@ export default function Calendar() {
   };
 
   const getStoredTeams = () => {
-    const selection = getCache<Team[]>('teamsSelected')?.map((team) => team.uniqueId) ?? [];
+    const cachedTeams = getCache<Team[]>('teamsSelected');
+    const selection = cachedTeams?.map((team) => team.uniqueId) ?? [];
     if (selection.length > 0) {
       storeTeamsSelected(selection);
 
@@ -118,7 +147,9 @@ export default function Calendar() {
       const gamesSelectedFromStorage = storedGamesSelected.filter((game) => game.gameDate >= today);
       setGamesSelected(gamesSelectedFromStorage);
       saveCache('gameSelected', gamesSelectedFromStorage);
-      setTeams(selection);
+      if (cachedTeams) {
+        setTeams(cachedTeams);
+      }
     } else {
       setTeamsSelected(selection);
     }
@@ -140,7 +171,7 @@ export default function Calendar() {
   const getGamesFromApi = async (
     startDate: string | undefined = undefined,
     endDate: string | undefined = undefined
-  ): Promise<FilterGames> => {
+  ): Promise<void> => {
     if (teamsSelected && teamsSelected.length !== 0) {
       let start = readableDate(dateRange.startDate);
       let end = readableDate(dateRange.endDate);
@@ -160,10 +191,8 @@ export default function Calendar() {
         setGames(gamesData);
       } catch (error) {
         console.error(error);
-        return {};
       }
     }
-    return {};
   };
 
   const storeTeamsSelected = (teamsSelected: string[]) => {
@@ -198,11 +227,20 @@ export default function Calendar() {
     let newTeamsSelected;
     let newGamesSelected;
     switch (clickedButton) {
-      case ButtonsKind.ADDTEAM:
-        newTeamsSelected = addNewTeamId(teamsSelected, teams);
+      case ButtonsKind.ADDTEAM: {
+        const favoriteTeams = getCache<string[]>('favoriteTeams') || [];
+        const nextFavorite = favoriteTeams.find(
+          (fav) => !teamsSelected.includes(fav) && fav !== '' && teams.some((t) => t.uniqueId === fav)
+        );
+        if (nextFavorite) {
+          newTeamsSelected = [...teamsSelected, nextFavorite];
+        } else {
+          newTeamsSelected = addNewTeamId(teamsSelected, teams);
+        }
         storeTeamsSelected(newTeamsSelected);
         getGamesFromApi();
         break;
+      }
       case ButtonsKind.REMOVETEAM:
         newTeamsSelected = removeLastTeamId(teamsSelected);
         storeTeamsSelected(newTeamsSelected);
@@ -239,11 +277,21 @@ export default function Calendar() {
 
   const displaySelectors = () => {
     return teamsSelected.map((teamSelectedId, i) => {
-      const data = { i, items: teams, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
+      const teamsAvailable = teams.filter(
+        (team) =>
+          (!teamsSelected.includes(team.uniqueId) || team.uniqueId === teamSelectedId) &&
+          (allowedLeagues.length === 0 || allowedLeagues.includes(team.league))
+      );
+      const data = { i, items: teamsAvailable, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
       return (
         <td key={`selector-${teamSelectedId}-${teamsSelected.length}`}>
           <ThemedView>
-            <Selector data={data} onItemSelectionChange={handleTeamSelectionChange} isClearable={false} />
+            <Selector
+              data={data}
+              onItemSelectionChange={handleTeamSelectionChange}
+              isClearable={false}
+              placeholder={translateWord('filterTeams')}
+            />
           </ThemedView>
         </td>
       );
@@ -262,7 +310,7 @@ export default function Calendar() {
 
   const displayGamesCards = (teamSelectedId: string) => {
     if (games) {
-      const days = Object.keys(games) || [];
+      const days = Object.keys(games);
       if (days.length) {
         return days.map((day: string) => {
           const game = games[day].find((game: GameFormatted) => game.teamSelectedId === teamSelectedId);
@@ -315,20 +363,9 @@ export default function Calendar() {
       }
       fetchGames();
     }
-  }, [teamsSelected]);
+  }, [teamsSelected, teams]);
 
-  useEffect(() => {
-    const updateDeviceType = () => {
-      const { width } = Dimensions.get('window');
-      if (width <= 1075) {
-        setMaxTeamsNumber(6);
-      } else {
-        setMaxTeamsNumber(8);
-      }
-    };
-
-    updateDeviceType();
-  }, []);
+  const widthStyle = teamsSelected.length === 1 && !isSmallDevice ? '50%' : '100%';
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -337,9 +374,18 @@ export default function Calendar() {
         onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
         scrollEventThrottle={16}
       >
+        {!!gamesSelected.length && (
+          <GamesSelected
+            onAction={handleGamesSelection}
+            data={gamesSelected}
+            teamNumber={maxTeamsNumber > teamsSelected?.length ? teamsSelected.length : maxTeamsNumber}
+          />
+        )}
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView>
-            <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
+            <div style={{ position: 'relative', zIndex: 20 }}>
+              <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
+            </div>
             <Buttons
               onClicks={handleButtonClick}
               data={{
@@ -349,22 +395,23 @@ export default function Calendar() {
                 maxTeamsNumber,
               }}
             />
-            {!!gamesSelected.length && (
-              <GamesSelected
-                onAction={handleGamesSelection}
-                data={gamesSelected}
-                teamNumber={maxTeamsNumber > teamsSelected?.length ? teamsSelected.length : maxTeamsNumber}
-              />
-            )}
-            {!teamsSelected.length && <LoadingView />}
-            <table style={{ tableLayout: 'fixed', width: '100%' }}>
+            <table
+              style={{
+                tableLayout: 'fixed',
+                width: widthStyle,
+                margin: 'auto',
+                position: 'relative',
+                zIndex: 5,
+              }}
+            >
               <tbody>
                 <tr>{displaySelectors()}</tr>
               </tbody>
             </table>
           </ThemedView>
         </div>
-        <table style={{ tableLayout: 'fixed', width: '100%' }}>
+        {!teamsSelected.length && <LoadingView />}
+        <table style={{ tableLayout: 'fixed', width: widthStyle, margin: 'auto' }}>
           <tbody>
             <tr>{displayGamesGrid()}</tr>
           </tbody>
