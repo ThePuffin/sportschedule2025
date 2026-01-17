@@ -1,5 +1,4 @@
 import NoResults from '@/components/NoResults';
-import { ThemedText } from '@/components/ThemedText';
 import { ListItem } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
 import Cards from './Cards';
@@ -15,30 +14,30 @@ export default function Accordion({
   showDate = false,
   disableToggle = false,
   gamesSelected = [],
-}: Readonly<AccordionProps>) {
-  const [expanded, setExpanded] = useState(disableToggle ? true : open ?? i === 0);
+  onRetry,
+}: Readonly<AccordionProps & { onRetry?: () => void }>) {
+  const [expanded, setExpanded] = useState(disableToggle ? true : (open ?? i === 0));
 
   // Synchronize internal expanded state with the 'open' prop
   useEffect(() => {
-    setExpanded(disableToggle ? true : open ?? i === 0);
+    setExpanded(disableToggle ? true : (open ?? i === 0));
   }, [open, disableToggle, i]);
 
   const makeCards = () => {
     if (!gamesFiltred?.length) {
-      return <ThemedText>There are no games today</ThemedText>;
+      return <NoResults onRetry={onRetry} />;
     }
     if (gamesFiltred.length) {
       return gamesFiltred.map((game) => {
-        const gameId = game._id ?? Math.random();
         const isSelected = gamesSelected.some(
-          (gameSelect) => game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC
+          (gameSelect) => game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
         );
-        return (
+          return (
           <Cards
             onSelection={() => {
               return;
             }}
-            key={gameId}
+            key={`${game.homeTeamId}-${game.startTimeUTC}`}
             data={game}
             numberSelected={1}
             showDate={showDate}
@@ -49,7 +48,7 @@ export default function Accordion({
         );
       });
     }
-    return <NoResults />;
+    return <NoResults onRetry={onRetry} />;
   };
 
   return (

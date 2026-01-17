@@ -7,9 +7,11 @@ export interface GameFormatted {
   awayTeam: string;
   awayTeamShort: string;
   awayTeamLogo: string;
+  awayTeamScore: number | null;
   homeTeamId: string;
   homeTeam: string;
   homeTeamShort: string;
+  homeTeamScore: number | null;
   homeTeamLogo: string;
   arenaName: string;
   placeName: string;

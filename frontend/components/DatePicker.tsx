@@ -148,8 +148,10 @@ export default function DateRangePicker({
   };
 
   const minDate = new Date();
+  // Allow selecting dates up to 6 months before today
+  minDate.setMonth(minDate.getMonth() - 6);
   const maxDate = new Date();
-  maxDate.setFullYear(minDate.getFullYear() + 1);
+  maxDate.setFullYear(maxDate.getFullYear() + 1);
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', zIndex: 100, width: '100%', margin: '10px 0' }}>

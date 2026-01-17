@@ -1,9 +1,18 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { translateWord } from '@/utils/utils';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
-export default function NoResults() {
+export default function NoResults({ onRetry }: { onRetry?: () => void }) {
+  const hasRetried = useRef(false);
+
+  useEffect(() => {
+    if (onRetry && !hasRetried.current) {
+      onRetry();
+      hasRetried.current = true;
+    }
+  }, [onRetry]);
+
   return (
     <ThemedView
       style={{

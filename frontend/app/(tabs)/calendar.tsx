@@ -2,7 +2,7 @@ import DateRangePicker from '@/components/DatePicker';
 import { ThemedView } from '@/components/ThemedView';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, ScrollView, useWindowDimensions } from 'react-native';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import Buttons from '../../components/Buttons';
@@ -24,6 +24,7 @@ export default function Calendar() {
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [maxTeamsNumber, setMaxTeamsNumber] = useState(6);
+  const [teamIdToOpen, setTeamIdToOpen] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [allowedLeagues, setAllowedLeagues] = useState<string[]>([]);
@@ -54,6 +55,14 @@ export default function Calendar() {
 
     updateDeviceType();
   }, []);
+
+  const filteredTeamsSelected = useMemo(() => {
+    if (allowedLeagues.length === 0) return teamsSelected;
+    return teamsSelected.filter((teamId) => {
+      const team = teams.find((t) => t.uniqueId === teamId);
+      return team ? allowedLeagues.includes(team.league) : true;
+    });
+  }, [teamsSelected, allowedLeagues, teams]);
 
   const beginDate = new Date();
   beginDate.setHours(23, 59, 59, 999);
@@ -113,8 +122,9 @@ export default function Calendar() {
           }
         }
       }
+      const availableTeams = allTeams.filter((t) => allowedLeagues.length === 0 || allowedLeagues.includes(t.league));
       while (selection.length < 2) {
-        addNewTeamId(selection, allTeams);
+        addNewTeamId(selection, availableTeams);
       }
     }
     storeTeamsSelected(selection);
@@ -211,6 +221,7 @@ export default function Calendar() {
   };
 
   const handleTeamSelectionChange = (teamSelectedId: string | string[], i: number) => {
+    setTeamIdToOpen(null);
     if (typeof teamSelectedId === 'string') {
       const newTeamsSelected = [...teamsSelected];
       newTeamsSelected[i] = teamSelectedId;
@@ -229,19 +240,23 @@ export default function Calendar() {
     switch (clickedButton) {
       case ButtonsKind.ADDTEAM: {
         const favoriteTeams = getCache<string[]>('favoriteTeams') || [];
+        const availableTeams = teams.filter((t) => allowedLeagues.length === 0 || allowedLeagues.includes(t.league));
         const nextFavorite = favoriteTeams.find(
-          (fav) => !teamsSelected.includes(fav) && fav !== '' && teams.some((t) => t.uniqueId === fav)
+          (fav) => !teamsSelected.includes(fav) && fav !== '' && availableTeams.some((t) => t.uniqueId === fav)
         );
         if (nextFavorite) {
           newTeamsSelected = [...teamsSelected, nextFavorite];
+          setTeamIdToOpen(nextFavorite);
         } else {
-          newTeamsSelected = addNewTeamId(teamsSelected, teams);
+          newTeamsSelected = addNewTeamId(teamsSelected, availableTeams);
+          setTeamIdToOpen(newTeamsSelected[newTeamsSelected.length - 1]);
         }
         storeTeamsSelected(newTeamsSelected);
         getGamesFromApi();
         break;
       }
       case ButtonsKind.REMOVETEAM:
+        setTeamIdToOpen(null);
         newTeamsSelected = removeLastTeamId(teamsSelected);
         storeTeamsSelected(newTeamsSelected);
         newGamesSelected = gamesSelected.filter((gameSelected) => teamsSelected.includes(gameSelected.teamSelectedId));
@@ -276,7 +291,8 @@ export default function Calendar() {
   };
 
   const displaySelectors = () => {
-    return teamsSelected.map((teamSelectedId, i) => {
+    return filteredTeamsSelected.map((teamSelectedId) => {
+      const i = teamsSelected.indexOf(teamSelectedId);
       const teamsAvailable = teams.filter(
         (team) =>
           (!teamsSelected.includes(team.uniqueId) || team.uniqueId === teamSelectedId) &&
@@ -291,6 +307,7 @@ export default function Calendar() {
               onItemSelectionChange={handleTeamSelectionChange}
               isClearable={false}
               placeholder={translateWord('filterTeams')}
+              startOpen={teamSelectedId === teamIdToOpen}
             />
           </ThemedView>
         </td>
@@ -299,7 +316,7 @@ export default function Calendar() {
   };
 
   const displayGamesGrid = () => {
-    return teamsSelected.map((teamSelectedId) => {
+    return filteredTeamsSelected.map((teamSelectedId) => {
       return (
         <td key={`games-${teamSelectedId}-${teamsSelected.length}`} style={{ verticalAlign: 'top' }}>
           <ThemedView>{displayGamesCards(teamSelectedId)}</ThemedView>
@@ -365,7 +382,7 @@ export default function Calendar() {
     }
   }, [teamsSelected, teams]);
 
-  const widthStyle = teamsSelected.length === 1 && !isSmallDevice ? '50%' : '100%';
+  const widthStyle = filteredTeamsSelected.length === 1 && !isSmallDevice ? '50%' : '100%';
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -377,8 +394,8 @@ export default function Calendar() {
         {!!gamesSelected.length && (
           <GamesSelected
             onAction={handleGamesSelection}
-            data={gamesSelected}
-            teamNumber={maxTeamsNumber > teamsSelected?.length ? teamsSelected.length : maxTeamsNumber}
+            data={gamesSelected.filter((g) => filteredTeamsSelected.includes(g.teamSelectedId))}
+            teamNumber={maxTeamsNumber > filteredTeamsSelected?.length ? filteredTeamsSelected.length : maxTeamsNumber}
           />
         )}
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>

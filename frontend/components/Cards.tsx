@@ -31,6 +31,8 @@ export default function Cards({
     backgroundColor,
     awayTeamShort,
     homeTeamShort,
+    homeTeamScore,
+    awayTeamScore,
     homeTeamId,
     awayTeamId,
   } = data;
@@ -90,6 +92,13 @@ export default function Cards({
 
     return () => {};
   }, []);
+
+  // If both scores are present and not null/undefined, display scores instead of team names
+  const hasScore = homeTeamScore != null && awayTeamScore != null && homeTeamScore !== '' && awayTeamScore !== '';
+  const displayHomeLabel = hasScore ? String(homeTeamScore) : teamNameHome;
+  const displayAwayLabel = hasScore ? String(awayTeamScore) : teamNameAway;
+  const displayHomeShort = hasScore ? String(homeTeamScore) : homeTeamShort;
+  const displayAwayShort = hasScore ? String(awayTeamScore) : awayTeamShort;
 
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
 
@@ -303,14 +312,14 @@ export default function Cards({
                     textAlign: 'center',
                   }}
                 >
-                  {awayTeamShort}
+                  {displayAwayShort}
                 </Text>
               )}
             </div>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
               {showAwayStar && <View style={{ width: 17 }} />}
               <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold', textAlign: 'center' }}>
-                {teamNameAway}
+                {displayAwayLabel}
               </Text>
               {showAwayStar && renderTeamStar()}
             </View>
@@ -318,7 +327,7 @@ export default function Cards({
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
               {showHomeStar && <View style={{ width: 17 }} />}
               <Text style={{ ...cardClass, backgroundColor: 'transparent', fontWeight: 'bold', textAlign: 'center' }}>
-                {teamNameHome}
+                {displayHomeLabel}
               </Text>
               {showHomeStar && renderTeamStar()}
             </View>
@@ -353,7 +362,7 @@ export default function Cards({
                     textAlign: 'center',
                   }}
                 >
-                  {homeTeamShort}
+                  {displayHomeShort}
                 </Text>
               )}
             </div>

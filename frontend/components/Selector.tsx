@@ -31,12 +31,19 @@ export default function Selector({
 
   const [visible, setVisible] = useState(startOpen);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLeague, setSelectedLeague] = useState<string | null>(null);
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>([]);
   const [tempSelectedIds, setTempSelectedIds] = useState<string[]>([]);
   const [tempSelectedId, setTempSelectedId] = useState<string>('');
   const inputRef = useRef<TextInput>(null);
   const userClearedRef = useRef(false);
+
+  useEffect(() => {
+    if (startOpen) {
+      setVisible(true);
+    }
+  }, [startOpen]);
 
   useEffect(() => {
     const loadFavs = () => {
@@ -52,11 +59,22 @@ export default function Selector({
   useEffect(() => {
     if (visible) {
       setSearch('');
+      setDebouncedSearch('');
       setTimeout(() => {
         inputRef.current?.focus();
-      }, 500);
+      }, 700);
     }
   }, [visible]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 700);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [search]);
 
   useEffect(() => {
     if (visible) {
@@ -124,30 +142,32 @@ export default function Selector({
   }, [allOptions, allowMultipleSelection, itemsSelectedIds, itemSelectedId, i, onItemSelectionChange]);
 
   const filteredOptions = allOptions.filter((opt) => {
-    const matchesSearch = opt.label.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = opt.label.toLowerCase().includes(debouncedSearch.toLowerCase());
     const matchesLeague = selectedLeague ? opt.league === selectedLeague : true;
     return matchesSearch && matchesLeague;
   });
 
+  useEffect(() => {
+    if (visible && debouncedSearch && filteredOptions.length > 0 && filteredOptions.length < 5) {
+      inputRef.current?.blur();
+    }
+  }, [debouncedSearch, filteredOptions.length, visible]);
+
   const isAllSelected = allOptions.length > 0 && allOptions.every((o) => tempSelectedIds.includes(o.id));
 
-  const listData = allowMultipleSelection
-    ? [
-        {
-          id: 'SELECT_ALL',
-          label: isAllSelected ? translateWord('nothing').toUpperCase() : translateWord('all').toUpperCase(),
-          isFav: false,
-          original: null,
-          league: '',
-        },
-        ...filteredOptions,
-      ]
-    : isClearable
-    ? [
-        { id: 'NOTHING', label: translateWord('all').toUpperCase(), isFav: false, original: null, league: '' },
-        ...filteredOptions,
-      ]
-    : filteredOptions;
+  const listData =
+    allowMultipleSelection && filteredOptions.length > 1
+      ? [
+          {
+            id: 'SELECT_ALL',
+            label: isAllSelected ? translateWord('nothing') : translateWord('all').toUpperCase(),
+            isFav: false,
+            original: null,
+            league: '',
+          },
+          ...filteredOptions,
+        ]
+      : filteredOptions;
 
   const handleSelect = (id: string) => {
     if (allowMultipleSelection) {
@@ -269,15 +289,31 @@ export default function Selector({
         </View>
       </TouchableOpacity>
 
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setVisible(false);
+        }}
+      >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={styles.modalOverlay} onPress={() => setVisible(false)}>
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => {
+              setVisible(false);
+            }}
+          >
             <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>
                   {allowMultipleSelection ? translateWord('selectMultiple') : translateWord('select') || ''}
                 </Text>
-                <TouchableOpacity onPress={() => setVisible(false)}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setVisible(false);
+                  }}
+                >
                   <Icon name="times" type="font-awesome" size={20} color="#000" />
                 </TouchableOpacity>
               </View>
@@ -406,7 +442,9 @@ export default function Selector({
               <View style={styles.buttonsContainer}>
                 <Pressable
                   style={[styles.button, styles.buttonClose, styles.buttonCancel]}
-                  onPress={() => setVisible(false)}
+                  onPress={() => {
+                    setVisible(false);
+                  }}
                 >
                   <Text style={[styles.textStyle, styles.textStyleCancel]}>{translateWord('cancel')}</Text>
                 </Pressable>
@@ -467,6 +505,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    flexShrink: 1,
   },
   header: {
     flexDirection: 'row',
