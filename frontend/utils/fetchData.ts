@@ -96,8 +96,8 @@ export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: G
   try {
     const data = await retryFetch(() =>
       fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/hour/${date}`).then(
-        (res) => res.json() as Promise<{ [key: string]: GameFormatted[] }>
-      )
+        (res) => res.json() as Promise<{ [key: string]: GameFormatted[] }>,
+      ),
     );
     saveCache(cacheKey, data);
     return data;
@@ -157,8 +157,8 @@ export const fetchLeagues = async (setLeaguesAvailable: (leagues: string[]) => v
   try {
     const leagues = await retryFetch(() =>
       fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`, 60000).then(
-        (res) => res.json() as Promise<string[]>
-      )
+        (res) => res.json() as Promise<string[]>,
+      ),
     );
     setLeaguesAvailable(leagues);
     saveCache(cacheKey, leagues);
@@ -188,7 +188,7 @@ export const fetchTeams = async () => {
 
   try {
     const teams = await retryFetch(() =>
-      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams`, 60000).then((res) => res.json() as Promise<Team[]>)
+      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams`, 60000).then((res) => res.json() as Promise<Team[]>),
     );
     saveCache(cacheKey, teams);
     return teams;
@@ -262,9 +262,9 @@ export const refreshGamesLeague = async (league: string): Promise<void> => {
   }
 };
 
-export const refreshTeams = async (): Promise<void> => {
+export const refreshTeams = async (endpoint: string): Promise<void> => {
   try {
-    await fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams/refresh`, 60000, { method: 'POST' }).then(() => null);
+    await fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/${endpoint}`, 60000, { method: 'POST' }).then(() => null);
     return;
   } catch (error) {
     console.error(`Error refreshing teams:`, error);
@@ -277,8 +277,8 @@ export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
     date = date || new Date().toISOString().split('T')[0];
     const dayGames = await retryFetch(() =>
       fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`).then(
-        (res) => res.json() as Promise<GameFormatted[]>
-      )
+        (res) => res.json() as Promise<GameFormatted[]>,
+      ),
     );
     return dayGames;
   } catch (error) {

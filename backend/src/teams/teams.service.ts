@@ -17,36 +17,46 @@ export class TeamService {
 
   async create(
     teamDto: CreateTeamDto | UpdateTeamDto | TeamType,
-  ): Promise<Team> {
+  ): Promise<any> {
     const { uniqueId } = teamDto;
 
     if (uniqueId) {
-      const existingTeam = await this.findOne(uniqueId);
-      if (existingTeam) {
-        Object.assign(existingTeam, teamDto);
-        return await existingTeam.save();
-      }
+      const saved = await this.teamModel
+        .findOneAndUpdate(
+          { uniqueId },
+          { $set: teamDto },
+          { new: true, upsert: true },
+        )
+        .lean()
+        .exec();
+      return this.addRecord({ ...saved, ...teamDto });
     }
 
     const newTeam = new this.teamModel(teamDto);
-    return await newTeam.save();
+    const saved = await newTeam.save();
+    return this.addRecord({ ...saved.toObject(), ...teamDto });
   }
 
-  async getTeams(): Promise<any> {
+  async getTeams(leagueParam?: string): Promise<any> {
     if (this.isFetchingTeams) {
       console.info(`getTeams is already running.`);
       return;
     }
     try {
       this.isFetchingTeams = true;
-      const allActivesTeams: TeamType[] = [];
+      const allActivesTeams: any[] = [];
       const collegeLeagueValues = Object.values(
         CollegeLeague,
       ) as CollegeLeague[];
-      const leagues = Object.values(League).filter(
-        (league) =>
-          !collegeLeagueValues.includes(league as unknown as CollegeLeague),
-      );
+      let leagues: string[] = [];
+      if (leagueParam) {
+        leagues = [leagueParam.toUpperCase()];
+      } else {
+        leagues = Object.values(League).filter(
+          (league) =>
+            !collegeLeagueValues.includes(league as unknown as CollegeLeague),
+        );
+      }
       for (const league of leagues) {
         const activeTeams: TeamType[] = [];
         let teams: TeamType[] = [];
@@ -68,10 +78,12 @@ export class TeamService {
           activeTeams.push(...teams);
         }
 
+        const savedTeams = [];
         let updateNumber = 0;
         for (const activeTeam of activeTeams) {
           activeTeam.updateDate = new Date().toISOString();
-          await this.create(activeTeam);
+          const saved = await this.create(activeTeam);
+          savedTeams.push(saved);
           updateNumber++;
           console.info(
             'updated:',
@@ -83,7 +95,7 @@ export class TeamService {
             ')',
           );
         }
-        allActivesTeams.push(...activeTeams);
+        allActivesTeams.push(...savedTeams);
       }
 
       return allActivesTeams;
@@ -95,10 +107,15 @@ export class TeamService {
     }
   }
 
-  async findAll(): Promise<Team[]> {
-    const allTeams = await this.teamModel.find().sort({ label: 1 }).exec();
+  async findAll(): Promise<any[]> {
+    const allTeams = await this.teamModel
+      .find()
+      .sort({ label: 1 })
+      .lean()
+      .exec();
     if (!allTeams?.length) {
-      return this.getTeams();
+      const teams = await this.getTeams();
+      return teams.map((team) => this.addRecord(team));
     }
     const teamIndex = randomNumber(allTeams.length - 1);
     const randomTeam = allTeams[teamIndex];
@@ -107,7 +124,7 @@ export class TeamService {
     if (new Date(randomTeam?.updateDate) < lastMonth) {
       this.getTeams();
     }
-    return allTeams;
+    return allTeams.map((team) => this.addRecord(team));
   }
 
   async findAllLeagues(): Promise<string[]> {
@@ -119,19 +136,46 @@ export class TeamService {
 
   async findOne(uniqueId: string) {
     const filter = { uniqueId: uniqueId };
-    const team = await this.teamModel.findOne(filter).exec();
-    return team;
+    const team = await this.teamModel.findOne(filter).lean().exec();
+    return team ? this.addRecord(team) : null;
   }
 
   async findByLeague(league: string) {
     const filter = { league: league };
-    const team = await this.teamModel.find(filter).exec();
-    return team;
+    const teams = await this.teamModel.find(filter).lean().exec();
+    return teams.map((team) => this.addRecord(team));
   }
 
   update(uniqueId: string, updateTeamDto: UpdateTeamDto) {
     const filter = { uniqueId: uniqueId };
     return this.teamModel.updateOne(filter, updateTeamDto);
+  }
+
+  async updateRecord(uniqueId: string, record: string) {
+    if (!record) return;
+    const parts = record.split('-');
+    const wins = parseInt(parts[0], 10);
+    const losses = parseInt(parts[1], 10);
+    const ties = parts[2] ? parseInt(parts[2], 10) : null;
+
+    const updateData: any = { wins, losses };
+    if (ties !== null) {
+      const league = uniqueId.split('-')[0];
+      if (league === League.NHL || league === League.PWHL) {
+        updateData.otLosses = ties;
+      } else {
+        updateData.ties = ties;
+      }
+    }
+    await this.teamModel.updateOne({ uniqueId }, { $set: updateData }).exec();
+  }
+
+  private addRecord(team: any) {
+    const ties = team.otLosses ?? team.ties;
+    const record = `${team.wins ?? 0}-${team.losses ?? 0}${
+      ties !== undefined && ties !== null ? '-' + ties : ''
+    }`;
+    return { ...team, record };
   }
 
   async remove(uniqueId: string) {

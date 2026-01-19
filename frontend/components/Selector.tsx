@@ -111,7 +111,7 @@ export default function Selector({
 
   const allOptions = getOptions();
   const uniqueLeagues = Array.from(
-    new Set(allOptions.map((o) => o.league).filter((l) => !!l && typeof l === 'string'))
+    new Set(allOptions.map((o) => o.league).filter((l) => !!l && typeof l === 'string')),
   );
 
   useEffect(() => {
@@ -386,8 +386,8 @@ export default function Selector({
                       ? isAllSelected
                       : tempSelectedIds.includes(item.id)
                     : item.id === 'NOTHING'
-                    ? !tempSelectedId
-                    : tempSelectedId === item.id;
+                      ? !tempSelectedId
+                      : tempSelectedId === item.id;
 
                   let logo = (item.original as any)?.logo || (item.original as any)?.teamLogo;
                   if (!logo) {
@@ -500,11 +500,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 10,
     padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+      },
+      android: { elevation: 5 },
+      web: { boxShadow: '0px 2px 3.84px rgba(0,0,0,0.25)' },
+    }),
     flexShrink: 1,
   },
   header: {

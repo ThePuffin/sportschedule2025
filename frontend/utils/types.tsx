@@ -7,12 +7,16 @@ export interface GameFormatted {
   awayTeam: string;
   awayTeamShort: string;
   awayTeamLogo: string;
+  awayTeamLogoDark?: string;
   awayTeamScore: number | null;
+  awayTeamRecord?: string;
   homeTeamId: string;
   homeTeam: string;
   homeTeamShort: string;
   homeTeamScore: number | null;
   homeTeamLogo: string;
+  homeTeamLogoDark?: string;
+  homeTeamRecord?: string;
   arenaName: string;
   placeName: string;
   gameDate: string;
@@ -46,6 +50,9 @@ export interface Team {
   league: string;
   abbrev: string;
   updateDate: string;
+  record?: string;
+  color?: string;
+  backgroundColor?: string;
 }
 
 export interface FilterGames {

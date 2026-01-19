@@ -6,7 +6,7 @@ import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const maxFavorites = 5;
 
@@ -174,7 +174,7 @@ const FavModal = ({
                 const filteredItems = teamsForFavorites.filter(
                   (team) =>
                     (!localFavorites.includes(team.uniqueId) || team.uniqueId === selectedId) &&
-                    (localLeagues.length === 0 || localLeagues.includes(team.league))
+                    (localLeagues.length === 0 || localLeagues.includes(team.league)),
                 );
                 const isFilled = !!selectedId;
                 const countFilled = localFavorites.filter((t) => !!t).length;
@@ -245,7 +245,7 @@ const FavModal = ({
                     </View>
                   </div>
                 );
-              }
+              },
             )}
           </View>
 
@@ -280,11 +280,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     alignItems: 'stretch',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: { elevation: 5 },
+      web: { boxShadow: '0px 2px 4px rgba(0,0,0,0.25)' },
+    }),
     width: '50%',
     minHeight: 300,
     justifyContent: 'space-between',

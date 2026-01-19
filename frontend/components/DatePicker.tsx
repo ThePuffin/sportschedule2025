@@ -1,7 +1,7 @@
 import { DateRangePickerProps } from '@/utils/types';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 
 // Helper pour formater la date en YYYY-MM-DD (heure locale)
@@ -192,7 +192,8 @@ export default function DateRangePicker({
               theme={{
                 selectedDayBackgroundColor: 'black',
                 selectedDayTextColor: 'white',
-                todayTextColor: 'black',
+                todayTextColor: '#000000',
+                todayBackgroundColor: '#90D5FF',
                 arrowColor: 'black',
                 textDayFontWeight: '500',
                 textMonthFontWeight: 'bold',
@@ -216,11 +217,16 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     borderWidth: 1,
     borderColor: '#ccc',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 1.41,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: '0px 1px 1.41px rgba(0,0,0,0.2)' },
+    }),
     justifyContent: 'center',
     minWidth: 280,
     width: '100%',
@@ -237,11 +243,16 @@ const styles = StyleSheet.create({
   calendarContainer: {
     backgroundColor: 'white',
     borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+      },
+      android: { elevation: 8 },
+      web: { boxShadow: '0px 4px 4.65px rgba(0,0,0,0.3)' },
+    }),
     padding: 10,
     width: 350,
   },

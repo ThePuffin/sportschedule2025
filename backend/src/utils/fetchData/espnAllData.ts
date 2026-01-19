@@ -28,14 +28,16 @@ const leagueConfigs = {
 
 const leaguesData = Object.fromEntries(
   Object.entries(leagueConfigs).map(([key, { sport, league }]) => {
-    const base = `${espnAPI}${sport}/${league}/teams`;
+    const base = `${espnAPI}${sport}/${league}`;
+    const teamBase = `${base}/teams`;
     return [
       key,
       {
         leagueName: key,
-        fetchTeam: base,
-        fetchGames: `${base}/\${id}/schedule`,
-        fetchDetails: `${base}/`,
+        fetchTeam: teamBase,
+        fetchGames: `${teamBase}/\${id}/schedule`,
+        fetchDetails: `${teamBase}/`,
+        fetchStandings: `${base}/standings`,
       },
     ];
   }),
@@ -44,17 +46,39 @@ const leaguesData = Object.fromEntries(
 const getDivision = async (
   leagueName: string,
   id: string,
-): Promise<{ conferenceName: string; divisionName: string }> => {
+): Promise<{
+  conferenceName: string;
+  divisionName: string;
+  record?: { wins: number; losses: number; ties?: number; otLosses?: number };
+}> => {
   const url = leaguesData[leagueName].fetchDetails + id;
   const fetchedTeams = await fetch(url);
   const fetchTeams = await fetchedTeams.json();
-  const { standingSummary = '' } = fetchTeams?.team;
+  const team = fetchTeams?.team || {};
+  const { standingSummary = '' } = team;
+
+  let record;
+  if (team.record?.items) {
+    const total = team.record.items.find((i) => i.type === 'total');
+    if (total?.stats) {
+      const wins = total.stats.find((s) => s.name === 'wins')?.value;
+      const losses = total.stats.find((s) => s.name === 'losses')?.value;
+      const ties = total.stats.find((s) => s.name === 'ties')?.value;
+      const otLosses = total.stats.find((s) => s.name === 'otLosses')?.value;
+      record = { wins, losses, ties, otLosses };
+    }
+  }
+
   if (standingSummary === '') {
-    return { conferenceName: '', divisionName: '' };
+    return { conferenceName: '', divisionName: '', record };
   }
   const cut = standingSummary.split(' ');
-  if (leagueName === League.NFL) {
-    return { conferenceName: cut[3] || '', divisionName: cut[2] || '' };
+  if (leagueName === League.NFL || leagueName === League.MLB) {
+    return {
+      conferenceName: cut[3] || '',
+      divisionName: cut[2] || '',
+      record,
+    };
   } else if (leagueName === League.NBA) {
     const divisionName = cut[2] || '';
     const conference = {
@@ -63,11 +87,46 @@ const getDivision = async (
       Northwest: 'West',
       Pacific: 'West',
     };
-    return { conferenceName: conference[divisionName] || '', divisionName };
-  } else if (leagueName === League.MLB) {
-    return { conferenceName: cut[3] || '', divisionName: cut[2] || '' };
+    return {
+      conferenceName: conference[divisionName] || '',
+      divisionName,
+      record,
+    };
   } else {
-    return { conferenceName: '', divisionName: '' };
+    return { conferenceName: '', divisionName: '', record };
+  }
+};
+
+const getESPNStandings = async (leagueName: string) => {
+  try {
+    const url = leaguesData[leagueName].fetchStandings;
+    const res = await fetch(url);
+    const data = await res.json();
+    const records = {};
+
+    const traverse = (node) => {
+      if (node.standings?.entries) {
+        node.standings.entries.forEach((entry) => {
+          const teamId = entry.team.id;
+          const stats = entry.stats;
+          if (stats) {
+            const wins = stats.find((s) => s.name === 'wins')?.value;
+            const losses = stats.find((s) => s.name === 'losses')?.value;
+            const ties = stats.find((s) => s.name === 'ties')?.value;
+            records[teamId] = { wins, losses, ties };
+          }
+        });
+      }
+      if (node.children) {
+        node.children.forEach((child) => traverse(child));
+      }
+    };
+
+    traverse(data);
+    return records;
+  } catch (error) {
+    console.error('Error fetching ESPN standings:', error);
+    return {};
   }
 };
 
@@ -78,6 +137,7 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
     const { sports } = fetchTeams;
     const { leagues } = sports[0];
     const allTeams: ESPNTeam[] = leagues[0].teams;
+    const standings = await getESPNStandings(leagueName);
 
     const activeTeams: TeamType[] = allTeams
       .filter(({ team }) => team.isActive)
@@ -94,33 +154,53 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
         } = team;
         let teamID = abbreviation;
 
-        if (ESPNAbbrevs[leagueName][teamID]) {
+        if (ESPNAbbrevs[leagueName]?.[teamID]) {
           teamID = ESPNAbbrevs[leagueName][teamID];
         }
         const uniqueId = `${leagueName}-${teamID}`;
+        const teamLogo = logos?.[2]?.href ?? logos?.[0]?.href;
+        const teamLogoDark =
+          logos?.find(
+            (l) => l.rel?.includes('dark') && l.rel?.includes('scoreboard'),
+          )?.href || teamLogo;
+
+        const record = standings[id];
+
         return {
           uniqueId,
           value: uniqueId,
           id: id,
           abbrev: teamID,
           label: capitalize(displayName),
-          teamLogo: logos?.[2]?.href ?? logos?.[0]?.href,
+          teamLogo,
+          teamLogoDark,
           teamCommonName: capitalize(nickname),
           conferenceName: '',
           divisionName: '',
           league: leagueName.toUpperCase(),
           color: color || undefined,
           backgroundColor: alternateColor || undefined,
+          wins: record?.wins,
+          losses: record?.losses,
+          ties: record?.ties,
         };
       });
 
     for (const team of activeTeams) {
-      const { conferenceName, divisionName } = await getDivision(
+      const { conferenceName, divisionName, record } = await getDivision(
         leagueName,
         team.id,
       );
       team.conferenceName = conferenceName;
       team.divisionName = divisionName;
+      if (record) {
+        (team as any).wins = record.wins;
+        (team as any).losses = record.losses;
+        (team as any).ties = record.ties;
+        if (record.otLosses !== undefined) {
+          (team as any).otLosses = record.otLosses;
+        }
+      }
     }
 
     return activeTeams;
@@ -174,7 +254,7 @@ const getEachTeamSchedule = async ({
       const fetchGames: MLSGameAPI = await fetchedGames.json();
       const { events } = fetchGames;
 
-      games = events && events?.length && events[0] ? events : [];
+      games = events?.[0] ? events : [];
 
       const now = new Date();
       const gamesFilter = games.filter(({ date }) => new Date(date) >= now);
@@ -219,18 +299,38 @@ const getEachTeamSchedule = async ({
         const awayAbbrev = `${awayTeam.abbreviation}`;
         const homeAbbrev = `${homeTeam.abbreviation}`;
 
+        const awayTeamLogo =
+          awayTeam?.logos?.find(
+            (l) => l.rel?.includes('full') && l.rel?.includes('scoreboard'),
+          )?.href || leagueLogos[awayAbbrev];
+        const homeTeamLogo =
+          homeTeam?.logos?.find(
+            (l) => l.rel?.includes('full') && l.rel?.includes('scoreboard'),
+          )?.href || leagueLogos[homeAbbrev];
+
+        const awayTeamLogoDark =
+          awayTeam?.logos?.find(
+            (l) => l.rel?.includes('dark') && l.rel?.includes('scoreboard'),
+          )?.href || awayTeamLogo;
+        const homeTeamLogoDark =
+          homeTeam?.logos?.find(
+            (l) => l.rel?.includes('dark') && l.rel?.includes('scoreboard'),
+          )?.href || homeTeamLogo;
+
         return {
           arenaName: capitalize(venue?.fullName) ?? '',
           awayTeam: capitalize(awayTeam.displayName),
           awayTeamId: `${leagueName}-${awayAbbrev}`,
-          awayTeamLogo: awayTeam?.logos?.[2]?.href || leagueLogos[awayAbbrev],
+          awayTeamLogo,
+          awayTeamLogoDark,
           awayTeamShort: awayAbbrev,
           backgroundColor: backgroundColor ?? undefined,
           color: color ?? undefined,
           gameDate: gameDate,
           homeTeam: capitalize(homeTeam.displayName),
           homeTeamId: `${leagueName}-${homeAbbrev}`,
-          homeTeamLogo: homeTeam?.logos?.[2]?.href || leagueLogos[homeAbbrev],
+          homeTeamLogo,
+          homeTeamLogoDark,
           homeTeamShort: homeAbbrev,
           homeTeamScore: null,
           awayTeamScore: null,
@@ -250,8 +350,8 @@ const getEachTeamSchedule = async ({
     gamesData = gamesData.filter((game) => game !== undefined && game !== null);
     return gamesData;
   } catch (error) {
-    console.error('Error fetching data', error);
-    return {};
+    console.error(`Error in getEachTeamSchedule for ${value}:`, error);
+    return [];
   }
 };
 
@@ -290,15 +390,6 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
         const startedLongAgo = eventStart ? eventStart <= threeHoursAgo : false;
         const isFinished = statusIndicatesFinished || startedLongAgo;
 
-        // Debug log for each event to help troubleshoot missing updates
-        try {
-          console.info(
-            `[getESPNScores][EVENT] league=${leagueKey} id=${ev.id} start=${ev.date} completed=${status?.completed} state=${status?.state} name=${status?.name} displayClock=${displayClock} startedLongAgo=${startedLongAgo} isFinished=${isFinished}`,
-          );
-        } catch (e) {
-          // ignore logging errors
-        }
-
         // If not finished, try to fetch a boxscore/summary link (sometimes scores are available even if status not final)
         if (!isFinished) {
           try {
@@ -329,6 +420,11 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
                     ? Number(away.score)
                     : null;
                 const statusDetail = comp.status?.type || comp.status;
+                const homeTeamRecord =
+                  home?.records?.find((r) => r.type === 'total')?.summary || '';
+                const awayTeamRecord =
+                  away?.records?.find((r) => r.type === 'total')?.summary || '';
+
                 const displayClockDetail = comp.status?.displayClock || '';
                 const statusIndicatesFinishedDetail =
                   statusDetail?.completed === true ||
@@ -359,10 +455,12 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
                   isFinal:
                     statusIndicatesFinishedDetail === true ||
                     isFinalDetail === true,
+                  homeTeamRecord,
+                  awayTeamRecord,
                   status: statusDetail?.name || displayClockDetail || '',
                 };
               } catch (e) {
-                console.debug('[getESPNScores][BOX_FETCH] error', e);
+                console.error(`Error fetching summary for event ${ev.id}:`, e);
                 return null;
               }
             };
@@ -370,13 +468,13 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
             const detail = await tryFetchDetail();
             if (detail) {
               results.push(detail);
-              console.info(
-                `[getESPNScores][BOX] pushed detail for event ${ev.id}`,
-              );
               continue;
             }
           } catch (e) {
-            // ignore
+            console.error(
+              `Error processing detailed fetch for event ${ev.id}:`,
+              e,
+            );
           }
           continue;
         }
@@ -397,6 +495,11 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
             ? Number(away.score)
             : null;
 
+        const homeTeamRecord =
+          home?.records?.find((r) => r.type === 'total')?.summary || '';
+        const awayTeamRecord =
+          away?.records?.find((r) => r.type === 'total')?.summary || '';
+
         finishedCount++;
         const normalized = {
           uniqueId: id,
@@ -413,18 +516,12 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
           homeTeamShort: home?.team?.abbreviation || undefined,
           awayTeamShort: away?.team?.abbreviation || undefined,
           isFinal: statusIndicatesFinished === true,
+          homeTeamRecord,
+          awayTeamRecord,
           status: status?.name || displayClock || '',
         };
         results.push(normalized);
-        try {
-          console.debug('[getESPNScores][NORMALIZED]', normalized);
-        } catch (e) {
-          // ignore
-        }
       }
-      console.info(
-        `[getESPNScores] ${leagueKey} ${url} -> events=${events.length} finished=${finishedCount}`,
-      );
     } catch (err) {
       console.error(`Error fetching ESPN scores for ${leagueKey}:`, err);
     }

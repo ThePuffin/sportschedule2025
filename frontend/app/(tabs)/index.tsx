@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollView, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
+import CardLarge from '../../components/CardLarge';
 import DateRangePicker from '../../components/DatePicker';
 import LoadingView from '../../components/LoadingView';
 import { League, timeDurationEnum } from '../../constants/enum';
@@ -53,7 +54,7 @@ export default function GameofTheDay() {
   const [games, setGames] = useState<GameFormatted[]>([]);
   const [selectDate, setSelectDate] = useState<Date>(currentDate);
   const [selectLeagues, setSelectLeagues] = useState<League[]>(
-    getCache<League[]>('leaguesSelected') || LeaguesWithoutAll
+    getCache<League[]>('leaguesSelected') || LeaguesWithoutAll,
   );
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,7 +62,7 @@ export default function GameofTheDay() {
   const hasInitializedRef = useRef(false);
 
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>(
-    () => getCache<GameFormatted[]>('gameSelected') || []
+    () => getCache<GameFormatted[]>('gameSelected') || [],
   );
 
   const teamsOfTheDay = useMemo(() => {
@@ -79,7 +80,7 @@ export default function GameofTheDay() {
             label: game.awayTeam,
             uniqueId: game.awayTeamId,
             league: game.league,
-          }))
+          })),
       )
       .sort((a, b) => a.label.localeCompare(b.label));
     return Array.from(new Set(filtredTeamsAvailable));
@@ -131,7 +132,7 @@ export default function GameofTheDay() {
           selectLeagues.includes(game.league as League) &&
           (!teamSelectedId || game.homeTeamId === teamSelectedId || game.awayTeamId === teamSelectedId) &&
           game.awayTeamLogo &&
-          game.homeTeamLogo
+          game.homeTeamLogo,
       )
       .sort((a, b) => new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime());
 
@@ -199,14 +200,16 @@ export default function GameofTheDay() {
         if (cachedYesterday) {
           const nowMinusThreeHour = new Date(Date.now() - 3 * 60 * 60 * 1000);
           const recentYesterdayGames = cachedYesterday.filter(
-            ({ startTimeUTC = '' }) => new Date(startTimeUTC) >= nowMinusThreeHour
+            ({ startTimeUTC = '' }) => new Date(startTimeUTC) >= nowMinusThreeHour,
           );
           const combined = [...recentYesterdayGames, ...cachedGames];
           gamesToDisplay = combined.filter((game, index, self) => index === self.findIndex((t) => t._id === game._id));
         }
+        setGames(gamesToDisplay);
+      } else {
+        setGames(gamesToDisplay);
+        return;
       }
-      setGames(gamesToDisplay);
-      return;
     }
 
     // Fetch from API if not in cache
@@ -240,7 +243,7 @@ export default function GameofTheDay() {
         setIsLoading(false);
       });
     },
-    [getGamesFromApi]
+    [getGamesFromApi],
   );
 
   const handleTeamSelectionChange = useCallback((teamId: string | string[]) => {
@@ -286,9 +289,28 @@ export default function GameofTheDay() {
 
     if (visibleGamesByHour.length === 0) return <NoResults />;
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selected = new Date(selectDate);
+    selected.setHours(0, 0, 0, 0);
+    const isPast = selected < today;
+
     return (
       <ThemedView>
         {visibleGamesByHour.map(({ hour, games }, i) => {
+          if (isPast) {
+            return (
+              <div key={hour} style={{ width: '100%', margin: '0 auto' }}>
+                {games.map((game) => (
+                  <CardLarge
+                    key={game._id ?? randomNumber(999999)}
+                    data={teamSelectedId ? { ...game, teamSelectedId } : game}
+                    showDate={false}
+                  />
+                ))}
+              </div>
+            );
+          }
           return (
             <div key={hour} style={{ width: '100%', margin: '0 auto' }}>
               <Accordion
@@ -305,7 +327,7 @@ export default function GameofTheDay() {
         })}
       </ThemedView>
     );
-  }, [games, displayNoContent, visibleGamesByHour, gamesSelected]);
+  }, [games, displayNoContent, visibleGamesByHour, gamesSelected, selectDate, teamSelectedId]);
 
   const displayLargeDeviceHeader = useCallback(() => {
     if (visibleGamesByHour.length === 0) {
@@ -368,6 +390,12 @@ export default function GameofTheDay() {
 
     const showSingleColumn = visibleGamesByHour.length <= 1 || teamSelectedId !== '';
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selected = new Date(selectDate);
+    selected.setHours(0, 0, 0, 0);
+    const isPast = selected < today;
+
     return (
       <ThemedView>
         <table
@@ -383,9 +411,18 @@ export default function GameofTheDay() {
                 <td key={hour} style={{ verticalAlign: 'top' }}>
                   {games.map((game) => {
                     const gameId = game._id ?? randomNumber(999999);
+                    if (isPast) {
+                      return (
+                        <CardLarge
+                          key={gameId}
+                          data={teamSelectedId ? { ...game, teamSelectedId } : game}
+                          showDate={false}
+                        />
+                      );
+                    }
                     const isSelected = gamesSelected.some(
                       (gameSelect) =>
-                        game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC
+                        game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
                     );
                     return (
                       <Cards
@@ -407,7 +444,7 @@ export default function GameofTheDay() {
         </table>
       </ThemedView>
     );
-  }, [games, displayNoContent, visibleGamesByHour, teamSelectedId, gamesSelected]);
+  }, [games, displayNoContent, visibleGamesByHour, teamSelectedId, gamesSelected, selectDate]);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -470,7 +507,7 @@ export default function GameofTheDay() {
     useCallback(() => {
       setGamesSelected(getCache<GameFormatted[]>('gameSelected') || []);
       scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    }, [])
+    }, []),
   );
 
   return (

@@ -181,18 +181,39 @@ export class GameService {
         ...(await this.getLeagueGames(league, false)),
       };
     }
-    return this.gameModel.find().exec();
+    return this.findAll();
   }
 
-  async findAll(): Promise<Game[]> {
+  async findAll(): Promise<any[]> {
     const allGames = await this.gameModel
       .find({ isActive: true })
       .sort({ startTimeUTC: 1 })
+      .lean()
       .exec();
     if (Object.keys(allGames).length === 0 || allGames?.length === 0) {
       return this.getAllGames();
     }
-    return allGames;
+
+    const teams = await this.teamService.findAll();
+    const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
+
+    return allGames.map((game: any) => {
+      const homeTeam = teamsMap.get(game.homeTeamId);
+      const awayTeam = teamsMap.get(game.awayTeamId);
+      return {
+        ...game,
+        homeTeamRecord: homeTeam?.record || '',
+        awayTeamRecord: awayTeam?.record || '',
+        homeTeam: homeTeam?.label || game.homeTeam,
+        homeTeamShort: homeTeam?.abbrev || game.homeTeamShort,
+        homeTeamLogo: homeTeam?.teamLogo || game.homeTeamLogo,
+        homeTeamLogoDark: homeTeam?.teamLogoDark || game.homeTeamLogoDark,
+        awayTeam: awayTeam?.label || game.awayTeam,
+        awayTeamShort: awayTeam?.abbrev || game.awayTeamShort,
+        awayTeamLogo: awayTeam?.teamLogo || game.awayTeamLogo,
+        awayTeamLogoDark: awayTeam?.teamLogoDark || game.awayTeamLogoDark,
+      };
+    });
   }
 
   async findOne(uniqueId: string) {
@@ -203,6 +224,18 @@ export class GameService {
 
   async findByTeam(teamSelectedId: string, needRefreshData = true) {
     const games = await this.filterGames({ teamSelectedIds: teamSelectedId });
+    for (const date in games) {
+      games[date] = games[date].filter((game) => {
+        return (
+          game.homeTeamScore === null ||
+          game.homeTeamScore === undefined ||
+          game.awayTeamScore === null ||
+          game.awayTeamScore === undefined
+        );
+      });
+      if (games[date].length === 0) delete games[date];
+    }
+
     const keys = Object.keys(games);
     if (
       needRefreshData &&
@@ -272,9 +305,31 @@ export class GameService {
       .find(filter)
       .sort({ startTimeUTC: 1 })
       .limit(maxResults ? Number.parseInt(maxResults, 10) : 0)
+      .lean()
       .exec();
 
-    const games = Array.isArray(filtredGames) ? filtredGames : [];
+    const teams = await this.teamService.findAll();
+    const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
+
+    const games = Array.isArray(filtredGames)
+      ? filtredGames.map((game: any) => {
+          const homeTeam = teamsMap.get(game.homeTeamId);
+          const awayTeam = teamsMap.get(game.awayTeamId);
+          return {
+            ...game,
+            homeTeamRecord: homeTeam?.record || '',
+            awayTeamRecord: awayTeam?.record || '',
+            homeTeam: homeTeam?.label || game.homeTeam,
+            homeTeamShort: homeTeam?.abbrev || game.homeTeamShort,
+            homeTeamLogo: homeTeam?.teamLogo || game.homeTeamLogo,
+            homeTeamLogoDark: homeTeam?.teamLogoDark || game.homeTeamLogoDark,
+            awayTeam: awayTeam?.label || game.awayTeam,
+            awayTeamShort: awayTeam?.abbrev || game.awayTeamShort,
+            awayTeamLogo: awayTeam?.teamLogo || game.awayTeamLogo,
+            awayTeamLogoDark: awayTeam?.teamLogoDark || game.awayTeamLogoDark,
+          };
+        })
+      : [];
     const gamesByDay = {};
     const uniqueTeamSelectedIds = this.getTeams(teamSelectedIds, games);
     const dates = games.map((game) => new Date(game.gameDate));
@@ -294,36 +349,38 @@ export class GameService {
             game.isActive === true,
         );
         if (!gameOfDay.length && !league) {
-          gamesOfDay.push(
-            new this.gameModel({
-              _id: new mongoose.Types.ObjectId().toString(),
-              uniqueId: teamSelectedId + currentDate,
-              awayTeamId: '',
-              awayTeamShort: '',
-              awayTeam: '',
-              homeTeamId: '',
-              homeTeamShort: '',
-              homeTeam: '',
-              homeTeamScore: null,
-              awayTeamScore: null,
-              arenaName: '',
-              placeName: '',
-              gameDate: currentDate,
-              teamSelectedId: teamSelectedId,
-              show: false,
-              selectedTeam: false,
-              league: '',
-              venueTimezone: '',
-              isActive: true,
-              startTimeUTC: '',
-              updateDate: '',
-              __v: 0,
-              awayTeamLogo: '',
-              homeTeamLogo: '',
-              color: undefined,
-              backgroundColor: undefined,
-            }),
-          );
+          gamesOfDay.push({
+            _id: new mongoose.Types.ObjectId().toString(),
+            uniqueId: teamSelectedId + currentDate,
+            awayTeamId: '',
+            awayTeamShort: '',
+            awayTeam: '',
+            homeTeamId: '',
+            homeTeamShort: '',
+            homeTeam: '',
+            homeTeamScore: null,
+            awayTeamScore: null,
+            arenaName: '',
+            placeName: '',
+            gameDate: currentDate,
+            teamSelectedId: teamSelectedId,
+            show: false,
+            selectedTeam: false,
+            league: '',
+            venueTimezone: '',
+            isActive: true,
+            startTimeUTC: '',
+            updateDate: '',
+            __v: 0,
+            awayTeamLogo: '',
+            awayTeamLogoDark: '',
+            homeTeamLogo: '',
+            homeTeamLogoDark: '',
+            homeTeamRecord: '',
+            awayTeamRecord: '',
+            color: undefined,
+            backgroundColor: undefined,
+          });
         } else {
           gamesOfDay.push(...gameOfDay);
         }
@@ -361,6 +418,7 @@ export class GameService {
     const games = await this.gameModel
       .find(filter)
       .sort({ startTimeUTC: 1 })
+      .lean()
       .exec();
 
     if (games.length === 0) {
@@ -391,87 +449,30 @@ export class GameService {
         }
       }
 
-      // avoid dupplicate games
-      return games.filter(({ homeTeamId, teamSelectedId }) => {
-        return homeTeamId === teamSelectedId;
-      });
-    }
-  }
-
-  async findByDateHour(gameDate: string) {
-    const today = readableDate(new Date());
-    const filter: any = { isActive: true };
-
-    if (gameDate === today) {
-      const threeHoursAgo = new Date(addHours(new Date(), -3));
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayString = readableDate(yesterday);
-
-      filter.$or = [
-        { gameDate: gameDate },
-        {
-          gameDate: yesterdayString,
-          startTimeUTC: { $gte: threeHoursAgo.toISOString() },
-        },
-      ];
-    } else {
-      filter.gameDate = gameDate;
-    }
-
-    const games = await this.gameModel
-      .find(filter)
-      .sort({ startTimeUTC: 1 })
-      .exec();
-
-    if (games.length === 0) {
-      const allGames = await this.findAll();
-      if (!allGames.length) {
-        this.getAllGames();
-      }
-      return {};
-    } else {
-      for (const currentLeague of Object.values(League)) {
-        const filtredGames = games.filter(
-          ({ isActive, awayTeamId, league }) => {
-            return (
-              isActive === true &&
-              awayTeamId !== undefined &&
-              awayTeamId !== '' &&
-              league.toUpperCase() === currentLeague.toUpperCase()
-            );
-          },
-        );
-
-        const gamesIndex = randomNumber(filtredGames.length - 1);
-        const randomGames = filtredGames[gamesIndex];
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        if (new Date(randomGames?.updateDate) < yesterday) {
-          await this.getLeagueGames(currentLeague, false);
-        }
-      }
+      const teams = await this.teamService.findAll();
+      const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
 
       // avoid dupplicate games
       const filteredGames = games.filter(({ homeTeamId, teamSelectedId }) => {
         return homeTeamId === teamSelectedId;
       });
-
-      const gamesByTimeSlot: { [key: string]: Game[] } = {};
-      filteredGames.forEach((game) => {
-        const date = new Date(game.startTimeUTC);
-        const hours = date.getUTCHours().toString().padStart(2, '0');
-        const minutes = date.getUTCMinutes();
-        const minutesStr = minutes < 30 ? '00' : '30';
-        const timeSlot = `${hours}:${minutesStr}`;
-
-        if (!gamesByTimeSlot[timeSlot]) {
-          gamesByTimeSlot[timeSlot] = [];
-        }
-        gamesByTimeSlot[timeSlot].push(game);
+      return filteredGames.map((game: any) => {
+        const homeTeam = teamsMap.get(game.homeTeamId);
+        const awayTeam = teamsMap.get(game.awayTeamId);
+        return {
+          ...game,
+          homeTeamRecord: homeTeam?.record || '',
+          awayTeamRecord: awayTeam?.record || '',
+          homeTeam: homeTeam?.label || game.homeTeam,
+          homeTeamShort: homeTeam?.abbrev || game.homeTeamShort,
+          homeTeamLogo: homeTeam?.teamLogo || game.homeTeamLogo,
+          homeTeamLogoDark: homeTeam?.teamLogoDark || game.homeTeamLogoDark,
+          awayTeam: awayTeam?.label || game.awayTeam,
+          awayTeamShort: awayTeam?.abbrev || game.awayTeamShort,
+          awayTeamLogo: awayTeam?.teamLogo || game.awayTeamLogo,
+          awayTeamLogoDark: awayTeam?.teamLogoDark || game.awayTeamLogoDark,
+        };
       });
-
-      return gamesByTimeSlot;
     }
   }
 
@@ -499,9 +500,17 @@ export class GameService {
     const games = await this.gameModel.find().exec();
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const oldGames = games.filter(({ startTimeUTC }) => {
-      return new Date(startTimeUTC) < sixMonthsAgo;
-    });
+    const oldGames = games.filter(
+      ({ startTimeUTC, homeTeamScore, awayTeamScore }) => {
+        const isOld = new Date(startTimeUTC) < sixMonthsAgo;
+        const hasScore =
+          homeTeamScore !== null &&
+          homeTeamScore !== undefined &&
+          awayTeamScore !== null &&
+          awayTeamScore !== undefined;
+        return isOld && !hasScore;
+      },
+    );
     for (const oldGame of oldGames) {
       await this.remove(oldGame.uniqueId);
     }
@@ -512,7 +521,24 @@ export class GameService {
     for (const game of games) {
       const key = `${game.teamSelectedId}-${game.startTimeUTC}`;
       if (gameMap.has(key)) {
-        duplicates.push(game);
+        const existing = gameMap.get(key);
+        const existingHasScore =
+          existing.homeTeamScore !== null &&
+          existing.homeTeamScore !== undefined &&
+          existing.awayTeamScore !== null &&
+          existing.awayTeamScore !== undefined;
+        const currentHasScore =
+          game.homeTeamScore !== null &&
+          game.homeTeamScore !== undefined &&
+          game.awayTeamScore !== null &&
+          game.awayTeamScore !== undefined;
+
+        if (currentHasScore && !existingHasScore) {
+          duplicates.push(existing);
+          gameMap.set(key, game);
+        } else {
+          duplicates.push(game);
+        }
       } else {
         gameMap.set(key, game);
       }
@@ -533,17 +559,19 @@ export class GameService {
   async unactivateGames(teamId: string): Promise<void> {
     const games = await this.findByTeam(teamId, false);
     const now = new Date();
-    const threeHoursAgo = new Date(addHours(now, -3));
 
     for (const date in games) {
-      if (Array.isArray(games[date]) && games[date][0]?.awayTeamShort) {
-        const game = games[date][0];
-        const gameTime = new Date(game.startTimeUTC);
-        if (gameTime < now && gameTime > threeHoursAgo) {
-          continue;
+      if (Array.isArray(games[date])) {
+        for (const game of games[date]) {
+          if (!game.awayTeamShort) continue;
+
+          const gameTime = new Date(game.startTimeUTC);
+          if (gameTime < now) {
+            continue;
+          }
+          game.isActive = false;
+          await this.create(game);
         }
-        game.isActive = false;
-        await this.create(game);
       }
     }
   }
@@ -555,7 +583,6 @@ export class GameService {
     // match started at least 3 hours ago and score is null or missing
     const gamesWithoutScores = await this.gameModel
       .find({
-        isActive: true,
         startTimeUTC: { $lte: threeHoursAgo.toISOString() },
         $or: [{ homeTeamScore: null }, { awayTeamScore: null }],
       })
@@ -608,6 +635,26 @@ export class GameService {
 
     // Now try to update matching games in DB before returning
     const appliedUpdates: any[] = [];
+    const leaguesToUpdate = new Set<string>();
+
+    for (const score of results) {
+      if (score.league) {
+        leaguesToUpdate.add(score.league);
+      }
+      if (score.homeTeamRecord && score.homeTeamId) {
+        await this.teamService.updateRecord(
+          score.homeTeamId,
+          score.homeTeamRecord,
+        );
+      }
+      if (score.awayTeamRecord && score.awayTeamId) {
+        await this.teamService.updateRecord(
+          score.awayTeamId,
+          score.awayTeamRecord,
+        );
+      }
+    }
+
     for (const score of results) {
       try {
         if (!score.isFinal) {
@@ -699,10 +746,8 @@ export class GameService {
           } catch (e) {
             // ignore
           }
-          // shorts+date match result available in `game`
         }
 
-        // last fallback: match by startTimeUTC within +/-5 minutes and teams
         if (
           !game &&
           score.startTimeUTC &&
@@ -722,7 +767,6 @@ export class GameService {
               $or: [{ homeTeamScore: null }, { awayTeamScore: null }],
             })
             .exec();
-          // timeWindow match result available in `game`
         }
 
         if (game) {
@@ -738,21 +782,125 @@ export class GameService {
                 {
                   homeTeamScore: score.homeTeamScore,
                   awayTeamScore: score.awayTeamScore,
+                  isActive: true,
                   updateDate: new Date().toISOString(),
                 },
                 { new: true },
               )
+              .lean()
               .exec();
-            if (updated) appliedUpdates.push(updated);
+            if (updated) {
+              (updated as any).homeTeamRecord = score.homeTeamRecord;
+              (updated as any).awayTeamRecord = score.awayTeamRecord;
+              appliedUpdates.push(updated);
+            }
           }
-        } else {
-          // no matching game found for this score
         }
       } catch (err) {
         // ignore update errors
       }
     }
 
+    for (const league of leaguesToUpdate) {
+      await this.teamService.getTeams(league);
+    }
+
     return appliedUpdates.length ? appliedUpdates : results;
+  }
+
+  async findByDateHour(gameDate: string) {
+    const today = readableDate(new Date());
+    const filter: any = { isActive: true };
+
+    if (gameDate === today) {
+      const threeHoursAgo = new Date(addHours(new Date(), -3));
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayString = readableDate(yesterday);
+
+      filter.$or = [
+        { gameDate: gameDate },
+        {
+          gameDate: yesterdayString,
+          startTimeUTC: { $gte: threeHoursAgo.toISOString() },
+        },
+      ];
+    } else {
+      filter.gameDate = gameDate;
+    }
+
+    const games = await this.gameModel
+      .find(filter)
+      .sort({ startTimeUTC: 1 })
+      .lean()
+      .exec();
+
+    if (games.length === 0) {
+      const allGames = await this.findAll();
+      if (!allGames.length) {
+        this.getAllGames();
+      }
+      return {};
+    } else {
+      for (const currentLeague of Object.values(League)) {
+        const filtredGames = games.filter(
+          ({ isActive, awayTeamId, league }) => {
+            return (
+              isActive === true &&
+              awayTeamId !== undefined &&
+              awayTeamId !== '' &&
+              league.toUpperCase() === currentLeague.toUpperCase()
+            );
+          },
+        );
+
+        const gamesIndex = randomNumber(filtredGames.length - 1);
+        const randomGames = filtredGames[gamesIndex];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (new Date(randomGames?.updateDate) < yesterday) {
+          await this.getLeagueGames(currentLeague, false);
+        }
+      }
+
+      const teams = await this.teamService.findAll();
+      const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
+
+      // avoid dupplicate games
+      const filteredGames = games.filter(({ homeTeamId, teamSelectedId }) => {
+        return homeTeamId === teamSelectedId;
+      });
+
+      const gamesByTimeSlot: { [key: string]: any[] } = {};
+      filteredGames.forEach((game: any) => {
+        const homeTeam = teamsMap.get(game.homeTeamId);
+        const awayTeam = teamsMap.get(game.awayTeamId);
+        game = {
+          ...game,
+          homeTeamRecord: homeTeam?.record || '',
+          awayTeamRecord: awayTeam?.record || '',
+          homeTeam: homeTeam?.label || game.homeTeam,
+          homeTeamShort: homeTeam?.abbrev || game.homeTeamShort,
+          homeTeamLogo: homeTeam?.teamLogo || game.homeTeamLogo,
+          homeTeamLogoDark: homeTeam?.teamLogoDark || game.homeTeamLogoDark,
+          awayTeam: awayTeam?.label || game.awayTeam,
+          awayTeamShort: awayTeam?.abbrev || game.awayTeamShort,
+          awayTeamLogo: awayTeam?.teamLogo || game.awayTeamLogo,
+          awayTeamLogoDark: awayTeam?.teamLogoDark || game.awayTeamLogoDark,
+        };
+        const date = new Date(game.startTimeUTC);
+        const hours = date.getUTCHours().toString().padStart(2, '0');
+        const minutes = date.getUTCMinutes();
+        const minutesStr = minutes < 30 ? '00' : '30';
+        const timeSlot = `${hours}:${minutesStr}`;
+
+        if (!gamesByTimeSlot[timeSlot]) {
+          gamesByTimeSlot[timeSlot] = [];
+        }
+        gamesByTimeSlot[timeSlot].push(game);
+      });
+
+      return gamesByTimeSlot;
+    }
   }
 }
