@@ -30,6 +30,10 @@ export interface GameFormatted {
   isActive?: boolean;
   color: string;
   backgroundColor: string;
+  awayTeamColor: string;
+  awayTeamBackgroundColor: string;
+  homeTeamColor: string;
+  homeTeamBackgroundColor: string;
 }
 
 export interface League {
@@ -53,6 +57,10 @@ export interface Team {
   record?: string;
   color?: string;
   backgroundColor?: string;
+  awayTeamColor?: string;
+  awayTeamBackgroundColor?: string;
+  homeTeamColor?: string;
+  homeTeamBackgroundColor?: string;
 }
 
 export interface FilterGames {

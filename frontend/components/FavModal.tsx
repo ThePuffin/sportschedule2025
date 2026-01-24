@@ -29,9 +29,11 @@ const FavModal = ({
     return cached && cached.length > 0 ? cached : Object.values(LeaguesEnum);
   });
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [openFirstTeamSelector, setOpenFirstTeamSelector] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setOpenFirstTeamSelector(false);
       const cached = getCache<string[]>('favoriteTeams');
       setLocalFavorites(cached || favoriteTeams);
 
@@ -78,6 +80,7 @@ const FavModal = ({
   }));
 
   const handleSelection = (position: number, teamId: string | string[]) => {
+    setOpenFirstTeamSelector(false);
     const id = Array.isArray(teamId) ? teamId[0] : teamId;
     const updatedTeams = [...localFavorites];
 
@@ -156,7 +159,12 @@ const FavModal = ({
                 }}
                 onItemSelectionChange={(ids) => {
                   const newIds = Array.isArray(ids) ? ids : [];
-                  if (newIds.length > 0) setLocalLeagues(newIds);
+                  if (newIds.length > 0) {
+                    setLocalLeagues(newIds);
+                    if (!localFavorites.some((t) => !!t)) {
+                      setOpenFirstTeamSelector(true);
+                    }
+                  }
                 }}
                 allowMultipleSelection={true}
                 isClearable={false}
@@ -240,6 +248,7 @@ const FavModal = ({
                           allowMultipleSelection={false}
                           isClearable={true}
                           placeholder={translateWord('findTeam')}
+                          startOpen={index === 0 && openFirstTeamSelector}
                         />
                       </View>
                     </View>

@@ -1,10 +1,12 @@
 import { leagueLogos } from '@/constants/enum';
+import { getGamesStatus } from '@/utils/date';
 import { getCache } from '@/utils/fetchData';
 import { CardsProps } from '@/utils/types';
+import { translateWord } from '@/utils/utils';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
-import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function CardLarge({ data, showDate = false }: Readonly<CardsProps>) {
   const {
@@ -16,7 +18,6 @@ export default function CardLarge({ data, showDate = false }: Readonly<CardsProp
     awayTeamLogoDark,
     homeTeamScore,
     awayTeamScore,
-    color,
     arenaName = '',
     startTimeUTC,
     teamSelectedId,
@@ -24,12 +25,15 @@ export default function CardLarge({ data, showDate = false }: Readonly<CardsProp
     awayTeamId,
     homeTeamRecord,
     awayTeamRecord,
-    status, // Supposons que vous ayez un status pour le mode LIVE
+    awayTeamColor,
+    homeTeamColor,
     placeName = '',
     gameDate: gameDateStr,
   } = data;
 
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
+  const [scoreRevealed, setScoreRevealed] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const updateFavorites = () => {
@@ -42,21 +46,47 @@ export default function CardLarge({ data, showDate = false }: Readonly<CardsProp
   }, []);
 
   const hasScore = homeTeamScore != null && awayTeamScore != null;
-  const isLive = status === 'LIVE'; // À adapter selon vos données
+  const status = getGamesStatus(data);
+  const isLive = status === 'IN_PROGRESS';
 
-  const timeText = startTimeUTC
-    ? new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    : '';
+  useEffect(() => {
+    if (isLive) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.2,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [isLive, pulseAnim]);
+
+  let timeText = '';
+  if (status === 'FINAL') {
+    timeText = translateWord('ended');
+  } else if (status === 'IN_PROGRESS') {
+    timeText = 'live';
+  } else if (startTimeUTC) {
+    timeText = new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
 
   const leagueKey = (data.league || 'DEFAULT') as keyof typeof leagueLogos;
   const leagueLogo = leagueLogos[leagueKey] || leagueLogos.DEFAULT;
 
   // Style pour l'ombre des logos (identique à Cards.tsx pour un fond sombre)
-  const shadowColor = 'rgba(255, 255, 255, 0.5)';
-  const logoStyle = { filter: `brightness(1.1) contrast(1.2) drop-shadow(0 0 2px ${shadowColor})` } as any;
+  const shadowColor = 'rgba(255, 255, 255, 0.24)';
+  const logoStyle = { filter: `brightness(1.1) contrast(1.2) drop-shadow(0 0 1px ${shadowColor})` } as any;
 
   const baseColor = '#0f172a';
-  const teamColor = color ? (color.startsWith('#') ? color : `#${color}`) : baseColor;
 
   const getBrightness = (hexColor: string) => {
     if (!hexColor) return 0;
@@ -67,50 +97,33 @@ export default function CardLarge({ data, showDate = false }: Readonly<CardsProp
         .map((char) => char + char)
         .join('');
     }
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
+    const r = Number.parseInt(hex.substring(0, 2), 16);
+    const g = Number.parseInt(hex.substring(2, 4), 16);
+    const b = Number.parseInt(hex.substring(4, 6), 16);
     return (r * 299 + g * 587 + b * 114) / 1000;
   };
 
   let gradientStyle = { backgroundColor: baseColor } as any;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const isGradientActive = teamSelectedId && (teamSelectedId === homeTeamId || teamSelectedId === awayTeamId);
 
-  let isPast = false;
-  if (gameDateStr) {
-    const datePart = gameDateStr.includes('T') ? gameDateStr.split('T')[0] : gameDateStr;
-    const [y, m, d] = datePart.split('-').map(Number);
-    const gameDateLocal = new Date(y, m - 1, d);
-    isPast = !isNaN(gameDateLocal.getTime()) && gameDateLocal < today;
-  } else if (startTimeUTC) {
-    const gameDate = new Date(startTimeUTC);
-    isPast = !isNaN(gameDate.getTime()) && gameDate < today;
-  }
-
-  const isGradientActive =
-    !isPast && teamSelectedId && (teamSelectedId === homeTeamId || teamSelectedId === awayTeamId);
+  let homeBg = baseColor;
+  let awayBg = baseColor;
 
   if (isGradientActive) {
-    let gradientColors = [baseColor, baseColor];
-    let stops = ['0%', '100%'];
-
-    if (teamSelectedId === awayTeamId) {
-      gradientColors = [baseColor, teamColor];
-      stops = ['67%', '100%'];
-    } else if (teamSelectedId === homeTeamId) {
-      gradientColors = [teamColor, baseColor];
-      stops = ['0%', '33%'];
-    }
-    gradientStyle = {
-      backgroundColor: gradientColors[0],
-      backgroundImage: `linear-gradient(90deg, ${gradientColors[0]} ${stops[0]}, ${gradientColors[1]} ${stops[1]})`,
+    const formatColor = (c: string | undefined) => {
+      if (!c) return baseColor;
+      return c.startsWith('#') ? c : `#${c}`;
     };
+    const awayColorHex = formatColor(awayTeamColor);
+    const homeColorHex = formatColor(homeTeamColor);
+    gradientStyle = {
+      backgroundColor: baseColor,
+      backgroundImage: `linear-gradient(90deg, ${homeColorHex} 0%, ${baseColor} 10%, ${baseColor} 90%, ${awayColorHex} 100%)`,
+    };
+    homeBg = awayColorHex;
+    awayBg = homeColorHex;
   }
-
-  const homeBg = isGradientActive && teamSelectedId === homeTeamId ? teamColor : baseColor;
-  const awayBg = isGradientActive && teamSelectedId === awayTeamId ? teamColor : baseColor;
 
   const displayHomeLogo = getBrightness(homeBg) < 128 && homeTeamLogoDark ? homeTeamLogoDark : homeTeamLogo;
   const displayAwayLogo = getBrightness(awayBg) < 128 && awayTeamLogoDark ? awayTeamLogoDark : awayTeamLogo;
@@ -130,7 +143,15 @@ export default function CardLarge({ data, showDate = false }: Readonly<CardsProp
           </View>
           {isLive && (
             <View style={styles.liveBadge}>
-              <Text style={styles.liveText}>✦ LIVE</Text>
+              <Animated.View
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 4,
+                  backgroundColor: '#ef4444',
+                  opacity: pulseAnim,
+                }}
+              />
             </View>
           )}
         </View>
@@ -155,18 +176,25 @@ export default function CardLarge({ data, showDate = false }: Readonly<CardsProp
           {/* Center: Score or VS/@ */}
           <View style={styles.centerColumn}>
             {hasScore ? (
-              <View style={styles.scoreRow}>
-                <Text style={styles.scoreNumber}>{homeTeamScore}</Text>
+              (favoriteTeams.includes(homeTeamId) || favoriteTeams.includes(awayTeamId)) && !scoreRevealed ? (
+                <TouchableOpacity style={styles.revealButton} onPress={() => setScoreRevealed(true)}>
+                  <Icon name="eye" type="font-awesome" size={30} color="#94a3b8" />
+                  <Text style={styles.revealText}>{translateWord('score')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.scoreRow}>
+                  <Text style={styles.scoreNumber}>{homeTeamScore}</Text>
 
-                <Text style={styles.scoreDivider}>-</Text>
-                <Text style={styles.scoreNumber}>{awayTeamScore}</Text>
-              </View>
+                  <Text style={styles.scoreDivider}>-</Text>
+                  <Text style={styles.scoreNumber}>{awayTeamScore}</Text>
+                </View>
+              )
             ) : (
               <Text style={styles.vsText}>@</Text>
             )}
 
             <View style={styles.timeContainer}>
-              <Text style={isLive ? styles.liveTimeText : styles.timeText}>{isLive ? 'Q2 - 2:08' : timeText}</Text>
+              <Text style={isLive ? styles.liveTimeText : styles.timeText}>{timeText}</Text>
             </View>
           </View>
 
@@ -231,22 +259,16 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   leagueBadge: {
-    backgroundColor: '#1e293b',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
   },
   leagueIcon: {
+    height: 18,
     width: 30,
-    height: 15,
   },
   liveBadge: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#ef4444',
   },
   liveText: {
     color: '#ef4444',
@@ -289,6 +311,15 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontStyle: 'italic',
     fontWeight: '900',
+  },
+  revealButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  revealText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 4,
   },
   scoreRow: {
     flexDirection: 'row',

@@ -68,3 +68,9 @@ export const leagueLogos = {
   WNCAAB: require('../assets/images/ncaa-basketball-woman.png'),
   DEFAULT: require('../assets/images/DEFAULT.png'),
 };
+
+export enum GameStatus {
+  SCHEDULED = 'SCHEDULED',
+  IN_PROGRESS = 'IN_PROGRESS', 
+  FINAL = 'FINAL',
+}

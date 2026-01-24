@@ -1,7 +1,7 @@
 import NoResults from '@/components/NoResults';
 import { ListItem } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
-import Cards from './Cards';
+import CardLarge from './CardLarge';
 
 import type { AccordionProps } from '../utils/types';
 
@@ -33,7 +33,7 @@ export default function Accordion({
           (gameSelect) => game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
         );
           return (
-          <Cards
+          <CardLarge
             onSelection={() => {
               return;
             }}

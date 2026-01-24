@@ -85,43 +85,11 @@ export const getCache = <T>(cacheKey: string): T | null => {
   }
 };
 
-export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: GameFormatted[] }> => {
-  const cacheKey = `games_hour_${date}`;
-  // 1 minute cache
-  if (isCacheValid(cacheKey, 1 / 60)) {
-    const cached = getCache<{ [key: string]: GameFormatted[] }>(cacheKey);
-    if (cached) return cached;
-  }
-
-  try {
-    const data = await retryFetch(() =>
-      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/hour/${date}`).then(
-        (res) => res.json() as Promise<{ [key: string]: GameFormatted[] }>,
-      ),
-    );
-    saveCache(cacheKey, data);
-    return data;
-  } catch (error) {
-    console.error(error);
-    // Fallback to stale cache if available
-    const staleCache = getCache<{ [key: string]: GameFormatted[] }>(cacheKey);
-    if (staleCache) return staleCache;
-    return {};
-  }
-};
-
-// Helper function to retry after delay
-const retryFetch = async <T>(fetchFn: () => Promise<T>, retries: number = 1, delayMs: number = 6000): Promise<T> => {
-  try {
-    return await fetchFn();
-  } catch (error) {
-    if (retries > 0) {
-      console.warn(`Retry in ${delayMs}ms...`);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      return retryFetch(fetchFn, retries - 1, delayMs);
-    }
-    throw error;
-  }
+const isCacheContentValid = (data: unknown): boolean => {
+  if (data === null || data === undefined) return false;
+  if (Array.isArray(data)) return data.length > 0;
+  if (typeof data === 'object') return Object.keys(data as object).length > 0;
+  return true;
 };
 
 // Helper to add timeout to fetch (accepts RequestInit options)
@@ -142,6 +110,67 @@ const fetchWithTimeout = (url: string, timeoutMs: number = 6000, options: Reques
     });
 };
 
+const fetchWithCacheStrategy = async <T>(
+  url: string,
+  cacheKey: string | null,
+  emptyValue: T,
+  customGetCache?: () => T | null,
+  customSaveCache?: (data: T) => void,
+  retryTimeout: number = 10000,
+): Promise<T> => {
+  try {
+    const res = await fetchWithTimeout(url, 5000);
+    const data = (await res.json()) as T;
+    if (cacheKey) saveCache(cacheKey, data);
+    if (customSaveCache) customSaveCache(data);
+    return data;
+  } catch (error) {
+    console.warn(`Fetch failed for ${url} (5s). Checking cache...`);
+
+    let cached: T | null = null;
+    if (customGetCache) {
+      cached = customGetCache();
+    } else if (cacheKey) {
+      cached = getCache<T>(cacheKey);
+    }
+
+    if (isCacheContentValid(cached)) {
+      console.info(`Using cached data for ${url} due to fetch failure.`);
+      return cached!;
+    }
+
+    console.warn(`Cache invalid for ${url}. Retrying in 10s...`);
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+
+    try {
+      const res = await fetchWithTimeout(url, retryTimeout);
+      const data = (await res.json()) as T;
+      if (cacheKey) saveCache(cacheKey, data);
+      if (customSaveCache) customSaveCache(data);
+      return data;
+    } catch (retryError) {
+      console.error(`Retry failed for ${url}`, retryError);
+      return emptyValue;
+    }
+  }
+};
+
+export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: GameFormatted[] }> => {
+  const cacheKey = `games_hour_${date}`;
+
+  // Vérifie si le cache est valide (moins de 2 minutes)
+  if (isCacheValid(cacheKey, 2 / 60)) {
+    const cached = getCache<{ [key: string]: GameFormatted[] }>(cacheKey);
+    if (cached) return cached;
+  }
+
+  return fetchWithCacheStrategy<{ [key: string]: GameFormatted[] }>(
+    `${EXPO_PUBLIC_API_BASE_URL}/games/hour/${date}`,
+    cacheKey,
+    {},
+  );
+};
+
 export const fetchLeagues = async (setLeaguesAvailable: (leagues: string[]) => void) => {
   const cacheKey = 'leagues';
 
@@ -154,25 +183,16 @@ export const fetchLeagues = async (setLeaguesAvailable: (leagues: string[]) => v
     }
   }
 
-  try {
-    const leagues = await retryFetch(() =>
-      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`, 60000).then(
-        (res) => res.json() as Promise<string[]>,
-      ),
-    );
-    setLeaguesAvailable(leagues);
-    saveCache(cacheKey, leagues);
-    return leagues;
-  } catch (error: unknown) {
-    console.error('Error fetching leagues:', error);
-    // Fallback to stale cache if available
-    const staleCache = getCache<string[]>(cacheKey);
-    if (staleCache) {
-      setLeaguesAvailable(staleCache);
-      return staleCache;
-    }
-    return [];
-  }
+  const data = await fetchWithCacheStrategy<string[]>(
+    `${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`,
+    cacheKey,
+    [],
+    undefined,
+    undefined,
+    60000,
+  );
+  setLeaguesAvailable(data);
+  return data;
 };
 
 export const fetchTeams = async () => {
@@ -186,19 +206,7 @@ export const fetchTeams = async () => {
     }
   }
 
-  try {
-    const teams = await retryFetch(() =>
-      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/teams`, 60000).then((res) => res.json() as Promise<Team[]>),
-    );
-    saveCache(cacheKey, teams);
-    return teams;
-  } catch (error: unknown) {
-    console.error('Error fetching teams:', error);
-    // Fallback to stale cache if available
-    const staleCache = getCache<Team[]>(cacheKey);
-    if (staleCache) return staleCache;
-    return [];
-  }
+  return fetchWithCacheStrategy<Team[]>(`${EXPO_PUBLIC_API_BASE_URL}/teams`, cacheKey, [], undefined, undefined, 60000);
 };
 
 export const fetchRemainingGamesByTeam = async (teamSelected: string) => {
@@ -210,40 +218,28 @@ export const fetchRemainingGamesByTeam = async (teamSelected: string) => {
     return cachedEntry.data;
   }
 
-  const fallbackData = cachedEntry?.data;
-
-  try {
-    const games = await retryFetch(async () => {
-      const response = await fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/team/${teamSelected}`, 60000);
-      return (await response.json()) || {};
-    });
-    teamGamesCache[teamSelected] = { data: games, timestamp: Date.now() };
-    persistTeamGamesCache(teamGamesCache);
-    return games;
-  } catch (error) {
-    console.error('Error fetching remaining games by team:', error);
-    if (fallbackData) return fallbackData;
-    return {};
-  }
+  return fetchWithCacheStrategy<FilterGames>(
+    `${EXPO_PUBLIC_API_BASE_URL}/games/team/${teamSelected}`,
+    null,
+    {},
+    () => teamGamesCache[teamSelected]?.data || null,
+    (data) => {
+      teamGamesCache[teamSelected] = { data, timestamp: Date.now() };
+      persistTeamGamesCache(teamGamesCache);
+    },
+    60000,
+  );
 };
 
 export const fetchRemainingGamesByLeague = async (league: string, limit?: number) => {
   const cacheKey = `games_league_${league}${limit ? `_${limit}` : ''}`;
 
-  try {
-    let url = `${EXPO_PUBLIC_API_BASE_URL}/games/league/${league}`;
-    if (limit) {
-      url += `?maxResults=${limit}`;
-    }
-    const data = await retryFetch(() => fetchWithTimeout(url, 60000).then((res) => res.json() as Promise<FilterGames>));
-    return data;
-  } catch (error: unknown) {
-    console.error('Error fetching remaining games by league:', error);
-    // Fallback to stale cache if available
-    const staleCache = getCache<FilterGames>(cacheKey);
-    if (staleCache) return staleCache;
-    return {};
+  let url = `${EXPO_PUBLIC_API_BASE_URL}/games/league/${league}`;
+  if (limit) {
+    url += `?maxResults=${limit}`;
   }
+
+  return fetchWithCacheStrategy<FilterGames>(url, cacheKey, {}, undefined, undefined, 60000);
 };
 
 export const smallFetchRemainingGamesByLeague = async (league: string) => {
@@ -273,16 +269,13 @@ export const refreshTeams = async (endpoint: string): Promise<void> => {
 };
 
 export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
-  try {
-    date = date || new Date().toISOString().split('T')[0];
-    const dayGames = await retryFetch(() =>
-      fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`).then(
-        (res) => res.json() as Promise<GameFormatted[]>,
-      ),
-    );
-    return dayGames;
-  } catch (error) {
-    console.error(`Error fetching games for date ${date}:`, error);
-    return [];
-  }
+  date = date || new Date().toISOString().split('T')[0];
+  return fetchWithCacheStrategy<GameFormatted[]>(
+    `${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`,
+    null,
+    [],
+    undefined,
+    undefined,
+    10000,
+  );
 };
