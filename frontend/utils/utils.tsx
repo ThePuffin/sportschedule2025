@@ -114,6 +114,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'Ligue(s) à afficher',
         score: 'Résultat final',
         favorites: 'FAVORIS',
+        followLive: ' Suivre le direct',
+        scoreView: 'Afficher les scores',
       };
       break;
     case 'de':
@@ -146,6 +148,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'Anzuzeigende Liga/Ligen',
         score: 'Endstand',
         favorites: 'FAVORITEN',
+        followLive: 'Live verfolgen',
+        scoreView: 'Spielstände anzeigen',
       };
       break;
     case 'es':
@@ -178,6 +182,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'Liga(s) a mostrar',
         score: 'Marcador final',
         favorites: 'FAVORITOS',
+        followLive: 'Seguir en vivo',
+        scoreView: 'Mostrar marcadores',
       };
       break;
 
@@ -211,6 +217,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'Lega/Leghe da visualizzare',
         score: 'Punteggio finale',
         favorites: 'PREFERITI',
+        followLive: 'Segui in diretta',
+        scoreView: 'Mostra punteggi',
       };
       break;
     case 'ja':
@@ -243,6 +251,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: '表示するリーグ',
         score: '最終スコア',
         favorites: 'お気に入り',
+        followLive: 'ライブをフォロー',
+        scoreView: 'スコアを表示',
       };
       break;
     case 'ko':
@@ -275,6 +285,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: '표시할 리그',
         score: '최종 점수',
         favorites: '즐겨찾기',
+        followLive: '라이브 팔로우',
+        scoreView: '점수 보기',
       };
       break;
     case 'nl':
@@ -307,6 +319,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'Weer te geven competitie(s)',
         score: 'Eindstand',
         favorites: 'FAVORIETEN',
+        followLive: 'Volg live',
+        scoreView: 'Scores weergeven',
       };
       break;
     case 'pt':
@@ -339,6 +353,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'Liga(s) a exibir',
         score: 'Placar final',
         favorites: 'FAVORITOS',
+        followLive: 'Seguir ao vivo',
+        scoreView: 'Mostrar placares',
       };
       break;
     case 'ru':
@@ -371,6 +387,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'Лиги для отображения',
         score: 'Итоговый счет',
         favorites: 'ИЗБРАННОЕ',
+        followLive: 'Следить в прямом эфире',
+        scoreView: 'Показать результаты',
       };
       break;
     case 'zh':
@@ -403,6 +421,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: '要显示的联赛',
         score: '最终得分',
         favorites: '收藏',
+        followLive: '关注直播',
+        scoreView: '显示比分',
       };
       break;
     default:
@@ -435,6 +455,8 @@ export const translateWord = (word: string) => {
         leagueSurveilled: 'League(s) to display',
         score: 'Final Score',
         favorites: 'FAVORITES',
+        followLive: 'Follow Live',
+        scoreView: 'Show scores',
       };
       break;
   }

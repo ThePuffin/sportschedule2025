@@ -1,13 +1,16 @@
+import AppLogo from '@/components/AppLogo';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
+import ScoreToggle from '@/components/ScoreToggle';
 import Selector from '@/components/Selector';
 import SliderDatePicker from '@/components/SliderDatePicker';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getGamesStatus } from '@/utils/date';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, useWindowDimensions } from 'react-native';
+import { ScrollView, useWindowDimensions, View } from 'react-native';
 import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import CardLarge from '../../components/CardLarge';
@@ -74,6 +77,7 @@ export default function GameofTheDay() {
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   // Add state for the filter slider
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
+  const [showScores, setShowScores] = useState<boolean>(false);
 
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -117,6 +121,18 @@ export default function GameofTheDay() {
     if (globalThis.window !== undefined) {
       globalThis.window.addEventListener('favoritesUpdated', updateFavorites);
       return () => globalThis.window.removeEventListener('favoritesUpdated', updateFavorites);
+    }
+  }, []);
+
+  useEffect(() => {
+    const updateScores = () => {
+      const cached = getCache<boolean>('showScores');
+      setShowScores(cached ?? false);
+    };
+    updateScores();
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('scoresUpdated', updateScores);
+      return () => globalThis.window.removeEventListener('scoresUpdated', updateScores);
     }
   }, []);
 
@@ -303,28 +319,115 @@ export default function GameofTheDay() {
     return games.some((game) => favoriteTeams.includes(game.homeTeamId) || favoriteTeams.includes(game.awayTeamId));
   }, [games, favoriteTeams]);
 
+  useEffect(() => {
+    if (activeFilter === 'FAVORITES' && !hasFavorites && !isLoading) {
+      setActiveFilter('ALL');
+      setSelectLeagues(userLeagues);
+      setTeamSelectedId('');
+    }
+  }, [activeFilter, hasFavorites, isLoading, userLeagues]);
+
+  const handleScoreToggle = useCallback((value: boolean) => {
+    setShowScores(value);
+  }, []);
+
+  const displayScoreToggle = useCallback(() => {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '5px 15px 0 15px',
+        }}
+      >
+        <AppLogo />
+        <ScoreToggle value={showScores} onValueChange={handleScoreToggle} />
+      </div>
+    );
+  }, [showScores, handleScoreToggle]);
+
   const displayFilters = useCallback(() => {
+    const selectedTeamLabel = teamsOfTheDay.find((t) => t.uniqueId === teamSelectedId)?.label || 'ALL';
+    const teamLabels = teamsOfTheDay.map((t) => t.label);
+
+    const handleTeamFilterChange = (label: string) => {
+      if (label === 'ALL') {
+        handleTeamSelectionChange('');
+      } else {
+        const team = teamsOfTheDay.find((t) => t.label === label);
+        if (team) {
+          handleTeamSelectionChange(team.uniqueId);
+        }
+      }
+    };
+
     return (
       <ThemedView>
-        <div style={windowWidth > 768 ? { display: 'flex', flexDirection: 'row', width: '100%' } : { width: '100%' }}>
-          <div style={{ width: '100%' }}>
-            <Selector
-              data={{
-                i: randomNumber(999999),
-                items: teamsOfTheDay as any,
-                itemSelectedId: teamSelectedId,
-                itemsSelectedIds: [],
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            width: '100%',
+            alignItems: 'center',
+            paddingLeft: 15,
+            backgroundColor: 'black',
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              width: 40,
+              height: 40,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 10,
+              backgroundColor: 'black',
+              border: '1px solid white',
+              borderRadius: '50%',
+            }}
+          >
+            <Ionicons name="search" size={24} color="white" />
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                overflow: 'hidden',
+                zIndex: 10,
               }}
-              onItemSelectionChange={handleTeamSelectionChange}
-              allowMultipleSelection={false}
-              isClearable={true}
-              placeholder={translateWord('filterTeams')}
-            />
+            >
+              <Selector
+                data={{
+                  i: randomNumber(999999),
+                  items: teamsOfTheDay as any,
+                  itemSelectedId: teamSelectedId,
+                  itemsSelectedIds: [],
+                }}
+                onItemSelectionChange={handleTeamSelectionChange}
+                allowMultipleSelection={false}
+                isClearable={true}
+                placeholder={translateWord('filterTeams')}
+              />
+            </div>
           </div>
+          <View style={{ flex: 1 }}>
+            <FilterSlider
+              selectedFilter={selectedTeamLabel}
+              onFilterChange={handleTeamFilterChange}
+              hasFavorites={false}
+              showFavorites={false}
+              availableLeagues={teamLabels as any}
+            />
+          </View>
         </div>
       </ThemedView>
     );
-  }, [leaguesAvailable, selectLeagues, teamsOfTheDay, teamSelectedId, handleTeamSelectionChange, windowWidth]);
+  }, [leaguesAvailable, selectLeagues, teamsOfTheDay, teamSelectedId, handleTeamSelectionChange]);
 
   const displayNoContent = useCallback(() => {
     if (isLoading) {
@@ -358,6 +461,7 @@ export default function GameofTheDay() {
                     key={game._id ?? randomNumber(999999)}
                     data={teamSelectedId ? { ...game, teamSelectedId } : game}
                     showDate={false}
+                    showScores={showScores}
                   />
                 ))}
               </div>
@@ -373,13 +477,14 @@ export default function GameofTheDay() {
                 isCounted={false}
                 disableToggle={false}
                 gamesSelected={gamesSelected}
+                showScores={showScores}
               />
             </div>
           );
         })}
       </ThemedView>
     );
-  }, [games, displayNoContent, visibleGamesByHour, gamesSelected, selectDate, teamSelectedId]);
+  }, [games, displayNoContent, visibleGamesByHour, gamesSelected, selectDate, teamSelectedId, showScores]);
 
   const displayLargeDeviceHeader = useCallback(() => {
     if (visibleGamesByHour.length === 0) {
@@ -459,45 +564,49 @@ export default function GameofTheDay() {
         >
           <tbody>
             <tr>
-              {visibleGamesByHour.map(({ hour, games }) => (
-                <td key={hour} style={{ verticalAlign: 'top' }}>
-                  {games.map((game) => {
-                    const gameId = game._id ?? randomNumber(999999);
-                    if (isPast) {
+              {visibleGamesByHour.map(({ hour, games }) => {
+                return (
+                  <td key={hour} style={{ verticalAlign: 'top' }}>
+                    {games.map((game) => {
+                      const gameId = game._id ?? randomNumber(999999);
+                      if (isPast) {
+                        return (
+                          <CardLarge
+                            key={gameId}
+                            data={teamSelectedId ? { ...game, teamSelectedId } : game}
+                            showDate={false}
+                            selected={false}
+                            showScores={showScores}
+                          />
+                        );
+                      }
+                      const isSelected = gamesSelected.some(
+                        (gameSelect) =>
+                          game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
+                      );
                       return (
                         <CardLarge
                           key={gameId}
-                          data={teamSelectedId ? { ...game, teamSelectedId } : game}
+                          data={game}
+                          numberSelected={1}
+                          showButtons={true}
                           showDate={false}
-                          selected={false}
+                          onSelection={() => {}}
+                          selected={isSelected}
+                          disableSelection={true}
+                          showScores={showScores}
                         />
                       );
-                    }
-                    const isSelected = gamesSelected.some(
-                      (gameSelect) =>
-                        game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
-                    );
-                    return (
-                      <CardLarge
-                        key={gameId}
-                        data={game}
-                        numberSelected={1}
-                        showButtons={true}
-                        showDate={false}
-                        onSelection={() => {}}
-                        selected={isSelected}
-                        disableSelection={true}
-                      />
-                    );
-                  })}
-                </td>
-              ))}
+                    })}
+                  </td>
+                );
+              })}
             </tr>
           </tbody>
         </table>
       </ThemedView>
     );
-  }, [games, displayNoContent, visibleGamesByHour, teamSelectedId, gamesSelected, selectDate]);
+  }, [games, displayNoContent, visibleGamesByHour, teamSelectedId, gamesSelected, selectDate, showScores]);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -567,6 +676,7 @@ export default function GameofTheDay() {
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView>
             <div style={{ position: 'relative', zIndex: 20 }}>
+              {displayScoreToggle()}
               <SliderDatePicker onDateChange={(date) => handleDateChange(date, date)} selectDate={selectDate} />
               <FilterSlider
                 selectedFilter={activeFilter}

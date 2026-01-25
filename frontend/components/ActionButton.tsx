@@ -15,7 +15,7 @@ export interface ActionButtonRef {
 
 const ActionButtonWithRef: React.ForwardRefRenderFunction<ActionButtonRef, ActionButtonProps> = (
   { scrollViewRef },
-  ref
+  ref,
 ) => {
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => {
     return getCache<string[]>('favoriteTeams') || [];
@@ -96,8 +96,8 @@ const ActionButtonWithRef: React.ForwardRefRenderFunction<ActionButtonRef, Actio
             ]}
           >
             <IconSymbol
-              name={isVisibleScrollTop ? 'arrow.up' : 'star.fill'}
-              color={isVisibleScrollTop ? 'white' : '#EFBF04'}
+              name={isVisibleScrollTop ? 'arrow.up' : 'gearshape.fill'}
+              color={isVisibleScrollTop ? 'white' : 'black'}
               size={24}
             />
           </ThemedView>

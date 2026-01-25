@@ -16,6 +16,7 @@ const MAPPING = {
   'arrow.up': 'arrow-upward',
   'star.fill': 'star',
   'check-square': 'check-box',
+  'gearshape.fill': 'settings',
 } as Partial<
   Record<import('expo-symbols').SymbolViewProps['name'], React.ComponentProps<typeof MaterialIcons>['name']>
 >;

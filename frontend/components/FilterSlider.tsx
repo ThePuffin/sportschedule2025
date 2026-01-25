@@ -9,6 +9,7 @@ interface FilterSliderProps {
   onFilterChange: (filter: string) => void;
   hasFavorites?: boolean;
   availableLeagues?: string[];
+  showFavorites?: boolean;
 }
 
 export default function FilterSlider({
@@ -16,6 +17,7 @@ export default function FilterSlider({
   onFilterChange,
   hasFavorites = true,
   availableLeagues,
+  showFavorites = true,
 }: FilterSliderProps) {
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -26,7 +28,7 @@ export default function FilterSlider({
 
   const items = [
     { label: translateWord('all'), value: 'ALL' },
-    { label: translateWord('favorites'), value: 'FAVORITES', icon: 'star' },
+    ...(showFavorites ? [{ label: translateWord('favorites'), value: 'FAVORITES', icon: 'star' }] : []),
     ...(availableLeagues || Object.values(League).filter((l) => l !== League.ALL)).map((l) => ({ label: l, value: l })),
   ];
 

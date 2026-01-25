@@ -1,3 +1,4 @@
+import ScoreToggle from '@/components/ScoreToggle';
 import Selector from '@/components/Selector';
 import { LeaguesEnum } from '@/constants/Leagues';
 import { TeamsEnum } from '@/constants/Teams';
@@ -30,12 +31,16 @@ const FavModal = ({
   });
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [openFirstTeamSelector, setOpenFirstTeamSelector] = useState(false);
+  const [showScores, setShowScores] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setOpenFirstTeamSelector(false);
       const cached = getCache<string[]>('favoriteTeams');
       setLocalFavorites(cached || favoriteTeams);
+
+      const cachedShowScores = getCache<boolean>('showScores');
+      setShowScores(cachedShowScores ?? false);
 
       const cachedLeagues = getCache<string[]>('leaguesSelected');
       if (cachedLeagues && cachedLeagues.length > 0) {
@@ -99,9 +104,11 @@ const FavModal = ({
   const handleSave = () => {
     onSave(localFavorites);
     saveCache('leaguesSelected', localLeagues);
+    saveCache('showScores', showScores);
     if (globalThis.window !== undefined) {
       globalThis.window.dispatchEvent(new Event('favoritesUpdated'));
       globalThis.window.dispatchEvent(new Event('leaguesUpdated'));
+      globalThis.window.dispatchEvent(new Event('scoresUpdated'));
     }
     onClose();
   };
@@ -256,6 +263,10 @@ const FavModal = ({
                 );
               },
             )}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15 }}>
+            <Text style={{ marginRight: 10 }}>{translateWord('scoreView')} :</Text>
+            <ScoreToggle value={showScores} onValueChange={setShowScores} />
           </View>
 
           <View style={styles.buttonsContainer}>

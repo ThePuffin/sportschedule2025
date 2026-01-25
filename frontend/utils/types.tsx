@@ -28,6 +28,7 @@ export interface GameFormatted {
   updateDate?: Date;
   venueTimezone?: string;
   isActive?: boolean;
+  urlLive?: string;
   color: string;
   backgroundColor: string;
   awayTeamColor: string;
