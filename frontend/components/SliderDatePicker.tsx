@@ -1,6 +1,6 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 interface SliderDatePickerProps {
   selectDate: Date;
@@ -116,8 +116,71 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
     onDateChange(newDate);
   };
 
+  const useDragScroll = (ref: React.RefObject<ScrollView>) => {
+    useEffect(() => {
+      if (Platform.OS === 'web' && ref.current) {
+        // @ts-ignore
+        const element = ref.current.getScrollableNode ? ref.current.getScrollableNode() : ref.current;
+        if (element) {
+          let isDown = false;
+          let startX = 0;
+          let scrollLeft = 0;
+
+          const onMouseDown = (e: MouseEvent) => {
+            isDown = true;
+            element.style.cursor = 'grabbing';
+            startX = e.pageX - element.offsetLeft;
+            scrollLeft = element.scrollLeft;
+          };
+          const onMouseLeave = () => {
+            isDown = false;
+            element.style.cursor = 'grab';
+          };
+          const onMouseUp = () => {
+            isDown = false;
+            element.style.cursor = 'grab';
+          };
+          const onMouseMove = (e: MouseEvent) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - element.offsetLeft;
+            const walk = (x - startX) * 2;
+            element.scrollLeft = scrollLeft - walk;
+          };
+
+          element.addEventListener('mousedown', onMouseDown);
+          element.addEventListener('mouseleave', onMouseLeave);
+          element.addEventListener('mouseup', onMouseUp);
+          element.addEventListener('mousemove', onMouseMove);
+          element.style.cursor = 'grab';
+
+          return () => {
+            element.removeEventListener('mousedown', onMouseDown);
+            element.removeEventListener('mouseleave', onMouseLeave);
+            element.removeEventListener('mouseup', onMouseUp);
+            element.removeEventListener('mousemove', onMouseMove);
+            element.style.cursor = 'default';
+          };
+        }
+      }
+    }, [ref]);
+  };
+
+  useDragScroll(scrollViewRef);
+  useDragScroll(monthScrollViewRef);
+
   return (
-    <View style={[styles.container, { backgroundColor }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor },
+        Platform.OS === 'web' &&
+          ({
+            maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
+          } as any),
+      ]}
+    >
       <View style={styles.monthContainer}>
         <ScrollView
           ref={monthScrollViewRef}

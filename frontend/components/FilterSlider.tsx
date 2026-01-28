@@ -1,8 +1,8 @@
 import { League } from '@/constants/enum';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
-import React, { useRef } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface FilterSliderProps {
   selectedFilter: string;
@@ -10,6 +10,8 @@ interface FilterSliderProps {
   hasFavorites?: boolean;
   availableLeagues?: string[];
   showFavorites?: boolean;
+  showAll?: boolean;
+  data?: { label: string; value: string; icon?: string }[];
 }
 
 export default function FilterSlider({
@@ -18,6 +20,8 @@ export default function FilterSlider({
   hasFavorites = true,
   availableLeagues,
   showFavorites = true,
+  showAll = true,
+  data,
 }: FilterSliderProps) {
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -26,14 +30,80 @@ export default function FilterSlider({
   const unselectedTextColor = '#8E8E93';
   const selectedTextColor = '#FFFFFF';
 
-  const items = [
-    { label: translateWord('all'), value: 'ALL' },
-    ...(showFavorites ? [{ label: translateWord('favorites'), value: 'FAVORITES', icon: 'star' }] : []),
-    ...(availableLeagues || Object.values(League).filter((l) => l !== League.ALL)).map((l) => ({ label: l, value: l })),
-  ];
+  const useDragScroll = (ref: React.RefObject<ScrollView>) => {
+    useEffect(() => {
+      if (Platform.OS === 'web' && ref.current) {
+        // @ts-ignore
+        const element = ref.current.getScrollableNode ? ref.current.getScrollableNode() : ref.current;
+        if (element) {
+          let isDown = false;
+          let startX = 0;
+          let scrollLeft = 0;
+
+          const onMouseDown = (e: MouseEvent) => {
+            isDown = true;
+            element.style.cursor = 'grabbing';
+            startX = e.pageX - element.offsetLeft;
+            scrollLeft = element.scrollLeft;
+          };
+          const onMouseLeave = () => {
+            isDown = false;
+            element.style.cursor = 'grab';
+          };
+          const onMouseUp = () => {
+            isDown = false;
+            element.style.cursor = 'grab';
+          };
+          const onMouseMove = (e: MouseEvent) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - element.offsetLeft;
+            const walk = (x - startX) * 2;
+            element.scrollLeft = scrollLeft - walk;
+          };
+
+          element.addEventListener('mousedown', onMouseDown);
+          element.addEventListener('mouseleave', onMouseLeave);
+          element.addEventListener('mouseup', onMouseUp);
+          element.addEventListener('mousemove', onMouseMove);
+          element.style.cursor = 'grab';
+
+          return () => {
+            element.removeEventListener('mousedown', onMouseDown);
+            element.removeEventListener('mouseleave', onMouseLeave);
+            element.removeEventListener('mouseup', onMouseUp);
+            element.removeEventListener('mousemove', onMouseMove);
+            element.style.cursor = 'default';
+          };
+        }
+      }
+    }, [ref]);
+  };
+
+  useDragScroll(scrollViewRef);
+
+  const items = data
+    ? data
+    : [
+        ...(showAll ? [{ label: translateWord('all'), value: 'ALL' }] : []),
+        ...(showFavorites ? [{ label: translateWord('favorites'), value: 'FAVORITES', icon: 'star' }] : []),
+        ...(availableLeagues || Object.values(League).filter((l) => l !== League.ALL)).map((l) => ({
+          label: l,
+          value: l,
+        })),
+      ];
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        Platform.OS === 'web' &&
+          ({
+            backgroundImage: 'linear-gradient(90deg, transparent 0%, #000000 5%, #000000 95%, transparent 100%)',
+            backgroundColor: 'transparent',
+          } as any),
+      ]}
+    >
       <ScrollView
         ref={scrollViewRef}
         horizontal
@@ -83,7 +153,7 @@ export default function FilterSlider({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 10,
-    backgroundColor: '#000000', // Black background for the strip area as per screenshot seems dark
+    backgroundColor: '#000000',
   },
   scrollContent: {
     alignItems: 'center',
@@ -96,7 +166,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     marginHorizontal: 4,
-    backgroundColor: 'transparent', // Unselected has no bg in screenshot, just text
+    backgroundColor: 'transparent',
   },
   itemText: {
     fontSize: 14,

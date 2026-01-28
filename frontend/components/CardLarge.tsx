@@ -6,7 +6,7 @@ import { translateWord } from '@/utils/utils';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 export default function CardLarge({
   data,
@@ -38,6 +38,7 @@ export default function CardLarge({
     urlLive,
   } = data;
 
+  const { width } = useWindowDimensions();
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   const [scoreRevealed, setScoreRevealed] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -89,7 +90,12 @@ export default function CardLarge({
   } else if (status === 'IN_PROGRESS') {
     timeText = translateWord('followLive');
   } else if (startTimeUTC) {
-    timeText = new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    timeText = showDate
+      ? new Date(startTimeUTC).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: width < 640 || width > 1008 ? 'short' : 'numeric',
+        })
+      : new Date(startTimeUTC).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
 
   const leagueKey = (data.league || 'DEFAULT') as keyof typeof leagueLogos;
@@ -118,7 +124,7 @@ export default function CardLarge({
 
   let gradientStyle = { backgroundColor: baseColor } as any;
 
-  const isGradientActive = teamSelectedId && (teamSelectedId === homeTeamId || teamSelectedId === awayTeamId);
+  const isGradientActive = favoriteTeams.includes(homeTeamId);
 
   let homeBg = baseColor;
   let awayBg = baseColor;
@@ -193,7 +199,7 @@ export default function CardLarge({
                 <Icon name="star" type="font-awesome" size={14} color="#FFD700" style={{ marginLeft: 5 }} />
               )}
             </View>
-            <Text style={styles.recordText}>{awayTeamRecord || ''}</Text>
+            <Text style={styles.recordText}>{(showScores && scoreRevealed ? awayTeamRecord : '') || ''}</Text>
           </View>
 
           {/* Center: Score or VS/@ */}
@@ -244,7 +250,7 @@ export default function CardLarge({
                 <Icon name="star" type="font-awesome" size={14} color="#FFD700" style={{ marginLeft: 5 }} />
               )}
             </View>
-            <Text style={styles.recordText}>{homeTeamRecord || ''}</Text>
+            <Text style={styles.recordText}>{(showScores && scoreRevealed ? homeTeamRecord : '') || ''}</Text>
           </View>
         </View>
 

@@ -1,14 +1,17 @@
+import AppLogo from '@/components/AppLogo';
+import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
 import Selector from '@/components/Selector';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
-import Cards from '../../components/Cards';
+import CardLarge from '../../components/CardLarge';
 import { ColumnData, ColumnsContent, ColumnsHeader } from '../../components/ColumnsLayout';
 import LoadingView from '../../components/LoadingView';
 import {
@@ -30,14 +33,39 @@ export default function Schedule() {
   const [monthFilter, setMonthFilter] = useState<string[]>([]);
   const [leagueTeams, setLeagueTeams] = useState<Team[]>([]);
   const { width } = useWindowDimensions();
+  const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   const isSmallDevice = width <= 768;
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [leagueOfSelectedTeam, setleagueOfSelectedTeam] = useState<string>('');
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>(
-    () => getCache<GameFormatted[]>('gameSelected') || []
+    () => getCache<GameFormatted[]>('gameSelected') || [],
   );
+
+  const teamsForSelector = useMemo(() => {
+    const teamsList = [...leagueTeams];
+    let nextIndex = 1;
+    if (teamSelected && teamSelected !== 'all') {
+      const index = teamsList.findIndex((t) => t.uniqueId === teamSelected);
+      if (index > 1) {
+        const [selected] = teamsList.splice(index, 1);
+        teamsList.splice(1, 0, selected);
+      }
+      nextIndex = 2;
+    }
+    if (favoriteTeams.length > 0) {
+      const favId = favoriteTeams[0];
+      if (favId && favId !== teamSelected) {
+        const index = teamsList.findIndex((t) => t.uniqueId === favId);
+        if (index >= nextIndex) {
+          const [fav] = teamsList.splice(index, 1);
+          teamsList.splice(nextIndex, 0, fav);
+        }
+      }
+    }
+    return teamsList;
+  }, [leagueTeams, teamSelected, favoriteTeams]);
 
   const allOption = {
     uniqueId: 'all',
@@ -61,6 +89,16 @@ export default function Schedule() {
     if (globalThis.window !== undefined) {
       globalThis.window.addEventListener('leaguesUpdated', updateLeagues);
       return () => globalThis.window.removeEventListener('leaguesUpdated', updateLeagues);
+    }
+  }, []);
+
+  useEffect(() => {
+    const updateFavorites = () => {
+      setFavoriteTeams(getCache<string[]>('favoriteTeams') || []);
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('favoritesUpdated', updateFavorites);
+      return () => globalThis.window.removeEventListener('favoritesUpdated', updateFavorites);
     }
   }, []);
 
@@ -124,7 +162,7 @@ export default function Schedule() {
     useCallback(() => {
       scrollViewRef.current?.scrollTo({ y: 0, animated: false });
       setGamesSelected(getCache<GameFormatted[]>('gameSelected') || []);
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
@@ -169,7 +207,7 @@ export default function Schedule() {
         const filteredGames = Object.fromEntries(
           Object.entries(storedGames)
             .filter(([date]) => date >= today)
-            .map(([date, games]) => [date, games as GameFormatted[]])
+            .map(([date, games]) => [date, games as GameFormatted[]]),
         ) as FilterGames;
         setGames(filteredGames);
       }
@@ -262,8 +300,8 @@ export default function Schedule() {
       const filterNameGame = teamFilter === 'NHL-UTAH' ? 'NHL-UTA' : teamFilter;
       subFilteredGames = Object.fromEntries(
         Object.entries(games).filter(
-          ([_, game]) => game[0].homeTeamId === filterNameGame || game[0].awayTeamId === filterNameGame
-        )
+          ([_, game]) => game[0].homeTeamId === filterNameGame || game[0].awayTeamId === filterNameGame,
+        ),
       );
     }
 
@@ -306,14 +344,6 @@ export default function Schedule() {
   const display = () => {
     const leagues = leaguesAvailable || [];
 
-    const dataLeagues = {
-      i: randomNumber(999999),
-      items: leagues,
-      itemsSelectedIds: [],
-      itemSelectedId: leagueOfSelectedTeam,
-    };
-
-    const teamsForSelector = leagueTeams;
     const dataTeams = {
       i: randomNumber(999999),
       items: teamsForSelector,
@@ -395,10 +425,10 @@ export default function Schedule() {
       content: games.map((game) => {
         const gameId = game._id ?? randomNumber(999999);
         const isSelected = gamesSelected.some(
-          (gameSelect) => game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC
+          (gameSelect) => game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
         );
         return (
-          <Cards
+          <CardLarge
             key={gameId}
             data={game}
             numberSelected={1}
@@ -417,6 +447,16 @@ export default function Schedule() {
         <ThemedView>
           <div
             style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '5px 15px 0 15px',
+            }}
+          >
+            <AppLogo />
+          </div>
+          <div
+            style={{
               width: '100%',
               margin: '0 auto',
               alignContent: 'center',
@@ -428,11 +468,13 @@ export default function Schedule() {
             <ThemedView>
               <div style={{ width: '100%' }}>
                 <div style={{ width: '100%' }}>
-                  <Selector
-                    data={dataLeagues}
-                    onItemSelectionChange={handleLeagueSelectionChange}
-                    isClearable={false}
-                    placeholder={translateWord('filterLeagues')}
+                  <FilterSlider
+                    selectedFilter={leagueOfSelectedTeam}
+                    onFilterChange={handleLeagueSelectionChange}
+                    availableLeagues={leagues}
+                    showFavorites={false}
+                    hasFavorites={false}
+                    showAll={false}
                   />
                 </div>
                 <div
@@ -443,12 +485,57 @@ export default function Schedule() {
                   }
                 >
                   <div style={{ width: isSmallDevice || !showTeamFilter ? '100%' : '48%' }}>
-                    <Selector
-                      data={dataTeams}
-                      onItemSelectionChange={handleTeamSelectionChange}
-                      isClearable={false}
-                      placeholder={translateWord('filterTeams')}
-                    />
+                    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+                      <div
+                        style={{
+                          position: 'relative',
+                          width: 40,
+                          height: 40,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 10,
+                          backgroundColor: 'black',
+                          border: '1px solid white',
+                          borderRadius: '50%',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Ionicons name="search" size={24} color="white" />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            opacity: 0,
+                            overflow: 'hidden',
+                            zIndex: 10,
+                          }}
+                        >
+                          <Selector
+                            data={dataTeams}
+                            onItemSelectionChange={handleTeamSelectionChange}
+                            isClearable={false}
+                            placeholder={translateWord('filterTeams')}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <FilterSlider
+                          selectedFilter={teamSelected}
+                          onFilterChange={handleTeamSelectionChange}
+                          data={teamsForSelector.map((t) => ({
+                            label: t.label === 'All' ? translateWord('all') : t.label,
+                            value: t.uniqueId,
+                          }))}
+                          showFavorites={false}
+                          hasFavorites={false}
+                          showAll={false}
+                        />
+                      </div>
+                    </div>
                   </div>
                   {!isSmallDevice && showTeamFilter && (
                     <div style={{ width: '4%', display: 'flex', justifyContent: 'center' }}>
@@ -472,11 +559,16 @@ export default function Schedule() {
                   )}
                   {showTeamFilter && (
                     <div style={{ width: isSmallDevice ? '100%' : '48%' }}>
-                      <Selector
-                        data={dataTeamsFilter}
-                        onItemSelectionChange={handleTeamFilterChange}
-                        isClearable={true}
-                        placeholder={translateWord('filterTeams')}
+                      <FilterSlider
+                        selectedFilter={teamFilter}
+                        onFilterChange={handleTeamFilterChange}
+                        data={[
+                          { label: translateWord('all'), value: '' },
+                          ...uniqueTeamsFromGames.map((t) => ({ label: t.label, value: t.uniqueId })),
+                        ]}
+                        showFavorites={false}
+                        hasFavorites={false}
+                        showAll={false}
                       />
                     </div>
                   )}
@@ -526,17 +618,13 @@ export default function Schedule() {
         <div>
           {months.length > 1 && (
             <div style={{ width: '100%', marginBottom: 10 }}>
-              <Selector
-                data={{
-                  i: randomNumber(999999),
-                  items: months,
-                  itemsSelectedIds: monthFilter,
-                  itemSelectedId: '',
-                }}
-                onItemSelectionChange={(ids) => setMonthFilter(Array.isArray(ids) ? ids : [])}
-                isClearable={true}
-                allowMultipleSelection={true}
-                placeholder={translateWord('filterMonths')}
+              <FilterSlider
+                selectedFilter={monthFilter.length > 0 ? monthFilter[0] : 'ALL'}
+                onFilterChange={(value) => setMonthFilter(value === 'ALL' ? [] : [value])}
+                data={[{ label: translateWord('all'), value: 'ALL' }, ...months.map((m) => ({ label: m, value: m }))]}
+                showFavorites={false}
+                hasFavorites={false}
+                showAll={true}
               />
             </div>
           )}

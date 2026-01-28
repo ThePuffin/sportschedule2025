@@ -4,7 +4,6 @@ import NoResults from '@/components/NoResults';
 import ScoreToggle from '@/components/ScoreToggle';
 import Selector from '@/components/Selector';
 import SliderDatePicker from '@/components/SliderDatePicker';
-import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getGamesStatus } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
@@ -371,7 +370,9 @@ export default function GameofTheDay() {
             width: '100%',
             alignItems: 'center',
             paddingLeft: 15,
-            backgroundColor: 'black',
+            backgroundImage: 'linear-gradient(90deg, transparent 0%, #000000 5%, #000000 95%, transparent 100%)',
+            backgroundColor: 'transparent',
+            boxSizing: 'border-box',
           }}
         >
           <div
@@ -486,66 +487,11 @@ export default function GameofTheDay() {
     );
   }, [games, displayNoContent, visibleGamesByHour, gamesSelected, selectDate, teamSelectedId, showScores]);
 
-  const displayLargeDeviceHeader = useCallback(() => {
-    if (visibleGamesByHour.length === 0) {
-      return null;
-    }
-    const showSingleColumn = visibleGamesByHour.length <= 1 || teamSelectedId !== '';
-
-    return (
-      <div
-        style={{
-          backgroundColor: 'white',
-          border: '1px solid black',
-          width: showSingleColumn ? '50%' : '100%',
-          margin: 'auto',
-        }}
-      >
-        <table
-          style={{
-            tableLayout: 'fixed',
-            width: '100%',
-            margin: 'auto',
-            borderCollapse: 'collapse',
-          }}
-        >
-          <tbody>
-            <tr>
-              {visibleGamesByHour.map(({ hour }, index) => (
-                <td
-                  key={hour}
-                  style={{
-                    borderRight: index === visibleGamesByHour.length - 1 ? undefined : '1px solid black',
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: 15,
-                      alignItems: 'center',
-                      display: 'flex',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <ThemedText type="subtitle" style={{ color: 'black' }}>
-                      {hour}
-                    </ThemedText>
-                  </div>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    );
-  }, [visibleGamesByHour, teamSelectedId]);
-
   const displayLargeDeviceContent = useCallback(() => {
     if (!games || games.length === 0) {
       return displayNoContent();
     }
     if (visibleGamesByHour.length === 0) return <NoResults />;
-
-    const showSingleColumn = visibleGamesByHour.length <= 1 || teamSelectedId !== '';
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -553,57 +499,55 @@ export default function GameofTheDay() {
     selected.setHours(0, 0, 0, 0);
     const isPast = selected < today;
 
+    const allGames = visibleGamesByHour.flatMap((group) => group.games);
+
     return (
       <ThemedView>
-        <table
+        <div
           style={{
-            tableLayout: 'fixed',
-            width: showSingleColumn ? '50%' : '100%',
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: allGames.length < 3 ? 'center' : 'flex-start',
+            gap: 15,
+            padding: 10,
+            width: '75%',
             margin: 'auto',
           }}
         >
-          <tbody>
-            <tr>
-              {visibleGamesByHour.map(({ hour, games }) => {
-                return (
-                  <td key={hour} style={{ verticalAlign: 'top' }}>
-                    {games.map((game) => {
-                      const gameId = game._id ?? randomNumber(999999);
-                      if (isPast) {
-                        return (
-                          <CardLarge
-                            key={gameId}
-                            data={teamSelectedId ? { ...game, teamSelectedId } : game}
-                            showDate={false}
-                            selected={false}
-                            showScores={showScores}
-                          />
-                        );
-                      }
-                      const isSelected = gamesSelected.some(
-                        (gameSelect) =>
-                          game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
-                      );
-                      return (
-                        <CardLarge
-                          key={gameId}
-                          data={game}
-                          numberSelected={1}
-                          showButtons={true}
-                          showDate={false}
-                          onSelection={() => {}}
-                          selected={isSelected}
-                          disableSelection={true}
-                          showScores={showScores}
-                        />
-                      );
-                    })}
-                  </td>
-                );
-              })}
-            </tr>
-          </tbody>
-        </table>
+          {allGames.map((game) => {
+            const gameId = game._id ?? randomNumber(999999);
+            if (isPast) {
+              return (
+                <div key={gameId} style={{ width: 'calc((100% - 30px) / 3)', minWidth: 300 }}>
+                  <CardLarge
+                    data={teamSelectedId ? { ...game, teamSelectedId } : game}
+                    showDate={false}
+                    selected={false}
+                    showScores={showScores}
+                  />
+                </div>
+              );
+            }
+            const isSelected = gamesSelected.some(
+              (gameSelect) =>
+                game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
+            );
+            return (
+              <div key={gameId} style={{ width: 'calc((100% - 30px) / 3)', minWidth: 300 }}>
+                <CardLarge
+                  data={game}
+                  numberSelected={1}
+                  showButtons={true}
+                  showDate={false}
+                  onSelection={() => {}}
+                  selected={isSelected}
+                  disableSelection={true}
+                  showScores={showScores}
+                />
+              </div>
+            );
+          })}
+        </div>
       </ThemedView>
     );
   }, [games, displayNoContent, visibleGamesByHour, teamSelectedId, gamesSelected, selectDate, showScores]);
@@ -677,16 +621,28 @@ export default function GameofTheDay() {
           <ThemedView>
             <div style={{ position: 'relative', zIndex: 20 }}>
               {displayScoreToggle()}
-              <SliderDatePicker onDateChange={(date) => handleDateChange(date, date)} selectDate={selectDate} />
-              <FilterSlider
-                selectedFilter={activeFilter}
-                onFilterChange={handleFilterChange}
-                hasFavorites={hasFavorites}
-                availableLeagues={userLeagues}
-              />
-              {displayFilters()}
+              <div
+                style={
+                  windowWidth > 768
+                    ? {
+                        width: '75%',
+                        margin: '0 auto',
+                        padding: 10,
+                        boxSizing: 'border-box',
+                      }
+                    : {}
+                }
+              >
+                <SliderDatePicker onDateChange={(date) => handleDateChange(date, date)} selectDate={selectDate} />
+                <FilterSlider
+                  selectedFilter={activeFilter}
+                  onFilterChange={handleFilterChange}
+                  hasFavorites={hasFavorites}
+                  availableLeagues={userLeagues}
+                />
+                {displayFilters()}
+              </div>
             </div>
-            {windowWidth > 768 && displayLargeDeviceHeader()}
           </ThemedView>
         </div>
         <ThemedView>{windowWidth > 768 ? displayLargeDeviceContent() : displaySmallDeviceContent()}</ThemedView>

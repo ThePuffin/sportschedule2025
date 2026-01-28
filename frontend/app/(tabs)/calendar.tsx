@@ -138,7 +138,7 @@ export default function Calendar() {
 
     // Keep only games whose date is today or in the future
     const filteredGamesData = Object.fromEntries(
-      Object.entries(storedGamesDataRaw).filter(([date]) => date >= begindateStr)
+      Object.entries(storedGamesDataRaw).filter(([date]) => date >= begindateStr),
     );
 
     return filteredGamesData;
@@ -180,7 +180,7 @@ export default function Calendar() {
 
   const getGamesFromApi = async (
     startDate: string | undefined = undefined,
-    endDate: string | undefined = undefined
+    endDate: string | undefined = undefined,
   ): Promise<void> => {
     if (teamsSelected && teamsSelected.length !== 0) {
       let start = readableDate(dateRange.startDate);
@@ -193,8 +193,8 @@ export default function Calendar() {
       try {
         const response = await fetch(
           `${EXPO_PUBLIC_API_BASE_URL}/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${teamsSelected.join(
-            ','
-          )}`
+            ',',
+          )}`,
         );
         const gamesData = await response.json();
         saveCache('gamesData', gamesData);
@@ -227,7 +227,7 @@ export default function Calendar() {
       newTeamsSelected[i] = teamSelectedId;
       storeTeamsSelected(newTeamsSelected);
       const newSelection = gamesSelected.filter((gameSelected) =>
-        newTeamsSelected.includes(gameSelected.teamSelectedId)
+        newTeamsSelected.includes(gameSelected.teamSelectedId),
       );
       setGamesSelected(newSelection);
       saveCache('gameSelected', newSelection);
@@ -242,7 +242,7 @@ export default function Calendar() {
         const favoriteTeams = getCache<string[]>('favoriteTeams') || [];
         const availableTeams = teams.filter((t) => allowedLeagues.length === 0 || allowedLeagues.includes(t.league));
         const nextFavorite = favoriteTeams.find(
-          (fav) => !teamsSelected.includes(fav) && fav !== '' && availableTeams.some((t) => t.uniqueId === fav)
+          (fav) => !teamsSelected.includes(fav) && fav !== '' && availableTeams.some((t) => t.uniqueId === fav),
         );
         if (nextFavorite) {
           newTeamsSelected = [...teamsSelected, nextFavorite];
@@ -296,7 +296,7 @@ export default function Calendar() {
       const teamsAvailable = teams.filter(
         (team) =>
           (!teamsSelected.includes(team.uniqueId) || team.uniqueId === teamSelectedId) &&
-          (allowedLeagues.length === 0 || allowedLeagues.includes(team.league))
+          (allowedLeagues.length === 0 || allowedLeagues.includes(team.league)),
       );
       const data = { i, items: teamsAvailable, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
       return (
@@ -362,7 +362,7 @@ export default function Calendar() {
   useFocusEffect(
     useCallback(() => {
       scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
