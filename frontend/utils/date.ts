@@ -2,7 +2,11 @@ import { GameStatus, timeDurationEnum } from '@/constants/enum';
 import { GameFormatted } from '@/utils/types';
 
 export const readableDate = (date: string | Date) => {
-  return new Date(date).toISOString().split('T')[0];
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export const getHourGame = (startTimeUTC: string | Date, venueUTCOffset: string) => {

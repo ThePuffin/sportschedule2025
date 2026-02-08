@@ -8,22 +8,22 @@ import { translateWord } from '@/utils/utils';
 
 export default function NotFoundScreen() {
   return (
-    <ThemedView>
+    <ThemedView style={{ flex: 1 }}>
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '5px 15px 0 15px',
+          padding: '5px 16px 0 16px',
         }}
       >
         <AppLogo />
       </div>
-      <Stack.Screen options={{ title: 'Oops!' }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <ThemedView style={styles.container}>
         <ThemedText type="title">{translateWord('wrongPage')}</ThemedText>
         <Link href="/" style={styles.link}>
-          <ThemedText type="link">{translateWord('homeScreen')}</ThemedText>
+          <ThemedText type="link">{translateWord('homeScreen').toUpperCase()}</ThemedText>
         </Link>
         <Link href="/" style={styles.link}>
           <img

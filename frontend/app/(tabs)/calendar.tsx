@@ -4,7 +4,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, ScrollView, useWindowDimensions } from 'react-native';
+import { Dimensions, ScrollView } from 'react-native';
 import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import Buttons from '../../components/Buttons';
@@ -29,8 +29,6 @@ export default function Calendar() {
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [allowedLeagues, setAllowedLeagues] = useState<string[]>([]);
-  const { width } = useWindowDimensions();
-  const isSmallDevice = width <= 768;
 
   useEffect(() => {
     const updateLeagues = () => {

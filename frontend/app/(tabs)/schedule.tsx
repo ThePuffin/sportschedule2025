@@ -322,6 +322,64 @@ export default function Schedule() {
       .filter((item) => item.games.length > 0);
   }, [games, teamFilter, gamesTeamId]);
 
+  const uniqueTeamsFromGames = useMemo(() => {
+    if (teamSelected === 'all' && monthFilter.length === 0) {
+      return teamsForSelector.filter((team) => team.uniqueId !== teamSelected);
+    }
+    const teamsFromGames: Team[] = [];
+    const seenIds = new Set<string>();
+
+    for (const day in games) {
+      if (!Object.hasOwn(games, day)) continue;
+      if (monthFilter.length > 0) {
+        const month = new Date(day).toLocaleString('default', { month: 'long' });
+        if (!monthFilter.includes(month)) continue;
+      }
+
+      const dayGames = games[day];
+      if (!Array.isArray(dayGames)) continue;
+
+      dayGames.forEach((game) => {
+        const { homeTeam, awayTeam, league, homeTeamId, awayTeamId } = game;
+        if (homeTeam && !seenIds.has(homeTeamId) && homeTeamId !== teamSelected) {
+          seenIds.add(homeTeamId);
+          teamsFromGames.push({
+            label: homeTeam,
+            league,
+            uniqueId: homeTeamId,
+            value: homeTeamId,
+            id: homeTeamId,
+            teamLogo: '',
+            teamCommonName: homeTeam,
+            conferenceName: '',
+            divisionName: '',
+            abbrev: '',
+            updateDate: '',
+          });
+        }
+        if (awayTeam && !seenIds.has(awayTeamId) && awayTeamId !== teamSelected) {
+          seenIds.add(awayTeamId);
+          teamsFromGames.push({
+            label: awayTeam,
+            league,
+            uniqueId: awayTeamId,
+            value: awayTeamId,
+            id: awayTeamId,
+            teamLogo: '',
+            teamCommonName: awayTeam,
+            conferenceName: '',
+            divisionName: '',
+            abbrev: '',
+            updateDate: '',
+          });
+        }
+      });
+    }
+    return teamsFromGames.sort((a, b) => a.label.localeCompare(b.label));
+  }, [games, teamSelected, monthFilter, teamsForSelector]);
+
+  const showTeamFilter = uniqueTeamsFromGames.length > 1;
+
   const display = () => {
     const leagues = leaguesAvailable || [];
 
@@ -331,64 +389,6 @@ export default function Schedule() {
       itemsSelectedIds: [],
       itemSelectedId: teamSelected,
     };
-
-    const uniqueTeamsFromGames = React.useMemo(() => {
-      if (teamSelected === 'all' && monthFilter.length === 0) {
-        return teamsForSelector.filter((team) => team.uniqueId !== teamSelected);
-      }
-      const teamsFromGames: Team[] = [];
-      const seenIds = new Set<string>();
-
-      for (const day in games) {
-        if (!Object.hasOwn(games, day)) continue;
-        if (monthFilter.length > 0) {
-          const month = new Date(day).toLocaleString('default', { month: 'long' });
-          if (!monthFilter.includes(month)) continue;
-        }
-
-        const dayGames = games[day];
-        if (!Array.isArray(dayGames)) continue;
-
-        dayGames.forEach((game) => {
-          const { homeTeam, awayTeam, league, homeTeamId, awayTeamId } = game;
-          if (homeTeam && !seenIds.has(homeTeamId) && homeTeamId !== teamSelected) {
-            seenIds.add(homeTeamId);
-            teamsFromGames.push({
-              label: homeTeam,
-              league,
-              uniqueId: homeTeamId,
-              value: homeTeamId,
-              id: homeTeamId,
-              teamLogo: '',
-              teamCommonName: homeTeam,
-              conferenceName: '',
-              divisionName: '',
-              abbrev: '',
-              updateDate: '',
-            });
-          }
-          if (awayTeam && !seenIds.has(awayTeamId) && awayTeamId !== teamSelected) {
-            seenIds.add(awayTeamId);
-            teamsFromGames.push({
-              label: awayTeam,
-              league,
-              uniqueId: awayTeamId,
-              value: awayTeamId,
-              id: awayTeamId,
-              teamLogo: '',
-              teamCommonName: awayTeam,
-              conferenceName: '',
-              divisionName: '',
-              abbrev: '',
-              updateDate: '',
-            });
-          }
-        });
-      }
-      return teamsFromGames.sort((a, b) => a.label.localeCompare(b.label));
-    }, [games, teamSelected, monthFilter, teamsForSelector]);
-
-    const showTeamFilter = uniqueTeamsFromGames.length > 1;
 
     const dataTeamsFilter = {
       i: randomNumber(999999),

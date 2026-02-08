@@ -7,11 +7,13 @@ import {
   refreshGamesLeague as refreshGamesLeagueApi,
   refreshTeams as refreshTeamsApi,
 } from '@/utils/fetchData';
+import { Stack } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Image, View, useWindowDimensions } from 'react-native';
 import LoadingView from '../components/LoadingView';
 
 let width: number;
+
 
 const leagueLogos = {
   MLB: require('../assets/images/MLB.png'),
@@ -103,6 +105,7 @@ export default function GameofTheDay() {
 
   return (
     <ThemedView>
+      <Stack.Screen options={{ headerShown: false }} />
       <div
         style={{
           display: 'flex',
