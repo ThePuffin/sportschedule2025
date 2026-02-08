@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "american-leagues-schedule",
+    "site": "skedall",
     "public": "dist",
     "ignore": [
       "firebase.json",
