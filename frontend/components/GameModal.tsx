@@ -102,7 +102,7 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
 
                 <View style={styles.actionsRow}>
                   <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
+                    style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, flex: 1 }]}
                     onPress={() => {
                       generateICSFile(data);
                       onClose();
@@ -122,13 +122,14 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
 
                   {arenaName && (
                     <a
-                      href={`https://maps.google.com/?q=${stadiumSearch}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${stadiumSearch}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ textDecoration: 'none' }}
+                      /* On s'assure que le lien prend exactement la même place que le bouton d'à côté */
+                      style={{ textDecoration: 'none', flex: 1, display: 'flex' }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}>
+                      <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, width: '100%' }]}>
                         <Icon
                           name="map-marker"
                           type="font-awesome"
@@ -151,7 +152,7 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                     href={urlLive}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: 'none', flex: 1, display: 'flex', flexBasis: 0, minWidth: 0 }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}>
@@ -260,17 +261,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionButton: {
-    flex: 1,
     flexDirection: 'row',
     height: 60,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   actionButtonText: {
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
     flexShrink: 1,
   },

@@ -5,16 +5,16 @@ import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, ScrollView, useWindowDimensions } from 'react-native';
+import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import Buttons from '../../components/Buttons';
-import CardLarge from '../../components/CardLarge';
 import GamesSelected from '../../components/GamesSelected';
 import LoadingView from '../../components/LoadingView';
 import Selector from '../../components/Selector';
-import { ButtonsKind } from '../../constants/enum';
-import { addDays, readableDate } from '../../utils/date';
+import { ButtonsKind, GameStatus } from '../../constants/enum';
+import { addDays, getGamesStatus, readableDate } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
-import { addNewTeamId, randomNumber, removeLastTeamId, translateWord } from '../../utils/utils';
+import { addNewTeamId, removeLastTeamId, translateWord } from '../../utils/utils';
 const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
@@ -31,9 +31,6 @@ export default function Calendar() {
   const [allowedLeagues, setAllowedLeagues] = useState<string[]>([]);
   const { width } = useWindowDimensions();
   const isSmallDevice = width <= 768;
-  const verticalMode = useMemo(() => {
-    return (teamsSelected.length > 2 && isSmallDevice) || (teamsSelected.length > 6 && !isSmallDevice);
-  }, [teamsSelected.length, isSmallDevice]);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -304,7 +301,7 @@ export default function Calendar() {
       );
       const data = { i, items: teamsAvailable, itemsSelectedIds: teamsSelected, itemSelectedId: teamSelectedId };
       return (
-        <td key={`selector-${teamSelectedId}-${teamsSelected.length}`}>
+        <div key={`selector-${teamSelectedId}-${teamsSelected.length}`} style={{ padding: 5, minWidth: 30, flex: 1 }}>
           <ThemedView>
             <Selector
               data={data}
@@ -314,51 +311,48 @@ export default function Calendar() {
               startOpen={teamSelectedId === teamIdToOpen}
             />
           </ThemedView>
-        </td>
+        </div>
       );
     });
   };
 
-  const displayGamesGrid = () => {
-    return filteredTeamsSelected.map((teamSelectedId) => {
+  const displayAccordions = () => {
+    if (!games || Object.keys(games).length === 0) return null;
+
+    const sortedDates = Object.keys(games).sort();
+
+    return sortedDates.map((date, index) => {
+      const gamesForDate = games[date].filter(
+        (g) => filteredTeamsSelected.includes(g.teamSelectedId) && getGamesStatus(g) === GameStatus.SCHEDULED,
+      );
+
+      if (gamesForDate.length === 0) return null;
+
+      const [year, month, day] = date.split('-').map(Number);
+      const localDate = new Date(year, month - 1, day);
+      const formattedDate = localDate.toLocaleDateString(undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
       return (
-        <td key={`games-${teamSelectedId}-${teamsSelected.length}`} style={{ verticalAlign: 'top' }}>
-          <ThemedView>{displayGamesCards(teamSelectedId)}</ThemedView>
-        </td>
+        <div key={date} style={{ width: '100%', margin: '0 auto' }}>
+          <Accordion
+            filter={formattedDate}
+            i={index}
+            gamesFiltred={gamesForDate}
+            open={true}
+            showDate={false}
+            gamesSelected={gamesSelected}
+            onSelection={handleGamesSelection}
+          />
+        </div>
       );
     });
   };
 
-  const displayGamesCards = (teamSelectedId: string) => {
-    if (games) {
-      const days = Object.keys(games);
-      if (days.length) {
-        return days.map((day: string) => {
-          const game = games[day].find((game: GameFormatted) => game.teamSelectedId === teamSelectedId);
-          if (game) {
-            const gameId = game?._id ?? randomNumber(999999);
-            const isSelected = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
-            return (
-              <div key={gameId} style={{ display: 'inline-block', width: '100%' }}>
-                <ThemedView>
-                  <CardLarge
-                    data={game}
-                    showDate={true}
-                    onSelection={handleGamesSelection}
-                    isSelected={isSelected}
-                    verticalMode={verticalMode}
-                    showTime={true}
-                  />
-                </ThemedView>
-              </div>
-            );
-          }
-          return null;
-        });
-      }
-    }
-    return <LoadingView />;
-  };
   useEffect(() => {
     initializeDateRange();
     getStoredTeams();
@@ -386,8 +380,6 @@ export default function Calendar() {
       fetchGames();
     }
   }, [teamsSelected, teams]);
-
-  const widthStyle = filteredTeamsSelected.length === 1 && !isSmallDevice ? '33%' : '100%';
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -427,27 +419,21 @@ export default function Calendar() {
                 maxTeamsNumber,
               }}
             />
-            <table
+            <div
               style={{
-                tableLayout: 'fixed',
-                width: widthStyle,
-                margin: 'auto',
-                position: 'relative',
-                zIndex: 5,
+                display: 'flex',
+                flexDirection: 'row',
+                flexWrap: 'nowrap',
+                overflowX: 'auto',
+                width: '100%',
               }}
             >
-              <tbody>
-                <tr>{displaySelectors()}</tr>
-              </tbody>
-            </table>
+              {displaySelectors()}
+            </div>
           </ThemedView>
         </div>
         {!teamsSelected.length && <LoadingView />}
-        <table style={{ tableLayout: 'fixed', width: widthStyle, margin: 'auto' }}>
-          <tbody>
-            <tr>{displayGamesGrid()}</tr>
-          </tbody>
-        </table>
+        {displayAccordions()}
       </ScrollView>
       <ActionButton ref={ActionButtonRef} scrollViewRef={scrollViewRef} />
     </ThemedView>

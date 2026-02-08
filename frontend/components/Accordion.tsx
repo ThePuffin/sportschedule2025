@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import CardLarge from './CardLarge';
 
+import { GameFormatted } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import type { AccordionProps } from '../utils/types';
 
@@ -17,7 +18,11 @@ export default function Accordion({
   disableToggle = false,
   onRetry,
   showScores,
-}: Readonly<AccordionProps & { onRetry?: () => void; showScores?: boolean }>) {
+  gamesSelected,
+  onSelection,
+}: Readonly<
+  AccordionProps & { onRetry?: () => void; showScores?: boolean; onSelection?: (game: GameFormatted) => void }
+>) {
   const [expanded, setExpanded] = useState(disableToggle ? true : (open ?? i === 0));
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 768;
@@ -35,14 +40,25 @@ export default function Accordion({
   const makeCards = () => {
     if (!gamesFiltred?.length) return <NoResults onRetry={onRetry} />;
 
-    return gamesFiltred.map((game) => (
-      <div
-        key={`${game.homeTeamId}-${game.startTimeUTC}`}
-        style={{ width: isSmallDevice ? '100%' : 'calc((100% - 30px) / 3)' }}
-      >
-        <CardLarge data={game} numberSelected={1} showDate={showDate} showButtons={true} showScores={showScores} />
-      </div>
-    ));
+    return gamesFiltred.map((game) => {
+      const isSelected = gamesSelected?.some((g) => g._id === game._id || (g.uniqueId && g.uniqueId === game.uniqueId));
+      return (
+        <div
+          key={`${game.homeTeamId}-${game.startTimeUTC}`}
+          style={{ width: isSmallDevice ? '100%' : 'calc((100% - 30px) / 3)' }}
+        >
+          <CardLarge
+            data={game}
+            numberSelected={1}
+            showDate={showDate}
+            showButtons={true}
+            showScores={showScores}
+            onSelection={onSelection}
+            isSelected={isSelected}
+          />
+        </div>
+      );
+    });
   };
 
   return (

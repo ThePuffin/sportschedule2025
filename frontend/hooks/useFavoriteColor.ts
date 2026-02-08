@@ -1,14 +1,16 @@
 import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCache } from '@/utils/fetchData';
 import { useEffect, useState } from 'react';
 
 export function useFavoriteColor(defaultColor: string = '#3b82f6') {
+  const theme = useColorScheme() ?? 'light';
   const [backgroundColor, setBackgroundColor] = useState(defaultColor);
   const [textColor, setTextColor] = useState('#FFFFFF');
 
-  const getTextColorForBackground = (bgColor: string) => {
-    if (!bgColor) return '#FFFFFF';
-    let hex = bgColor.replace('#', '');
+  const getBrightness = (color: string) => {
+    if (!color) return 0;
+    let hex = color.replace(/#/g, '');
     if (hex.length === 3) {
       hex = hex
         .split('')
@@ -18,7 +20,11 @@ export function useFavoriteColor(defaultColor: string = '#3b82f6') {
     const r = parseInt(hex.substring(0, 2), 16);
     const g = parseInt(hex.substring(2, 4), 16);
     const b = parseInt(hex.substring(4, 6), 16);
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return (r * 299 + g * 587 + b * 114) / 1000;
+  };
+
+  const getTextColorForBackground = (bgColor: string) => {
+    const brightness = getBrightness(bgColor);
     return brightness > 128 ? '#000000' : '#FFFFFF';
   };
 
@@ -27,10 +33,29 @@ export function useFavoriteColor(defaultColor: string = '#3b82f6') {
       const favoriteTeams = getCache<string[]>('favoriteTeams');
       if (favoriteTeams && favoriteTeams.length > 0) {
         const firstFav = favoriteTeams[0];
-        const teamColor = (Colors as any)[firstFav]?.backgroundColor;
-        const finalColor = teamColor || defaultColor;
-        setBackgroundColor(finalColor);
-        setTextColor(getTextColorForBackground(finalColor));
+        const teamData = (Colors as any)[firstFav];
+
+        if (teamData) {
+          const { color, backgroundColor: teamBg } = teamData;
+          const b1 = getBrightness(color);
+          const b2 = getBrightness(teamBg);
+
+          let finalColor;
+          if (theme === 'light') {
+            // Darkest
+            finalColor = b1 < b2 ? color : teamBg;
+          } else {
+            // Lightest
+            finalColor = b1 > b2 ? color : teamBg;
+          }
+
+          finalColor = finalColor || defaultColor;
+          setBackgroundColor(finalColor);
+          setTextColor(getTextColorForBackground(finalColor));
+        } else {
+          setBackgroundColor(defaultColor);
+          setTextColor(getTextColorForBackground(defaultColor));
+        }
       } else {
         setBackgroundColor(defaultColor);
         setTextColor(getTextColorForBackground(defaultColor));
@@ -41,7 +66,7 @@ export function useFavoriteColor(defaultColor: string = '#3b82f6') {
       globalThis.window.addEventListener('favoritesUpdated', updateColor);
       return () => globalThis.window.removeEventListener('favoritesUpdated', updateColor);
     }
-  }, [defaultColor]);
+  }, [defaultColor, theme]);
 
   return { backgroundColor, textColor };
 }

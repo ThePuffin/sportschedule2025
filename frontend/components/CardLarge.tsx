@@ -357,7 +357,7 @@ export default function CardLarge({
   );
 
   const bookmarkElement =
-    status === GameStatus.SCHEDULED && isSelected ? (
+    status === GameStatus.SCHEDULED && (isSelected || onSelection) ? (
       <View
         style={{
           justifyContent: 'center',
@@ -367,15 +367,19 @@ export default function CardLarge({
         }}
       >
         <Icon
-          name="bookmark"
+          name={isSelected ? 'bookmark' : 'bookmark-o'}
           type="font-awesome"
           size={20}
           color={isDark ? '#ffffff' : '#0f172a'}
-          style={{
-            textShadowColor: homeColorHex,
-            textShadowOffset: { width: 0, height: 0 },
-            textShadowRadius: 3,
-          }}
+          style={
+            isSelected
+              ? {
+                  textShadowColor: homeColorHex,
+                  textShadowOffset: { width: 0, height: 0 },
+                  textShadowRadius: 3,
+                }
+              : {}
+          }
         />
       </View>
     ) : null;
@@ -740,15 +744,23 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     marginTop: 8,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 80,
   },
   timeText: {
     fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 16,
   },
   liveTimeText: {
     color: '#ef4444',
     fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 16,
   },
   footer: {
     borderTopWidth: 1,

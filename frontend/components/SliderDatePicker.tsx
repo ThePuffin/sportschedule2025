@@ -1,3 +1,4 @@
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import React, { useEffect, useRef, useState } from 'react';
@@ -16,6 +17,7 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
   const [locale, setLocale] = useState('en-US');
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
+  const theme = useColorScheme() ?? 'light';
 
   // Custom colors to match the screenshot
   const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
@@ -209,7 +211,12 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
                   style={[
                     styles.monthText,
                     {
-                      color: selected ? textColor : unselectedTextColor,
+                      color:
+                        selected && isCurrentMonth && theme === 'light'
+                          ? selectedBackgroundColor
+                          : selected
+                            ? textColor
+                            : unselectedTextColor,
                       fontWeight: selected || isCurrentMonth ? 'bold' : 'normal',
                     },
                   ]}
