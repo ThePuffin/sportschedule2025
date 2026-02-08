@@ -1,4 +1,6 @@
+import { ThemedText } from '@/components/ThemedText';
 import { emoticonEnum, leagueLogos } from '@/constants/enum';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { getCache } from '@/utils/fetchData';
 import { SelectorProps } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
@@ -11,11 +13,14 @@ import {
   Modal,
   Platform,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TextInput,
+  TextStyle,
   TouchableOpacity,
   View,
+  ViewStyle,
 } from 'react-native';
 
 export default function Selector({
@@ -25,7 +30,18 @@ export default function Selector({
   isClearable = false,
   placeholder,
   startOpen = false,
-}: Readonly<SelectorProps & { placeholder?: string; startOpen?: boolean }>) {
+  style,
+  textStyle,
+  iconColor,
+}: Readonly<
+  SelectorProps & {
+    placeholder?: string;
+    startOpen?: boolean;
+    style?: StyleProp<ViewStyle>;
+    textStyle?: StyleProp<TextStyle>;
+    iconColor?: string;
+  }
+>) {
   const { items, i, itemSelectedId } = data;
   let { itemsSelectedIds = [] } = data;
 
@@ -38,6 +54,12 @@ export default function Selector({
   const [tempSelectedId, setTempSelectedId] = useState<string>('');
   const inputRef = useRef<TextInput>(null);
   const userClearedRef = useRef(false);
+
+  const textColor = useThemeColor({}, 'text');
+  const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#1c1c1e' }, 'background');
+  const borderColor = useThemeColor({}, 'text');
+  const itemBackgroundColor = useThemeColor({ light: '#f0f0f0', dark: '#2c2c2e' }, 'background');
+  const effectiveIconColor = iconColor ?? textColor;
 
   useEffect(() => {
     if (startOpen) {
@@ -258,9 +280,12 @@ export default function Selector({
             style={{ width: 25, height: 25, resizeMode: 'contain', marginRight: 10, opacity: isDisabled ? 0.5 : 1 }}
           />
         )}
-        <Text style={[styles.selectorText, (!hasSelection || isDisabled) && { color: '#999' }]} numberOfLines={1}>
+        <ThemedText
+          style={[styles.selectorText, textStyle, (!hasSelection || isDisabled) && { opacity: 0.5 }]}
+          numberOfLines={1}
+        >
           {getDisplayText()}
-        </Text>
+        </ThemedText>
       </View>
     );
   };
@@ -268,7 +293,7 @@ export default function Selector({
   return (
     <View style={styles.container}>
       <TouchableOpacity
-        style={[styles.selectorButton, isDisabled && styles.selectorButtonDisabled]}
+        style={[styles.selectorButton, { borderColor }, style, isDisabled && styles.selectorButtonDisabled]}
         onPress={() => setVisible(true)}
         disabled={isDisabled}
       >
@@ -282,10 +307,10 @@ export default function Selector({
               }}
               style={{ marginRight: 10 }}
             >
-              <Icon name="times-circle" type="font-awesome" size={16} color="#999" />
+              <Icon name="times-circle" type="font-awesome" size={16} color={effectiveIconColor} />
             </TouchableOpacity>
           )}
-          <Icon name="chevron-down" type="font-awesome" size={12} color="#666" />
+          <Icon name="chevron-down" type="font-awesome" size={12} color={effectiveIconColor} />
         </View>
       </TouchableOpacity>
 
@@ -304,27 +329,27 @@ export default function Selector({
               setVisible(false);
             }}
           >
-            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Pressable style={[styles.modalContent, { backgroundColor }]} onPress={(e) => e.stopPropagation()}>
               <View style={styles.header}>
-                <Text style={styles.headerTitle}>
+                <ThemedText style={styles.headerTitle}>
                   {allowMultipleSelection ? translateWord('selectMultiple') : translateWord('select') || ''}
-                </Text>
+                </ThemedText>
                 <TouchableOpacity
                   onPress={() => {
                     setVisible(false);
                   }}
                 >
-                  <Icon name="times" type="font-awesome" size={20} color="#000" />
+                  <Icon name="times" type="font-awesome" size={20} color={textColor} />
                 </TouchableOpacity>
               </View>
 
               {/* Recherche */}
               {allOptions.length > 10 && (
-                <View style={styles.searchContainer}>
+                <View style={[styles.searchContainer, { backgroundColor: itemBackgroundColor }]}>
                   <Icon name="search" type="font-awesome" size={14} color="#999" style={{ marginRight: 8 }} />
                   <TextInput
                     ref={inputRef}
-                    style={styles.searchInput}
+                    style={[styles.searchInput, { color: textColor }]}
                     placeholder={placeholder || translateWord('Filter')}
                     value={search}
                     onChangeText={setSearch}
@@ -351,13 +376,18 @@ export default function Selector({
                         {row.map((league) => (
                           <TouchableOpacity
                             key={league || 'FILTER_ALL'}
-                            style={[styles.leagueChip, selectedLeague === league && styles.leagueChipSelected]}
+                            style={[
+                              styles.leagueChip,
+                              { backgroundColor: itemBackgroundColor, borderColor: itemBackgroundColor },
+                              selectedLeague === league && { backgroundColor: textColor, borderColor: textColor },
+                            ]}
                             onPress={() => setSelectedLeague(league === selectedLeague ? null : league)}
                           >
                             <Text
                               style={[
                                 styles.leagueChipText,
-                                selectedLeague === league && styles.leagueChipTextSelected,
+                                { color: textColor },
+                                selectedLeague === league && { color: backgroundColor, fontWeight: 'bold' },
                               ]}
                               numberOfLines={1}
                             >
@@ -399,9 +429,13 @@ export default function Selector({
 
                   return (
                     <View>
-                      {showSeparator && <View style={styles.separator} />}
+                      {showSeparator && <View style={[styles.separator, { borderColor: textColor }]} />}
                       <TouchableOpacity
-                        style={[styles.optionItem, isSelected && styles.optionSelected]}
+                        style={[
+                          styles.optionItem,
+                          { borderBottomColor: itemBackgroundColor },
+                          isSelected && { backgroundColor: itemBackgroundColor, borderBottomColor: 'transparent' },
+                        ]}
                         onPress={() => handleSelect(item.id)}
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -422,15 +456,17 @@ export default function Selector({
                               />
                             </View>
                           )}
-                          <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{item.label}</Text>
+                          <ThemedText style={[styles.optionText, isSelected && { fontWeight: 'bold' }]}>
+                            {item.label}
+                          </ThemedText>
                         </View>
                         {isSelected &&
                           (item.league && emoticonEnum[item.league as keyof typeof emoticonEnum] ? (
-                            <Text style={{ fontSize: 16 }}>
+                            <Text style={{ fontSize: 16, color: textColor }}>
                               {emoticonEnum[item.league as keyof typeof emoticonEnum]}
                             </Text>
                           ) : (
-                            <Icon name="check" type="font-awesome" size={14} color={isSelected ? 'white' : 'black'} />
+                            <Icon name="check" type="font-awesome" size={14} color={textColor} />
                           ))}
                       </TouchableOpacity>
                     </View>
@@ -441,15 +477,25 @@ export default function Selector({
               {/* Boutons Valider / Annuler */}
               <View style={styles.buttonsContainer}>
                 <Pressable
-                  style={[styles.button, styles.buttonClose, styles.buttonCancel]}
+                  style={[
+                    styles.button,
+                    styles.buttonClose,
+                    styles.buttonCancel,
+                    { backgroundColor, borderColor: textColor },
+                  ]}
                   onPress={() => {
                     setVisible(false);
                   }}
                 >
-                  <Text style={[styles.textStyle, styles.textStyleCancel]}>{translateWord('cancel')}</Text>
+                  <Text style={[styles.textStyle, styles.textStyleCancel, { color: textColor }]}>
+                    {translateWord('cancel')}
+                  </Text>
                 </Pressable>
-                <Pressable style={[styles.button, styles.buttonClose]} onPress={handleValidate}>
-                  <Text style={styles.textStyle}>{translateWord('register')}</Text>
+                <Pressable
+                  style={[styles.button, styles.buttonClose, { backgroundColor: textColor, borderColor: textColor }]}
+                  onPress={handleValidate}
+                >
+                  <Text style={[styles.textStyle, { color: backgroundColor }]}>{translateWord('register')}</Text>
                 </Pressable>
               </View>
             </Pressable>
@@ -469,23 +515,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'white',
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#ccc',
     borderRadius: 4,
     paddingHorizontal: 10,
     paddingVertical: 12,
     minHeight: 50,
   },
   selectorButtonDisabled: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#e0e0e0',
+    opacity: 0.5,
   },
   selectorText: {
     fontSize: 14,
-    color: '#333',
     flex: 1,
     marginRight: 10,
+    fontWeight: 'bold',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   },
   modalOverlay: {
     flex: 1,
@@ -497,7 +542,6 @@ const styles = StyleSheet.create({
     width: '90%',
     maxWidth: 400,
     maxHeight: '80%',
-    backgroundColor: 'white',
     borderRadius: 10,
     padding: 15,
     ...Platform.select({
@@ -525,7 +569,6 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
     borderRadius: 8,
     paddingHorizontal: 10,
     height: 40,
@@ -544,20 +587,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 6,
     borderRadius: 15,
-    backgroundColor: '#f0f0f0',
     marginHorizontal: 4,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  leagueChipSelected: {
-    backgroundColor: 'black',
-    borderColor: 'black',
-  },
-  leagueChipText: {
-    fontSize: 12,
-    color: '#333',
   },
   leagueChipTextSelected: {
     color: 'white',
@@ -579,10 +612,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   optionSelected: {
-    backgroundColor: '#696969',
     borderRadius: 5,
     marginVertical: 0,
     borderBottomWidth: 1,
@@ -590,16 +621,10 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    color: '#333',
-  },
-  optionTextSelected: {
-    color: 'white',
-    fontWeight: 'bold',
   },
   separator: {
     height: 4,
     borderTopWidth: 1,
-    borderColor: '#000',
     marginVertical: 0,
   },
   buttonsContainer: {
@@ -616,20 +641,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   buttonClose: {
-    backgroundColor: '#000',
     borderWidth: 1,
-    borderColor: 'white',
   },
-  buttonCancel: {
-    backgroundColor: 'white',
-    borderColor: 'black',
-  },
+  buttonCancel: {},
   textStyle: {
     color: 'white',
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  textStyleCancel: {
-    color: 'black',
-  },
+  textStyleCancel: {},
 });

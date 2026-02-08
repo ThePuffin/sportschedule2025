@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "American leagues schedule",
+    "name": "SkedAll",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,14 +12,14 @@
       "supportsTablet": true
     },
     "android": {
-      "name": "American leagues schedule",
+      "name": "SkedAll",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       }
     },
     "web": {
-      "name": "American leagues schedule",
+      "name": "SkedAll",
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/logo512.png"

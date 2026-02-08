@@ -2,33 +2,28 @@ import AppLogo from '@/components/AppLogo';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
 import ScoreToggle from '@/components/ScoreToggle';
-import Selector from '@/components/Selector';
 import SliderDatePicker from '@/components/SliderDatePicker';
+import TeamFilter from '@/components/TeamFilter';
 import { ThemedView } from '@/components/ThemedView';
 import { getGamesStatus } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, useWindowDimensions, View } from 'react-native';
+import { ScrollView, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
-import CardLarge from '../../components/CardLarge';
 import LoadingView from '../../components/LoadingView';
 import { GameStatus, League } from '../../constants/enum';
 import { fetchGamesByHour, fetchLeagues, getCache, saveCache } from '../../utils/fetchData';
 import { GameFormatted } from '../../utils/types';
 import { randomNumber, translateWord } from '../../utils/utils';
 
-const groupGamesByHour = (games: GameFormatted[], roundToHour: boolean = false) => {
+const groupGamesByHour = (games: GameFormatted[]) => {
   const grouped: { [key: string]: GameFormatted[] } = {};
   games.forEach((game) => {
     const date = new Date(game.startTimeUTC);
     const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    let hour = `${hours}:${minutes}`;
-    if (roundToHour) {
-      hour = `${hours}:00`;
-    }
+    const hour = `${hours}:00`;
 
     if (!grouped[hour]) {
       grouped[hour] = [];
@@ -39,12 +34,11 @@ const groupGamesByHour = (games: GameFormatted[], roundToHour: boolean = false) 
 };
 
 const getNextGamesFromApi = async (date: Date): Promise<{ [key: string]: GameFormatted[] }> => {
-  const dayBefore = new Date(date);
-  dayBefore.setDate(dayBefore.getDate() - 1);
-  const dayBeforeYYYYMMDD = dayBefore.toISOString().split('T')[0];
+  const today = new Date(date);
+  const todayYYYYMMDD = today.toISOString().split('T')[0];
   const newFetch: { [key: string]: GameFormatted[] } = {};
-  for (let i = 0; i <= 10; i++) {
-    const nextDate = new Date(dayBeforeYYYYMMDD);
+  for (let i = 0; i <= 5; i++) {
+    const nextDate = new Date(todayYYYYMMDD);
     nextDate.setDate(nextDate.getDate() + i);
     const nextYYYYMMDD = nextDate.toISOString().split('T')[0];
     const gamesByHour = await fetchGamesByHour(nextYYYYMMDD);
@@ -187,8 +181,7 @@ export default function GameofTheDay() {
       }
     });
 
-    const roundToHour = windowWidth >= 768 && windowWidth < 1200;
-    const scheduledGrouped = groupGamesByHour(scheduled, roundToHour);
+    const scheduledGrouped = groupGamesByHour(scheduled);
 
     const groups: { hour: string; games: GameFormatted[] }[] = [];
 
@@ -212,15 +205,31 @@ export default function GameofTheDay() {
     }
 
     return groups;
-  }, [games, selectLeagues, teamSelectedId, windowWidth, activeFilter, favoriteTeams]);
+  }, [games, selectLeagues, teamSelectedId, activeFilter, favoriteTeams]);
 
   const getGamesFromApi = useCallback(async (dateToFetch: Date) => {
     const YYYYMMDD = new Date(dateToFetch).toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+
+    if (YYYYMMDD < today) {
+      if (gamesDayCache.current[YYYYMMDD]) {
+        delete gamesDayCache.current[YYYYMMDD];
+        saveCache('gamesDay', gamesDayCache.current);
+      }
+      try {
+        const gamesByHourData = await fetchGamesByHour(YYYYMMDD);
+        const gamesOfTheDay = Object.values(gamesByHourData).flat();
+        setGames(gamesOfTheDay);
+      } catch (error) {
+        console.error(error);
+        setGames([]);
+      }
+      return;
+    }
 
     // Check cache first
     const cachedGames = gamesDayCache.current[YYYYMMDD];
     if (cachedGames) {
-      const today = new Date().toISOString().split('T')[0];
       let gamesToDisplay = cachedGames;
 
       if (YYYYMMDD === today) {
@@ -250,7 +259,7 @@ export default function GameofTheDay() {
       const gamesOfTheDay = Object.values(gamesByHourData).flat();
       gamesDayCache.current[YYYYMMDD] = gamesOfTheDay;
 
-      if (YYYYMMDD === new Date().toISOString().split('T')[0]) {
+      if (YYYYMMDD === today) {
         const nextFetchedGames = await getNextGamesFromApi(dateToFetch);
         Object.entries(nextFetchedGames).forEach(([date, games]) => {
           gamesDayCache.current[date] = games;
@@ -277,9 +286,6 @@ export default function GameofTheDay() {
       readonlyRef.current = true;
       setSelectDate(startDate);
       const YYYYMMDD = new Date(startDate).toISOString().split('T')[0];
-      if (!gamesDayCache.current[YYYYMMDD]) {
-        setGames([]);
-      }
       setIsLoading(true);
 
       getGamesFromApi(startDate).finally(() => {
@@ -347,88 +353,38 @@ export default function GameofTheDay() {
   }, [showScores, handleScoreToggle]);
 
   const displayFilters = useCallback(() => {
-    const selectedTeamLabel = teamsOfTheDay.find((t) => t.uniqueId === teamSelectedId)?.label || 'ALL';
-    const teamLabels = teamsOfTheDay.map((t) => t.label);
-
-    const handleTeamFilterChange = (label: string) => {
-      if (label === 'ALL') {
+    const handleTeamFilterChange = (val: string) => {
+      if (val === 'ALL') {
         handleTeamSelectionChange('');
       } else {
-        const team = teamsOfTheDay.find((t) => t.label === label);
-        if (team) {
-          handleTeamSelectionChange(team.uniqueId);
-        }
+        handleTeamSelectionChange(val);
       }
     };
 
+    const teamFilterData = [
+      { label: translateWord('all'), value: 'ALL' },
+      ...teamsOfTheDay.map((t) => ({ label: t.label, value: t.uniqueId })),
+    ];
+
     return (
-      <ThemedView>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'row',
-            width: '100%',
-            alignItems: 'center',
-            paddingLeft: 15,
-            backgroundImage: 'linear-gradient(90deg, transparent 0%, #000000 5%, #000000 95%, transparent 100%)',
-            backgroundColor: 'transparent',
-            boxSizing: 'border-box',
-          }}
-        >
-          <div
-            style={{
-              position: 'relative',
-              width: 40,
-              height: 40,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginRight: 10,
-              backgroundColor: 'black',
-              border: '1px solid white',
-              borderRadius: '50%',
-            }}
-          >
-            <Ionicons name="search" size={24} color="white" />
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                overflow: 'hidden',
-                zIndex: 10,
-              }}
-            >
-              <Selector
-                data={{
-                  i: randomNumber(999999),
-                  items: teamsOfTheDay as any,
-                  itemSelectedId: teamSelectedId,
-                  itemsSelectedIds: [],
-                }}
-                onItemSelectionChange={handleTeamSelectionChange}
-                allowMultipleSelection={false}
-                isClearable={true}
-                placeholder={translateWord('filterTeams')}
-              />
-            </div>
-          </div>
-          <View style={{ flex: 1 }}>
-            <FilterSlider
-              selectedFilter={selectedTeamLabel}
-              onFilterChange={handleTeamFilterChange}
-              hasFavorites={false}
-              showFavorites={false}
-              availableLeagues={teamLabels as any}
-            />
-          </View>
-        </div>
-      </ThemedView>
+      <TeamFilter
+        icon={<Ionicons name="search" size={24} color="white" />}
+        selectorData={{
+          i: randomNumber(999999),
+          items: teamsOfTheDay as any,
+          itemSelectedId: teamSelectedId,
+          itemsSelectedIds: [],
+        }}
+        onSelectorChange={handleTeamSelectionChange}
+        selectorPlaceholder={translateWord('filterTeams')}
+        isClearable={true}
+        filterData={teamFilterData}
+        selectedFilter={teamSelectedId || 'ALL'}
+        onFilterChange={handleTeamFilterChange}
+        favoriteValues={favoriteTeams}
+      />
     );
-  }, [leaguesAvailable, selectLeagues, teamsOfTheDay, teamSelectedId, handleTeamSelectionChange]);
+  }, [leaguesAvailable, selectLeagues, teamsOfTheDay, teamSelectedId, handleTeamSelectionChange, favoriteTeams]);
 
   const displayNoContent = useCallback(() => {
     if (isLoading) {
@@ -438,119 +394,32 @@ export default function GameofTheDay() {
     }
   }, [isLoading]);
 
-  const displaySmallDeviceContent = useCallback(() => {
+  const displayContent = useCallback(() => {
     if (!games || games.length === 0) {
       return displayNoContent();
     }
 
     if (visibleGamesByHour.length === 0) return <NoResults />;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selected = new Date(selectDate);
-    selected.setHours(0, 0, 0, 0);
-    const isPast = selected < today;
-
     return (
-      <ThemedView>
-        {visibleGamesByHour.map(({ hour, games }, i) => {
-          if (isPast) {
-            return (
-              <div key={hour} style={{ width: '100%', margin: '0 auto' }}>
-                {games.map((game) => (
-                  <CardLarge
-                    key={game._id ?? randomNumber(999999)}
-                    data={teamSelectedId ? { ...game, teamSelectedId } : game}
-                    showDate={false}
-                    showScores={showScores}
-                  />
-                ))}
-              </div>
-            );
-          }
-          return (
-            <div key={hour} style={{ width: '100%', margin: '0 auto' }}>
-              <Accordion
-                filter={hour}
-                i={i}
-                gamesFiltred={games}
-                open={true}
-                isCounted={false}
-                disableToggle={false}
-                gamesSelected={gamesSelected}
-                showScores={showScores}
-              />
-            </div>
-          );
-        })}
+      <ThemedView style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' } as any}>
+        {visibleGamesByHour.map(({ hour, games }, i) => (
+          <div key={hour} style={{ width: '100%', margin: '0 auto' }}>
+            <Accordion
+              filter={hour}
+              i={i}
+              gamesFiltred={games}
+              open={true}
+              isCounted={false}
+              disableToggle={false}
+              gamesSelected={gamesSelected}
+              showScores={showScores}
+            />
+          </div>
+        ))}
       </ThemedView>
     );
-  }, [games, displayNoContent, visibleGamesByHour, gamesSelected, selectDate, teamSelectedId, showScores]);
-
-  const displayLargeDeviceContent = useCallback(() => {
-    if (!games || games.length === 0) {
-      return displayNoContent();
-    }
-    if (visibleGamesByHour.length === 0) return <NoResults />;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selected = new Date(selectDate);
-    selected.setHours(0, 0, 0, 0);
-    const isPast = selected < today;
-
-    const allGames = visibleGamesByHour.flatMap((group) => group.games);
-
-    return (
-      <ThemedView>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: allGames.length < 3 ? 'center' : 'flex-start',
-            gap: 15,
-            padding: 10,
-            width: '75%',
-            margin: 'auto',
-          }}
-        >
-          {allGames.map((game) => {
-            const gameId = game._id ?? randomNumber(999999);
-            if (isPast) {
-              return (
-                <div key={gameId} style={{ width: 'calc((100% - 30px) / 3)', minWidth: 300 }}>
-                  <CardLarge
-                    data={teamSelectedId ? { ...game, teamSelectedId } : game}
-                    showDate={false}
-                    selected={false}
-                    showScores={showScores}
-                  />
-                </div>
-              );
-            }
-            const isSelected = gamesSelected.some(
-              (gameSelect) =>
-                game.homeTeamId === gameSelect.homeTeamId && game.startTimeUTC === gameSelect.startTimeUTC,
-            );
-            return (
-              <div key={gameId} style={{ width: 'calc((100% - 30px) / 3)', minWidth: 300 }}>
-                <CardLarge
-                  data={game}
-                  numberSelected={1}
-                  showButtons={true}
-                  showDate={false}
-                  onSelection={() => {}}
-                  selected={isSelected}
-                  disableSelection={true}
-                  showScores={showScores}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </ThemedView>
-    );
-  }, [games, displayNoContent, visibleGamesByHour, teamSelectedId, gamesSelected, selectDate, showScores]);
+  }, [games, displayNoContent, visibleGamesByHour, gamesSelected, showScores, isLoading]);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -570,7 +439,7 @@ export default function GameofTheDay() {
 
     async function initializeGames() {
       fetchLeagues(setLeaguesAvailable);
-      // restore persisted games cache (current day + next 10 days)
+      // restore persisted games cache (current day + next 5 days)
       const localStorageGamesDay = getCache<{ [key: string]: GameFormatted[] }>('gamesDay');
       if (localStorageGamesDay) {
         gamesDayCache.current = localStorageGamesDay;
@@ -625,7 +494,7 @@ export default function GameofTheDay() {
                 style={
                   windowWidth > 768
                     ? {
-                        width: '75%',
+                        width: windowWidth < 1200 ? '95%' : '100%',
                         margin: '0 auto',
                         padding: 10,
                         boxSizing: 'border-box',
@@ -633,7 +502,6 @@ export default function GameofTheDay() {
                     : {}
                 }
               >
-                <SliderDatePicker onDateChange={(date) => handleDateChange(date, date)} selectDate={selectDate} />
                 <FilterSlider
                   selectedFilter={activeFilter}
                   onFilterChange={handleFilterChange}
@@ -641,11 +509,12 @@ export default function GameofTheDay() {
                   availableLeagues={userLeagues}
                 />
                 {displayFilters()}
+                <SliderDatePicker onDateChange={(date) => handleDateChange(date, date)} selectDate={selectDate} />
               </div>
             </div>
           </ThemedView>
         </div>
-        <ThemedView>{windowWidth > 768 ? displayLargeDeviceContent() : displaySmallDeviceContent()}</ThemedView>
+        <ThemedView>{displayContent()}</ThemedView>
       </ScrollView>
 
       <ActionButton ref={ActionButtonRef} scrollViewRef={scrollViewRef} />

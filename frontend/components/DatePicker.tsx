@@ -1,7 +1,10 @@
+import { ThemedText } from '@/components/ThemedText';
+import { useFavoriteColor } from '@/hooks/useFavoriteColor';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { DateRangePickerProps } from '@/utils/types';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 
 // Helper pour formater la date en YYYY-MM-DD (heure locale)
@@ -27,6 +30,10 @@ export default function DateRangePicker({
   const [isOpen, setIsOpen] = useState(false);
   const [locale, setLocale] = useState('en-US');
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const textColor = useThemeColor({}, 'text');
+  const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#1c1c1e' }, 'background');
+  const borderColor = useThemeColor({}, 'text');
+  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
 
   // État temporaire pour la sélection de plage en cours
   const [tempRange, setTempRange] = useState<{ start: string | null; end: string | null }>({
@@ -104,8 +111,8 @@ export default function DateRangePicker({
 
   const getMarkedDates = () => {
     const marked: any = {};
-    const color = 'black';
-    const textColor = 'white';
+    const color = selectedBackgroundColor;
+    const textColor = selectedTextColor;
 
     if (selectDate) {
       const dateStr = toDateString(selectDate);
@@ -148,8 +155,6 @@ export default function DateRangePicker({
   };
 
   const minDate = new Date();
-  // Allow selecting dates up to 6 months before today
-  minDate.setMonth(minDate.getMonth() - 6);
   const maxDate = new Date();
   maxDate.setFullYear(maxDate.getFullYear() + 1);
 
@@ -158,31 +163,47 @@ export default function DateRangePicker({
       <TouchableOpacity
         onPress={() => !readonly && setIsOpen(!isOpen)}
         disabled={readonly}
-        style={[styles.inputContainer, readonly && styles.readonly]}
+        style={[styles.inputContainer, { borderColor }, readonly && styles.readonly]}
       >
         <Icon
           name="calendar"
           type="font-awesome"
           size={20}
-          color={readonly ? 'gray' : 'black'}
+          color={readonly ? 'gray' : textColor}
           style={{ marginRight: 10 }}
         />
-        <Text style={[styles.inputText, readonly && { color: 'gray' }]}>{displayText()}</Text>
+        <ThemedText style={[styles.inputText, readonly && { color: 'gray' }]}>{displayText()}</ThemedText>
         {!readonly && (
           <Icon
             name={isOpen ? 'chevron-up' : 'chevron-down'}
             type="font-awesome"
             size={12}
-            color="gray"
+            color={textColor}
             style={{ marginLeft: 10 }}
           />
         )}
       </TouchableOpacity>
 
       {isOpen && (
-        <div style={{ position: 'absolute', top: '110%', left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
-          <View style={styles.calendarContainer}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '110%',
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <View
+            style={[
+              styles.calendarContainer,
+              { backgroundColor, width: Platform.select({ web: '90%', default: 350 }) as any, maxWidth: 350 },
+            ]}
+          >
             <Calendar
+              style={{ width: '100%' }}
               onDayPress={handleDayPress}
               markingType={'period'}
               markedDates={getMarkedDates()}
@@ -190,11 +211,14 @@ export default function DateRangePicker({
               minDate={toDateString(minDate)}
               maxDate={toDateString(maxDate)}
               theme={{
-                selectedDayBackgroundColor: 'black',
-                selectedDayTextColor: 'white',
-                todayTextColor: '#000000',
+                calendarBackground: backgroundColor,
+                selectedDayBackgroundColor: selectedBackgroundColor,
+                selectedDayTextColor: selectedTextColor,
+                todayTextColor: textColor,
                 todayBackgroundColor: '#90D5FF',
-                arrowColor: 'black',
+                dayTextColor: textColor,
+                monthTextColor: textColor,
+                arrowColor: textColor,
                 textDayFontWeight: '500',
                 textMonthFontWeight: 'bold',
                 textDayHeaderFontWeight: 'bold',
@@ -211,12 +235,10 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: 'transparent',
     paddingVertical: 10,
     paddingHorizontal: 15,
-    borderRadius: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
+
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -225,7 +247,7 @@ const styles = StyleSheet.create({
         shadowRadius: 1.41,
       },
       android: { elevation: 2 },
-      web: { boxShadow: '0px 1px 1.41px rgba(0,0,0,0.2)' },
+      web: { boxShadow: 'none' },
     }),
     justifyContent: 'center',
     minWidth: 280,
@@ -236,9 +258,10 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   inputText: {
-    fontSize: 16,
-    color: 'black',
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: 'bold',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    textTransform: 'capitalize',
   },
   calendarContainer: {
     backgroundColor: 'white',
@@ -254,6 +277,5 @@ const styles = StyleSheet.create({
       web: { boxShadow: '0px 4px 4.65px rgba(0,0,0,0.3)' },
     }),
     padding: 10,
-    width: 350,
   },
 });

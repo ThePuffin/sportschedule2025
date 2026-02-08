@@ -177,6 +177,9 @@ const FavModal = ({
                 isClearable={false}
                 placeholder={translateWord('filterLeagues')}
                 startOpen={!hasFavorites}
+                style={{ backgroundColor: 'white', borderColor: '#ccc' }}
+                textStyle={{ color: '#333', fontWeight: 'normal' }}
+                iconColor="#666"
               />
             </View>
           </View>
@@ -256,6 +259,9 @@ const FavModal = ({
                           isClearable={true}
                           placeholder={translateWord('findTeam')}
                           startOpen={index === 0 && openFirstTeamSelector}
+                          style={{ backgroundColor: 'white', borderColor: '#ccc' }}
+                          textStyle={{ color: '#333', fontWeight: 'normal' }}
+                          iconColor="#666"
                         />
                       </View>
                     </View>

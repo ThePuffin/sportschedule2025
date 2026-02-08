@@ -47,7 +47,7 @@ export const timeDurationEnum = {
   NCAAF: 3.5,
   MLB: 2.75,
   NCCABB: 2.75,
-  NBA: 2.75,
+  NBA: 3,
   NCAAB: 2.75,
   WNCAAB: 2.75,
   WNBA: 2.75,

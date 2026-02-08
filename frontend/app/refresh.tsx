@@ -1,3 +1,4 @@
+import AppLogo from '@/components/AppLogo';
 import NoResults from '@/components/NoResults';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -64,16 +65,16 @@ export default function GameofTheDay() {
     }
   };
 
-    const handleRefreshScores = async () => {
-      setIsLoading(true);
-      try {
-        await refreshTeamsApi('games/scores');
-      } catch (error) {
-        console.error('Error refreshing teams:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const handleRefreshScores = async () => {
+    setIsLoading(true);
+    try {
+      await refreshTeamsApi('games/scores');
+    } catch (error) {
+      console.error('Error refreshing teams:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
@@ -102,6 +103,16 @@ export default function GameofTheDay() {
 
   return (
     <ThemedView>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '5px 15px 0 15px',
+        }}
+      >
+        <AppLogo />
+      </div>
       <View
         style={{
           flex: 1,
@@ -145,7 +156,7 @@ export default function GameofTheDay() {
           </View>
         </div>
         <br />
-                <div
+        <div
           role="button"
           tabIndex={isLoading ? -1 : 0}
           aria-disabled={isLoading}

@@ -1,49 +1,50 @@
-import { ThemedView } from '@/components/ThemedView';
+import { useMemo } from 'react';
+import { useWindowDimensions } from 'react-native';
 import { GameFormatted, GamesSelectedProps } from '../utils/types';
-import Cards from './Cards';
+import CardLarge from './CardLarge';
 
-export default function GamesSelected({ data = [], teamNumber = 6, onAction }: Readonly<GamesSelectedProps>) {
-  const displayGamesSelected = (games: GameFormatted[]) => {
-    return games.map((gameSelected: GameFormatted) => {
-      return (
-        <td key={gameSelected._id}>
-          <ThemedView>
-            <Cards
-              data={gameSelected}
-              selected={false}
-              showDate={true}
-              showButtons={true}
-              onSelection={() => onAction(gameSelected)}
-              numberSelected={50}
-            />
-          </ThemedView>
-        </td>
-      );
-    });
-  };
+export default function GamesSelected({ data = [], onAction, teamNumber = 1 }: Readonly<GamesSelectedProps>) {
+  const { width } = useWindowDimensions();
+  const isSmallDevice = width < 768;
 
-  const cutSelectedGames: GameFormatted[][] = [];
-  data.forEach((gameSelected: GameFormatted, i) => {
-    const arrayNumber = Math.floor(i / teamNumber);
-    if (!cutSelectedGames[arrayNumber]) {
-      cutSelectedGames[arrayNumber] = new Array(teamNumber);
-    }
-    cutSelectedGames[arrayNumber][i % teamNumber] = gameSelected;
-  });
+  const verticalMode = useMemo(() => {
+    return (teamNumber > 6 && !isSmallDevice) || isSmallDevice;
+  }, [teamNumber, isSmallDevice]);
+
+  let cardWidth = '100%';
+  if (!isSmallDevice) {
+    cardWidth = teamNumber === 1 ? '33%' : `${100 / teamNumber}%`;
+  } else {
+    cardWidth = '50%';
+  }
 
   return (
-    <table style={{ tableLayout: 'fixed', width: '100%' }}>
-      <tbody>
-        {cutSelectedGames.map((gamesSelected) => {
-          // Use the _id of the first game in the row as the key, fallback to Math.random() if empty
-          const rowKey = gamesSelected[0]?._id || Math.random().toString();
-          return (
-            <tr key={rowKey} style={{ width: '100%' }}>
-              {displayGamesSelected(gamesSelected)}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        width: '100%',
+        justifyContent: !isSmallDevice && teamNumber === 1 ? 'center' : 'flex-start',
+      }}
+    >
+      {data.map((gameSelected: GameFormatted) => {
+        return (
+          <div
+            key={gameSelected.uniqueId || gameSelected._id}
+            style={{ width: cardWidth, padding: 5, boxSizing: 'border-box' }}
+          >
+            <CardLarge
+              data={gameSelected}
+              showDate={true}
+              showTime={true}
+              onSelection={() => onAction(gameSelected)}
+              animateExit={true}
+              animateEntry={true}
+              verticalMode={verticalMode}
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 }

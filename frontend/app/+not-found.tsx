@@ -1,13 +1,24 @@
 import { Link, Stack } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
+import AppLogo from '@/components/AppLogo';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { translateWord } from '@/utils/utils';
 
 export default function NotFoundScreen() {
   return (
-    <>
+    <ThemedView>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '5px 15px 0 15px',
+        }}
+      >
+        <AppLogo />
+      </div>
       <Stack.Screen options={{ title: 'Oops!' }} />
       <ThemedView style={styles.container}>
         <ThemedText type="title">{translateWord('wrongPage')}</ThemedText>
@@ -21,7 +32,7 @@ export default function NotFoundScreen() {
           />
         </Link>
       </ThemedView>
-    </>
+    </ThemedView>
   );
 }
 

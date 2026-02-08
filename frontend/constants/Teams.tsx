@@ -163,7 +163,7 @@ export const TeamsEnum: Record<string, string> = {
   'NBA-TOR': 'Toronto Raptors',
   'PWHL-TOR': 'Toronto Sceptres',
   'NBA-UTAH': 'Utah Jazz',
-  'NHL-UTAH': 'Utah Mammoth',
+  'NHL-UTA': 'Utah Mammoth',
   'NHL-VAN': 'Vancouver Canucks',
   'PWHL-VAN': 'Vancouver Goldeneyes',
   'MLS-VAN': 'Vancouver Whitecaps',

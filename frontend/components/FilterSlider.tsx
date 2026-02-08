@@ -1,8 +1,21 @@
+import { ThemedElements } from '@/components/ThemedElements';
+import { ThemedText } from '@/components/ThemedText';
 import { League } from '@/constants/enum';
+import { useFavoriteColor } from '@/hooks/useFavoriteColor';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
-import React, { useEffect, useRef } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import {
+  Platform,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  TextStyle,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from 'react-native';
 
 interface FilterSliderProps {
   selectedFilter: string;
@@ -12,6 +25,12 @@ interface FilterSliderProps {
   showFavorites?: boolean;
   showAll?: boolean;
   data?: { label: string; value: string; icon?: string }[];
+  favoriteValues?: string[];
+  style?: StyleProp<ViewStyle>;
+  itemStyle?: StyleProp<ViewStyle>;
+  selectedItemStyle?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+  selectedTextStyle?: StyleProp<TextStyle>;
 }
 
 export default function FilterSlider({
@@ -22,13 +41,19 @@ export default function FilterSlider({
   showFavorites = true,
   showAll = true,
   data,
+  favoriteValues = [],
+  style,
+  itemStyle,
+  selectedItemStyle,
+  textStyle,
+  selectedTextStyle,
 }: FilterSliderProps) {
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Custom colors matching the dark theme screenshot
-  const selectedBackgroundColor = '#3b82f6';
-  const unselectedTextColor = '#8E8E93';
-  const selectedTextColor = '#FFFFFF';
+  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
+  const unselectedTextColor = useThemeColor({ light: '#404040', dark: '#8E8E93' }, 'text');
+  const unselectedBackgroundColor = 'rgba(120, 120, 120, 0.1)';
 
   const useDragScroll = (ref: React.RefObject<ScrollView>) => {
     useEffect(() => {
@@ -82,26 +107,74 @@ export default function FilterSlider({
 
   useDragScroll(scrollViewRef);
 
-  const items = data
-    ? data
-    : [
-        ...(showAll ? [{ label: translateWord('all'), value: 'ALL' }] : []),
-        ...(showFavorites ? [{ label: translateWord('favorites'), value: 'FAVORITES', icon: 'star' }] : []),
-        ...(availableLeagues || Object.values(League).filter((l) => l !== League.ALL)).map((l) => ({
-          label: l,
-          value: l,
-        })),
-      ];
+  const rawItems = useMemo(
+    () =>
+      data
+        ? data
+        : [
+            ...(showAll ? [{ label: translateWord('all'), value: 'ALL' }] : []),
+            ...(showFavorites ? [{ label: translateWord('favorites'), value: 'FAVORITES', icon: 'star' }] : []),
+            ...(availableLeagues || Object.values(League).filter((l) => l !== League.ALL)).map((l) => ({
+              label: l,
+              value: l,
+            })),
+          ],
+    [data, showAll, showFavorites, availableLeagues],
+  );
+
+  const items = useMemo(() => {
+    const specialValues = ['ALL', 'all'];
+    const result: typeof rawItems = [];
+    const seenValues = new Set<string>();
+
+    const addItem = (item: (typeof rawItems)[0] | undefined) => {
+      if (item && !seenValues.has(item.value)) {
+        seenValues.add(item.value);
+        result.push(item);
+      }
+    };
+
+    // 1. Add Selected item
+    const selectedItem = rawItems.find((i) => i.value === selectedFilter);
+    addItem(selectedItem);
+
+    // 2. Add Special items (ALL)
+    rawItems.forEach((item) => {
+      if (specialValues.includes(item.value)) {
+        addItem(item);
+      }
+    });
+
+    // 3. Add FAVORITES item
+    const favoritesItem = rawItems.find((i) => i.value === 'FAVORITES');
+    addItem(favoritesItem);
+
+    // 4. Add Favorites
+    if (favoriteValues.length > 0) {
+      favoriteValues.forEach((fav) => {
+        const favItem = rawItems.find((i) => i.value === fav);
+        addItem(favItem);
+      });
+    }
+
+    // 5. Add remaining items
+    rawItems.forEach((item) => {
+      addItem(item);
+    });
+
+    return result;
+  }, [rawItems, selectedFilter, favoriteValues]);
 
   return (
-    <View
+    <ThemedElements
       style={[
         styles.container,
         Platform.OS === 'web' &&
           ({
-            backgroundImage: 'linear-gradient(90deg, transparent 0%, #000000 5%, #000000 95%, transparent 100%)',
-            backgroundColor: 'transparent',
+            maskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
           } as any),
+        style,
       ]}
     >
       <ScrollView
@@ -114,46 +187,54 @@ export default function FilterSlider({
           const selected = item.value === selectedFilter;
           const disabled = item.value === 'FAVORITES' && !hasFavorites;
           return (
-            <TouchableOpacity
-              key={item.value}
-              style={[
-                styles.item,
-                selected && { backgroundColor: selectedBackgroundColor },
-                disabled && { opacity: 0.5 },
-              ]}
-              onPress={() => onFilterChange(item.value)}
-              disabled={disabled}
-            >
-              {item.icon && (
-                <Icon
-                  name={item.icon}
-                  type="font-awesome"
-                  size={14}
-                  color={selected ? selectedTextColor : '#fbbf24'} // Gold star if unselected? Screenshot shows grey text but maybe star is colored
-                  style={{ marginRight: 4 }}
-                />
-              )}
-              <Text
+            <React.Fragment key={item.value}>
+              <TouchableOpacity
                 style={[
-                  styles.itemText,
-                  { color: selected ? selectedTextColor : unselectedTextColor },
-                  selected && styles.selectedText,
+                  styles.item,
+                  { backgroundColor: selected ? selectedBackgroundColor : unselectedBackgroundColor },
+                  itemStyle,
+                  selected && selectedItemStyle,
+                  disabled && { opacity: 0.5 },
                 ]}
+                onPress={() => onFilterChange(item.value)}
+                disabled={disabled}
               >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
+                {item.icon && (
+                  <Icon
+                    name={item.icon}
+                    type="font-awesome"
+                    size={14}
+                    color={selected ? selectedTextColor : '#fbbf24'} // Gold star if unselected? Screenshot shows grey text but maybe star is colored
+                    style={{ marginRight: 4 }}
+                  />
+                )}
+                <ThemedText
+                  style={[
+                    styles.itemText,
+                    { color: selected ? selectedTextColor : unselectedTextColor },
+                    textStyle,
+                    selected && selectedTextStyle,
+                  ]}
+                >
+                  {item.label}
+                </ThemedText>
+              </TouchableOpacity>
+              {index === 0 && items.length > 1 && (
+                <View style={styles.separator}>
+                  <ThemedText style={styles.separatorText}>|</ThemedText>
+                </View>
+              )}
+            </React.Fragment>
           );
         })}
       </ScrollView>
-    </View>
+    </ThemedElements>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 10,
-    backgroundColor: '#000000',
   },
   scrollContent: {
     alignItems: 'center',
@@ -162,17 +243,21 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
-    marginHorizontal: 4,
-    backgroundColor: 'transparent',
+    marginRight: 8,
   },
   itemText: {
     fontSize: 14,
     fontWeight: '600',
   },
-  selectedText: {
-    fontWeight: '700',
+  separator: {
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  separatorText: {
+    fontSize: 18,
+    fontWeight: '300',
   },
 });
