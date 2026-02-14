@@ -56,7 +56,7 @@ export default function Selector({
   const userClearedRef = useRef(false);
 
   const textColor = useThemeColor({}, 'text');
-  const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#1c1c1e' }, 'background');
+  const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
   const borderColor = useThemeColor({}, 'text');
   const itemBackgroundColor = useThemeColor({ light: '#f0f0f0', dark: '#2c2c2e' }, 'background');
   const effectiveIconColor = iconColor ?? textColor;

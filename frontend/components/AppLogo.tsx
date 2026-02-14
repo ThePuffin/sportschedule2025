@@ -9,7 +9,8 @@ export default function AppLogo() {
       <TouchableOpacity activeOpacity={0.7} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Image source={require('@/assets/images/SkedAll.png')} style={{ width: 30, height: 30 }} resizeMode="contain" />
         <ThemedText
-          type="subtitle"
+          type="title"
+          aria-level="1"
           style={{
             fontSize: 30,
             fontWeight: '900',

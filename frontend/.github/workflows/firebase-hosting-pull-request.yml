@@ -17,6 +17,8 @@ jobs:
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SKEDALL_CAF72 }}
-          projectId: skedall-caf72
+          # Ce secret DOIT contenir la clé JSON du projet american-sport-leagues-d1e2a
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NEW }}
+          # L'ID du projet doit être celui qui est actif dans votre console
+          projectId: american-sport-leagues-d1e2a
           entryPoint: .

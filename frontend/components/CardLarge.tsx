@@ -30,9 +30,8 @@ export default function CardLarge({
   verticalMode = false,
   showTime = false,
 }: Readonly<CardsProps & { showTime?: boolean }>) {
+  let { homeTeamShort, awayTeamShort } = data;
   const {
-    homeTeamShort,
-    awayTeamShort,
     homeTeamLogo,
     awayTeamLogo,
     homeTeamLogoDark,
@@ -51,9 +50,19 @@ export default function CardLarge({
     awayTeamBackgroundColor,
     homeTeamBackgroundColor,
     placeName = '',
+    league,
     urlLive,
   } = data;
 
+  if (league.includes('OLYMPICS')) {
+    const suffix = league.includes('WOMEN') ? '-W' : '-M';
+    if (homeTeamShort && !homeTeamShort.endsWith(suffix)) {
+      homeTeamShort += suffix;
+    }
+    if (awayTeamShort && !awayTeamShort.endsWith(suffix)) {
+      awayTeamShort += suffix;
+    }
+  }
   const emptyCard = !homeTeamShort && !awayTeamShort;
   const { width } = useWindowDimensions();
   const theme = useColorScheme() ?? 'light';
@@ -164,8 +173,10 @@ export default function CardLarge({
   }, [isLive, pulseAnim]);
 
   let timeText = '';
-  if (status === GameStatus.FINAL) {
+  if ( status === GameStatus.FINISHED) {
     timeText = translateWord('ended');
+  } else if (status === GameStatus.FINAL) {
+    timeText = translateWord('final');
   } else if (status === GameStatus.IN_PROGRESS) {
     timeText = translateWord('followLive');
   } else if (startTimeUTC) {

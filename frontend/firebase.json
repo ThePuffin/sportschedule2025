@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "skedall-caf72",
+    "site": "skedall",
     "public": "dist",
     "ignore": [
       "firebase.json",

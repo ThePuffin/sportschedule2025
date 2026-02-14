@@ -11,6 +11,8 @@ export enum League {
   NCAAB = 'NCAAB',
   NCCABB = 'NCCABB',
   WNCAAB = 'WNCAAB',
+  'OLYMPICS_HOCKEY_MEN' = 'OLYMPICS-MEN',
+  'OLYMPICS_HOCKEY_WOMEN' = 'OLYMPICS-WOMEN',
 }
 
 export enum CollegeLeague {
@@ -38,6 +40,10 @@ export const emoticonEnum = {
   WNCAAB: '⛹️‍♀️',
   WNBA: '⛹️‍♀️',
   MLS: '⚽',
+  OLYMPICS_HOCKEY_MEN: '🏒',
+  OLYMPICS_HOCKEY_WOMEN: '🏒',
+  'OLYMPICS-MEN': '🏒',
+  'OLYMPICS-WOMEN': '🏒',
 };
 
 export const timeDurationEnum = {
@@ -66,11 +72,14 @@ export const leagueLogos = {
   NCAAB: require('../assets/images/ncaa-basketball.png'),
   NCCABB: require('../assets/images/ncaa-baseball.png'),
   WNCAAB: require('../assets/images/ncaa-basketball-woman.png'),
+  'OLYMPICS-MEN': require('../assets/images/OLYMPICS.png'),
+  'OLYMPICS-WOMEN': require('../assets/images/OLYMPICS.png'),
   DEFAULT: require('../assets/images/DEFAULT.png'),
 };
 
 export enum GameStatus {
   SCHEDULED = 'SCHEDULED',
-  IN_PROGRESS = 'IN_PROGRESS', 
+  IN_PROGRESS = 'IN_PROGRESS',
+  FINISHED = 'FINISHED',
   FINAL = 'FINAL',
 }

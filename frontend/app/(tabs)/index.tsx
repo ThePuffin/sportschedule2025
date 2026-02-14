@@ -174,7 +174,7 @@ export default function GameofTheDay() {
       const status = getGamesStatus(game);
       if (status === GameStatus.IN_PROGRESS && (!game.homeTeamScore || game.homeTeamScore === null)) {
         inProgress.push(game);
-      } else if (status === GameStatus.FINAL || game.homeTeamScore != null) {
+      } else if (status === GameStatus.FINISHED || game.homeTeamScore != null) {
         finished.push(game);
       } else {
         scheduled.push(game);
@@ -258,17 +258,21 @@ export default function GameofTheDay() {
       const gamesByHourData = await fetchGamesByHour(YYYYMMDD);
       const gamesOfTheDay = Object.values(gamesByHourData).flat();
       gamesDayCache.current[YYYYMMDD] = gamesOfTheDay;
+      setGames(gamesOfTheDay);
 
       if (YYYYMMDD === today) {
-        const nextFetchedGames = await getNextGamesFromApi(dateToFetch);
-        Object.entries(nextFetchedGames).forEach(([date, games]) => {
-          gamesDayCache.current[date] = games;
+        getNextGamesFromApi(dateToFetch).then((nextFetchedGames) => {
+          Object.entries(nextFetchedGames).forEach(([date, games]) => {
+            gamesDayCache.current[date] = games;
+          });
+          const pruned = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
+          gamesDayCache.current = pruned;
+          saveCache('gamesDay', pruned);
         });
       }
       const pruned = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
       gamesDayCache.current = pruned;
       saveCache('gamesDay', pruned);
-      setGames(gamesOfTheDay);
     } catch (error) {
       console.error(error);
       if (!cachedGames) {

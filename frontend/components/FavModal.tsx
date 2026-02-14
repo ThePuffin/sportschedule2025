@@ -1,13 +1,14 @@
 import ScoreToggle from '@/components/ScoreToggle';
 import Selector from '@/components/Selector';
+import TeamReorderSelector from '@/components/TeamReorderSelector';
 import { LeaguesEnum } from '@/constants/Leagues';
 import { TeamsEnum } from '@/constants/Teams';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchLeagues, getCache, saveCache } from '@/utils/fetchData';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
-import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 const maxFavorites = 5;
 
@@ -29,13 +30,15 @@ const FavModal = ({
     const cached = getCache<string[]>('allLeagues');
     return cached && cached.length > 0 ? cached : Object.values(LeaguesEnum);
   });
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [openFirstTeamSelector, setOpenFirstTeamSelector] = useState(false);
   const [showScores, setShowScores] = useState(false);
+
+  const textColor = useThemeColor({}, 'text');
+  const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
+  const borderColor = useThemeColor({}, 'text');
+  const itemBackgroundColor = useThemeColor({ light: '#f0f0f0', dark: '#2c2c2e' }, 'background');
 
   useEffect(() => {
     if (isOpen) {
-      setOpenFirstTeamSelector(false);
       const cached = getCache<string[]>('favoriteTeams');
       setLocalFavorites(cached || favoriteTeams);
 
@@ -84,23 +87,6 @@ const FavModal = ({
     updateDate: '',
   }));
 
-  const handleSelection = (position: number, teamId: string | string[]) => {
-    setOpenFirstTeamSelector(false);
-    const id = Array.isArray(teamId) ? teamId[0] : teamId;
-    const updatedTeams = [...localFavorites];
-
-    // Ensure we have 5 slots
-    while (updatedTeams.length < maxFavorites) updatedTeams.push('');
-
-    updatedTeams[position] = id || '';
-
-    // remove duplicates && reorganize to have not empty slots at the beginning
-    const uniqueTeams = Array.from(new Set(updatedTeams.filter((team) => team !== ''))).filter((team) => !!team);
-
-    while (uniqueTeams.length < maxFavorites) uniqueTeams.push('');
-    setLocalFavorites(uniqueTeams);
-  };
-
   const handleSave = () => {
     onSave(localFavorites);
     saveCache('leaguesSelected', localLeagues);
@@ -113,34 +99,6 @@ const FavModal = ({
     onClose();
   };
 
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: any) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (index: number) => {
-    if (draggedIndex === null || draggedIndex === index) return;
-    const newFavorites = [...localFavorites];
-    const item = newFavorites[draggedIndex];
-    newFavorites.splice(draggedIndex, 1);
-    newFavorites.splice(index, 0, item);
-    setLocalFavorites(newFavorites);
-    setDraggedIndex(null);
-  };
-
-  const moveItem = (index: number, direction: -1 | 1) => {
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= localFavorites.length) return;
-    const newFavorites = [...localFavorites];
-    const item = newFavorites[index];
-    newFavorites.splice(index, 1);
-    newFavorites.splice(newIndex, 0, item);
-    setLocalFavorites(newFavorites);
-  };
-
   const hasFavorites = favoriteTeams.length > 0;
   const hasSelection = localFavorites.some((t) => !!t);
 
@@ -148,10 +106,10 @@ const FavModal = ({
     <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => hasFavorites && onClose()}>
       <Pressable style={styles.centeredView} onPress={() => hasFavorites && onClose()}>
         <Pressable
-          style={[styles.modalView, isSmallDevice && { width: '90%', maxHeight: '90%' }]}
+          style={[styles.modalView, { backgroundColor }, isSmallDevice && { width: '90%', maxHeight: '90%' }]}
           onPress={(e) => e.stopPropagation()}
         >
-          <Text style={styles.modalText}>{translateWord('leagueSurveilled')}:</Text>
+          <Text style={[styles.modalText, { color: textColor }]}>{translateWord('leagueSurveilled')}:</Text>
 
           <View style={{ marginBottom: 15, zIndex: 20, flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ marginRight: 5, width: 20 }} />
@@ -168,110 +126,31 @@ const FavModal = ({
                   const newIds = Array.isArray(ids) ? ids : [];
                   if (newIds.length > 0) {
                     setLocalLeagues(newIds);
-                    if (!localFavorites.some((t) => !!t)) {
-                      setOpenFirstTeamSelector(true);
-                    }
                   }
                 }}
                 allowMultipleSelection={true}
                 isClearable={false}
                 placeholder={translateWord('filterLeagues')}
                 startOpen={!hasFavorites}
-                style={{ backgroundColor: 'white', borderColor: '#ccc' }}
-                textStyle={{ color: '#333', fontWeight: 'normal' }}
-                iconColor="#666"
+                style={{ backgroundColor, borderColor }}
+                textStyle={{ color: textColor, fontWeight: 'normal' }}
+                iconColor={textColor}
               />
             </View>
           </View>
 
-          <Text style={styles.modalText}>{translateWord('yourFav')}:</Text>
+          <Text style={[styles.modalText, { color: textColor }]}>{translateWord('yourFav')}:</Text>
           <View style={styles.selector}>
-            {Array.from({ length: Math.min(localFavorites.filter((t) => !!t).length + 1, maxFavorites) }).map(
-              (_, index) => {
-                const selectedId = localFavorites[index] || '';
-                const filteredItems = teamsForFavorites.filter(
-                  (team) =>
-                    (!localFavorites.includes(team.uniqueId) || team.uniqueId === selectedId) &&
-                    (localLeagues.length === 0 || localLeagues.includes(team.league)),
-                );
-                const isFilled = !!selectedId;
-                const countFilled = localFavorites.filter((t) => !!t).length;
-
-                return (
-                  <div
-                    key={selectedId || 'new-entry'}
-                    draggable={!!selectedId}
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(index)}
-                    onDragEnd={() => setDraggedIndex(null)}
-                    style={{ cursor: selectedId ? 'grab' : 'default' }}
-                  >
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        zIndex: 100 - index,
-                        opacity: draggedIndex === index ? 0.5 : 1,
-                      }}
-                    >
-                      <View style={{ marginRight: 5, width: 20, alignItems: 'center' }}>
-                        {isFilled &&
-                          (isSmallDevice ? (
-                            <View>
-                              {index > 0 && (
-                                <TouchableOpacity onPress={() => moveItem(index, -1)}>
-                                  <Icon
-                                    name="chevron-up"
-                                    type="font-awesome"
-                                    size={14}
-                                    color="#333"
-                                    style={{ marginBottom: 2 }}
-                                  />
-                                </TouchableOpacity>
-                              )}
-                              {index < countFilled - 1 && (
-                                <TouchableOpacity onPress={() => moveItem(index, 1)}>
-                                  <Icon
-                                    name="chevron-down"
-                                    type="font-awesome"
-                                    size={14}
-                                    color="#333"
-                                    style={{ marginTop: 2 }}
-                                  />
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          ) : (
-                            <Icon name="bars" type="font-awesome" size={14} color="#ccc" />
-                          ))}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Selector
-                          data={{
-                            i: index,
-                            items: filteredItems,
-                            itemsSelectedIds: selectedId ? [selectedId] : [],
-                            itemSelectedId: selectedId,
-                          }}
-                          onItemSelectionChange={(id) => handleSelection(index, id)}
-                          allowMultipleSelection={false}
-                          isClearable={true}
-                          placeholder={translateWord('findTeam')}
-                          startOpen={index === 0 && openFirstTeamSelector}
-                          style={{ backgroundColor: 'white', borderColor: '#ccc' }}
-                          textStyle={{ color: '#333', fontWeight: 'normal' }}
-                          iconColor="#666"
-                        />
-                      </View>
-                    </View>
-                  </div>
-                );
-              },
-            )}
+            <TeamReorderSelector
+              teams={localFavorites}
+              allTeams={teamsForFavorites}
+              maxTeams={maxFavorites}
+              onChange={setLocalFavorites}
+              allowedLeagues={localLeagues}
+            />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15 }}>
-            <Text style={{ marginRight: 10 }}>{translateWord('scoreView')} :</Text>
+            <Text style={{ marginRight: 10, color: textColor }}>{translateWord('scoreView')} :</Text>
             <ScoreToggle value={showScores} onValueChange={setShowScores} />
           </View>
 
@@ -302,7 +181,6 @@ const styles = StyleSheet.create({
   },
   modalView: {
     margin: 20,
-    backgroundColor: 'white',
     borderRadius: 20,
     padding: 20,
     alignItems: 'stretch',

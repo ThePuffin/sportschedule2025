@@ -2,6 +2,7 @@ import AppLogo from '@/components/AppLogo';
 import NoResults from '@/components/NoResults';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { leagueLogos } from '@/constants/enum';
 import {
   fetchLeagues,
   refreshGamesLeague as refreshGamesLeagueApi,
@@ -13,22 +14,6 @@ import { Image, View, useWindowDimensions } from 'react-native';
 import LoadingView from '../components/LoadingView';
 
 let width: number;
-
-
-const leagueLogos = {
-  MLB: require('../assets/images/MLB.png'),
-  NBA: require('../assets/images/NBA.png'),
-  NFL: require('../assets/images/NFL.png'),
-  NHL: require('../assets/images/NHL.png'),
-  WNBA: require('../assets/images/WNBA.png'),
-  MLS: require('../assets/images/MLS.png'),
-  PWHL: require('../assets/images/PWHL.png'),
-  NCAAF: require('../assets/images/ncaa-football.png'),
-  NCAAB: require('../assets/images/ncaa-basketball.png'),
-  NCCABB: require('../assets/images/ncaa-baseball.png'),
-  WNCAAB: require('../assets/images/ncaa-basketball-woman.png'),
-  DEFAULT: require('../assets/images/DEFAULT.png'),
-};
 
 export default function GameofTheDay() {
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
@@ -82,7 +67,7 @@ export default function GameofTheDay() {
   width = windowWidth;
   const isTwoColumns = leaguesAvailable.length > 6;
   const gridTemplateColumns = isTwoColumns ? 'repeat(2, minmax(0, 1fr))' : 'repeat(1, 1fr)';
-  const containerMaxWidth = isTwoColumns ? (width < 700 ? '70%' : '500px') : '300px';
+  const containerMaxWidth = isTwoColumns ? (width < 700 ? '90%' : '600px') : '300px';
   const buttonMaxWidth = isTwoColumns ? (width < 700 ? '100%' : '300px') : width < 600 ? '100%' : '300px';
 
   const displayNoContent = () => {
@@ -201,7 +186,7 @@ export default function GameofTheDay() {
             {
               display: 'grid',
               gridTemplateColumns: gridTemplateColumns,
-              gap: '25px',
+              gap: '50px',
               width: '100%',
               maxWidth: containerMaxWidth,
 
@@ -244,12 +229,13 @@ export default function GameofTheDay() {
                   transition: 'background 0.2s',
                   minWidth: isTwoColumns ? '100px' : '300px',
                   maxWidth: buttonMaxWidth,
+                  width: '100%',
                   display: 'block',
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                   <ThemedText style={{ color: '#fff', fontSize: '16px', marginRight: 10 }}>
-                    {league.toUpperCase()}
+                    {league.replace('-', ' ').toUpperCase()}
                   </ThemedText>
                   <Image
                     source={leagueLogos[league.toUpperCase()] || leagueLogos.DEFAULT}

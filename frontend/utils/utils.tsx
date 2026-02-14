@@ -120,6 +120,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'Fichier .ics',
         gameDetails: 'Détails du match',
         events: 'Evenements',
+        final: 'Finalisation',
       };
       break;
     case 'de':
@@ -158,6 +159,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'ICS-Datei',
         gameDetails: 'Spieldetails',
         events: 'Ereignisse',
+        final: 'Ergebnis',
       };
       break;
     case 'es':
@@ -196,6 +198,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'Archivo .ics',
         gameDetails: 'Detalles del juego',
         events: 'Eventos',
+        final: 'Final',
       };
       break;
 
@@ -235,6 +238,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'File .ics',
         gameDetails: 'Dettagli del gioco',
         events: 'Eventi',
+        final: 'Finale',
       };
       break;
     case 'ja':
@@ -273,6 +277,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'ICSファイル',
         gameDetails: 'ゲームの詳細',
         events: 'イベント',
+        final: '最終',
       };
       break;
     case 'ko':
@@ -311,6 +316,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'ICS 파일',
         gameDetails: '게임 세부 정보',
         events: '이벤트',
+        final: '최종',
       };
       break;
     case 'nl':
@@ -349,6 +355,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'ICS-bestand',
         gameDetails: 'Spel details',
         events: 'Evenementen',
+        final: 'Eind',
       };
       break;
     case 'pt':
@@ -387,6 +394,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'Arquivo .ics',
         gameDetails: 'Detalhes do jogo',
         events: 'Eventos',
+        final: 'Final',
       };
       break;
     case 'ru':
@@ -425,6 +433,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'Файл .ics',
         gameDetails: 'Детали игры',
         events: 'События',
+        final: 'Финал',
       };
       break;
     case 'zh':
@@ -463,6 +472,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'ICS文件',
         gameDetails: '比赛详情',
         events: '事件',
+        final: '最终',
       };
       break;
     default:
@@ -501,6 +511,7 @@ export const translateWord = (word: string) => {
         downloadICS: 'ICS File',
         gameDetails: 'Game Details',
         events: 'Events',
+        final: 'Final',
       };
       break;
   }

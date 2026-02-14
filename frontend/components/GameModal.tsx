@@ -25,6 +25,8 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
     placeName,
     homeTeamScore,
     awayTeamScore,
+    homeTeamRecord,
+    awayTeamRecord,
     urlLive,
   } = data;
 
@@ -65,6 +67,11 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {awayTeam ? awayTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
                 </ThemedText>
+                {awayTeamRecord && (
+                  <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>
+                    {awayTeamRecord}
+                  </ThemedText>
+                )}
               </View>
 
               {hasScore ? (
@@ -92,6 +99,11 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {homeTeam ? homeTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
                 </ThemedText>
+                {homeTeamRecord && (
+                  <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>
+                    {homeTeamRecord}
+                  </ThemedText>
+                )}
               </View>
             </View>
             {!hasScore ? (
@@ -101,47 +113,48 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                 </ThemedText>
 
                 <View style={styles.actionsRow}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, flex: 1 }]}
-                    onPress={() => {
-                      generateICSFile(data);
-                      onClose();
-                    }}
-                  >
-                    <Icon
-                      name="calendar-plus-o"
-                      type="font-awesome"
-                      size={20}
-                      color={iconColor}
-                      style={{ marginRight: 10 }}
-                    />
-                    <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.actionButtonText}>
-                      {translateWord('downloadICS')}
-                    </ThemedText>
-                  </TouchableOpacity>
-
-                  {arenaName && (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${stadiumSearch}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      /* On s'assure que le lien prend exactement la même place que le bouton d'à côté */
-                      style={{ textDecoration: 'none', flex: 1, display: 'flex' }}
-                      onClick={(e) => e.stopPropagation()}
+                  {/* Premier bouton (ICS) */}
+                  <View style={styles.buttonWrapper}>
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
+                      onPress={() => {
+                        generateICSFile(data);
+                        onClose();
+                      }}
                     >
-                      <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, width: '100%' }]}>
-                        <Icon
-                          name="map-marker"
-                          type="font-awesome"
-                          size={20}
-                          color={iconColor}
-                          style={{ marginRight: 10 }}
-                        />
-                        <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.actionButtonText}>
-                          {translateWord('localizeArena')}
-                        </ThemedText>
-                      </View>
-                    </a>
+                      <Icon
+                        name="calendar-plus-o"
+                        type="font-awesome"
+                        size={18}
+                        color={iconColor}
+                        style={styles.buttonIcon}
+                      />
+                      <ThemedText style={styles.actionButtonText}>{translateWord('downloadICS')}</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Deuxième bouton (Arena) */}
+                  {arenaName && (
+                    <View style={styles.buttonWrapper}>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${stadiumSearch}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ textDecoration: 'none' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}>
+                          <Icon
+                            name="map-marker"
+                            type="font-awesome"
+                            size={18}
+                            color={iconColor}
+                            style={styles.buttonIcon}
+                          />
+                          <ThemedText style={styles.actionButtonText}>{translateWord('localizeArena')}</ThemedText>
+                        </View>
+                      </a>
+                    </View>
                   )}
                 </View>
               </>
@@ -152,10 +165,16 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                     href={urlLive}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ textDecoration: 'none', flex: 1, display: 'flex', flexBasis: 0, minWidth: 0 }}
+                    style={{
+                      textDecoration: 'none',
+                      display: 'flex',
+                      width: '100%',
+                      maxWidth: 250,
+                      justifyContent: 'center',
+                    }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}>
+                    <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, width: '100%' }]}>
                       <Icon
                         name="info-circle"
                         type="font-awesome"
@@ -208,7 +227,7 @@ const styles = StyleSheet.create({
   },
   teamsContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-around',
     width: '100%',
     marginBottom: 20,
@@ -227,6 +246,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
+  recordText: {
+    fontSize: 14,
+    marginTop: 4,
+    textAlign: 'center',
+  },
   modalTeamFullName: {
     fontSize: 16,
     textAlign: 'center',
@@ -235,13 +259,11 @@ const styles = StyleSheet.create({
   modalVsText: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginTop: 15,
   },
   scoreContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 15,
   },
   scoreText: {
     fontSize: 32,
@@ -257,22 +279,31 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 12,
     marginTop: 10,
+    justifyContent: 'center', // Centrage si un seul bouton
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  buttonWrapper: {
+    flex: 1, // Chaque wrapper prend la même largeur
+    maxWidth: 200, // Empêche les boutons de devenir trop larges sur grand écran
+    minWidth: 120, // Taille minimum pour la lisibilité
   },
   actionButton: {
     flexDirection: 'row',
-    height: 60,
+    height: 54, // Hauteur fixe identique pour tous
+    width: '100%', // Prend toute la place du wrapper (donc largeur identique)
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   actionButtonText: {
     fontWeight: 'bold',
     fontSize: 13,
     textAlign: 'center',
-    flexShrink: 1,
+    flexShrink: 1, // Force le texte à passer à la ligne si trop long au lieu de pousser le bouton
   },
   dateText: {
     marginBottom: 20,
