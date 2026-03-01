@@ -31,8 +31,9 @@ export default function DateRangePicker({
   const [locale, setLocale] = useState('en-US');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textColor = useThemeColor({}, 'text');
-  const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#1c1c1e' }, 'background');
+  const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'text');
+  const textDisabledColor = useThemeColor({ light: '#d9e1e8', dark: '#444444' }, 'text');
   const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
 
   // État temporaire pour la sélection de plage en cours
@@ -159,11 +160,11 @@ export default function DateRangePicker({
   maxDate.setFullYear(maxDate.getFullYear() + 1);
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative', zIndex: 100, width: '100%', margin: '10px 0' }}>
+    <div ref={wrapperRef} style={{ position: 'relative', zIndex: 100, width: '100%' }}>
       <TouchableOpacity
         onPress={() => !readonly && setIsOpen(!isOpen)}
         disabled={readonly}
-        style={[styles.inputContainer, { borderColor }, readonly && styles.readonly]}
+        style={[styles.inputContainer, { borderColor, backgroundColor }, readonly && styles.readonly]}
       >
         <Icon
           name="calendar"
@@ -217,6 +218,7 @@ export default function DateRangePicker({
                 todayTextColor: textColor,
                 todayBackgroundColor: '#90D5FF',
                 dayTextColor: textColor,
+                textDisabledColor,
                 monthTextColor: textColor,
                 arrowColor: textColor,
                 textDayFontWeight: '500',
@@ -236,7 +238,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'transparent',
-    paddingVertical: 10,
+    height: 40,
     paddingHorizontal: 15,
 
     ...Platform.select({

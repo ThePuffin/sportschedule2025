@@ -2,6 +2,7 @@ import AppLogo from '@/components/AppLogo';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
 import TeamFilter from '@/components/TeamFilter';
+import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
@@ -14,6 +15,7 @@ import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import CardLarge from '../../components/CardLarge';
 import { ColumnData } from '../../components/ColumnsLayout';
 import LoadingView from '../../components/LoadingView';
+import Separator from '../../components/Separator';
 import {
   fetchLeagues,
   fetchRemainingGamesByLeague,
@@ -428,13 +430,13 @@ export default function Schedule() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '5px 15px 0 15px',
+                  padding: '5px 15px 5px 15px',
                 }}
               >
                 <AppLogo />
               </div>
               <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
-                <div style={{ width: '100%' }}>
+                <ThemedElements style={{ width: '100%' }}>
                   <FilterSlider
                     selectedFilter={leagueOfSelectedTeam}
                     onFilterChange={handleLeagueSelectionChange}
@@ -443,7 +445,8 @@ export default function Schedule() {
                     hasFavorites={false}
                     showAll={false}
                   />
-                </div>
+                </ThemedElements>
+                <Separator />
                 <div
                   style={
                     isSmallDevice
@@ -471,7 +474,7 @@ export default function Schedule() {
                   {showTeamFilter && (
                     <div style={{ width: isSmallDevice ? '100%' : '50%' }}>
                       <TeamFilter
-                        icon={<FontAwesome6 name="arrows-left-right-to-line" size={18} color="white" />}
+                        icon={<FontAwesome6 name="people-arrows" size={18} color="white" />}
                         selectorData={dataTeamsFilter}
                         onSelectorChange={handleTeamFilterChange}
                         selectorPlaceholder={translateWord('filterTeams')}

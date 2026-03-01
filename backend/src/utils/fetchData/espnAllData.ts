@@ -1,17 +1,36 @@
 import { readableDate } from '../../utils/date';
-import { League } from '../../utils/enum';
+import { CollegeLeague, League } from '../../utils/enum';
 import type { MLSGameAPI } from '../../utils/interface/gameMLS';
 import { Colors } from '../Colors';
 import type { ESPNTeam, TeamESPN, TeamType } from '../interface/team';
 import { TeamDetailed } from '../interface/teamDetails';
+import { UniversityLogos } from '../UniversityLogos';
 import { capitalize, getLuminance } from '../utils';
 
 const espnAPI = 'https://site.api.espn.com/apis/site/v2/sports/';
+
+const getNormalizedLeagueName = (leagueName: string) => {
+  if (leagueName.includes('OLYMPICS')) {
+    if (leagueName.includes('WOMEN')) return 'OLYMPICS-WOMEN';
+    return 'OLYMPICS-MEN';
+  }
+  return leagueName;
+};
 
 const ESPNAbbrevs = {
   NHL: {
     UTAH: 'UTA',
   },
+};
+
+const OLYMPICS_HOCKEY_MEN = 'OLYMPICS-HOCKEY-MEN';
+const OLYMPICS_HOCKEY_WOMEN = 'OLYMPICS-HOCKEY-WOMEN';
+const OLYMPICS_BASKETBALL_MEN = 'OLYMPICS-BASKETBALL-MEN';
+const OLYMPICS_BASKETBALL_WOMEN = 'OLYMPICS-BASKETBALL-WOMEN';
+
+const aggregateLeagues = {
+  'OLYMPICS-MEN': [OLYMPICS_HOCKEY_MEN, OLYMPICS_BASKETBALL_MEN],
+  'OLYMPICS-WOMEN': [OLYMPICS_HOCKEY_WOMEN, OLYMPICS_BASKETBALL_WOMEN],
 };
 
 const leagueConfigs = {
@@ -25,13 +44,21 @@ const leagueConfigs = {
   [League.NCAAB]: { sport: 'basketball', league: 'mens-college-basketball' },
   [League.WNCAAB]: { sport: 'basketball', league: 'womens-college-basketball' },
   [League.NCCABB]: { sport: 'baseball', league: 'college-baseball' },
-  [League.OLYMPICS_HOCKEY_MEN]: {
+  [OLYMPICS_HOCKEY_MEN]: {
     sport: 'hockey',
     league: 'olympics-mens-ice-hockey',
   },
-  [League.OLYMPICS_HOCKEY_WOMEN]: {
+  [OLYMPICS_HOCKEY_WOMEN]: {
     sport: 'hockey',
     league: 'olympics-womens-ice-hockey',
+  },
+  [OLYMPICS_BASKETBALL_MEN]: {
+    sport: 'basketball',
+    league: 'olympics-mens-basketball',
+  },
+  [OLYMPICS_BASKETBALL_WOMEN]: {
+    sport: 'basketball',
+    league: 'olympics-womens-basketball',
   },
 };
 
@@ -147,6 +174,15 @@ const getESPNStandings = async (leagueName: string) => {
 
 export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
   try {
+    // Handle aggregate leagues (e.g. OLYMPICS-WOMEN)
+    if (aggregateLeagues[leagueName]) {
+      let allTeams: TeamType[] = [];
+      for (const subLeague of aggregateLeagues[leagueName]) {
+        const teams = await getESPNTeams(subLeague);
+        allTeams = [...allTeams, ...teams];
+      }
+      return allTeams;
+    }
     if (!leaguesData[leagueName]) return [];
     const fetchedTeams = await fetch(leaguesData[leagueName].fetchTeam);
     const fetchTeams: TeamESPN = await fetchedTeams.json();
@@ -183,10 +219,14 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
       }
     }
 
-    if (allTeams.length === 0 && leagueName.includes('OLYMPICS')) {
+    if (
+      (allTeams.length === 0 && leagueName.includes('OLYMPICS')) ||
+      CollegeLeague.hasOwnProperty(leagueName)
+    ) {
+      const currentYear = new Date().getFullYear();
       try {
         const { sport, league } = leagueConfigs[leagueName];
-        const url = `${espnAPI}${sport}/${league}/scoreboard?dates=2026`;
+        const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${currentYear}`;
         const res = await fetch(url);
         const data = await res.json();
         const events = data.events || [];
@@ -194,7 +234,7 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
           event.competitions?.[0]?.competitors?.forEach((comp) => {
             if (
               comp.team &&
-              !allTeams.find((t) => t.team.id === comp.team.id)
+              !allTeams.some((t) => t.team.id === comp.team.id)
             ) {
               allTeams.push({ team: comp.team });
             }
@@ -228,12 +268,22 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
         if (ESPNAbbrevs[leagueName]?.[teamID]) {
           teamID = ESPNAbbrevs[leagueName][teamID];
         }
+        const normalizedLeagueName = getNormalizedLeagueName(leagueName);
         const uniqueId = `${leagueName}-${teamID}`;
-        const teamLogo = logos?.[2]?.href ?? logos?.[0]?.href;
+        // ESPN sometimes returns no logos; fall back to our manual list if we
+        // have an entry for this abbreviation. the abbreviation is the second
+        // part of the uniqueId when saved in the database.
+        let teamLogo = logos?.[2]?.href ?? logos?.[0]?.href;
+        if (!teamLogo) {
+          teamLogo = UniversityLogos[teamID] || '';
+        }
         const teamLogoDark =
           logos?.find(
             (l) => l.rel?.includes('dark') && l.rel?.includes('scoreboard'),
-          )?.href || teamLogo;
+          )?.href ||
+          teamLogo ||
+          UniversityLogos[teamID] ||
+          '';
 
         const record = standings[id];
 
@@ -261,7 +311,7 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
           teamCommonName: capitalize(nickname || displayName),
           conferenceName: '',
           divisionName: '',
-          league: leagueName.toUpperCase(),
+          league: normalizedLeagueName.toUpperCase(),
           color: colorTeam,
           backgroundColor: backgroundColorTeam,
           wins: record?.wins,
@@ -331,24 +381,58 @@ const getEachTeamSchedule = async ({
   backgroundColor,
 }) => {
   try {
-    let games;
-    if (leagueName.includes('OLYMPICS')) {
-      try {
-        if (!leagueConfigs[leagueName]) {
-          games = [];
-        } else {
-          const { sport, league } = leagueConfigs[leagueName];
-          const url = `${espnAPI}${sport}/${league}/scoreboard?dates=2026`;
-          const res = await fetch(url);
-          const data = await res.json();
-          const events = data.events || [];
-          games = events.filter((ev) =>
-            ev.competitions?.[0]?.competitors?.some((c) => c.team?.id === id),
-          );
+    const normalizedLeagueName = getNormalizedLeagueName(leagueName);
+    // Handle aggregate leagues for Olympics
+    if (aggregateLeagues[leagueName]) {
+      let allGames = [];
+      for (const subLeague of aggregateLeagues[leagueName]) {
+        const games = await getEachTeamSchedule({
+          id,
+          abbrev,
+          value,
+          leagueName: subLeague,
+          leagueLogos,
+          color,
+          backgroundColor,
+        });
+        allGames = [...allGames, ...games];
+      }
+      return allGames;
+    }
+    let games = [];
+    if (leagueName.includes('OLYMPICS') || leagueName === League.MLS) {
+      const years = [new Date().getFullYear()];
+      if (leagueName === League.MLS) {
+        years.push(new Date().getFullYear() + 1);
+      }
+      for (const year of years) {
+        try {
+          if (leagueConfigs[leagueName]) {
+            const { sport, league } = leagueConfigs[leagueName];
+            let page = 1;
+            let hasMore = true;
+            while (hasMore) {
+              const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${year}&limit=1000&page=${page}`;
+              const res = await fetch(url);
+              const data = await res.json();
+              const events = data.events || [];
+              const eventsFiltered = events.filter((ev) =>
+                ev.competitions?.[0]?.competitors?.some(
+                  (c) => c.team?.id === id,
+                ),
+              );
+              games.push(...eventsFiltered);
+              if (events.length < 1000) {
+                hasMore = false;
+              } else {
+                page++;
+              }
+            }
+            console.log(id, 'total games found', games.length);
+          }
+        } catch (error) {
+          console.info('no games found' + leagueName, value, error);
         }
-      } catch (error) {
-        console.info('no olympic games found', value, error);
-        games = [];
       }
     } else {
       try {
@@ -441,7 +525,7 @@ const getEachTeamSchedule = async ({
           homeTeamShort,
           homeTeamScore: null,
           awayTeamScore: null,
-          league: leagueName.toUpperCase(),
+          league: normalizedLeagueName.toUpperCase(),
           placeName: capitalize(venue?.address?.city) ?? '',
           selectedTeam: homeAbbrev === abbrev,
           show: homeAbbrev === abbrev,
@@ -457,7 +541,12 @@ const getEachTeamSchedule = async ({
             links?.find(
               (l) => l.rel?.includes('summary') && l.rel?.includes('desktop'),
             )?.href ||
-            '',
+            (id &&
+            leagueConfigs[leagueName] &&
+            leagueName !== League.MLS &&
+            !leagueName.includes('OLYMPICS')
+              ? `https://www.espn.com/${leagueConfigs[leagueName].league}/game/_/gameId/${id}`
+              : ''),
         };
       });
     }
@@ -472,7 +561,16 @@ const getEachTeamSchedule = async ({
 
 export const getESPNScores = async (leagueKey: string, date: string) => {
   try {
+    if (aggregateLeagues[leagueKey]) {
+      let allScores = [];
+      for (const subLeague of aggregateLeagues[leagueKey]) {
+        const scores = await getESPNScores(subLeague, date);
+        allScores = [...allScores, ...scores];
+      }
+      return allScores;
+    }
     const results = [];
+    const normalizedLeagueName = getNormalizedLeagueName(leagueKey);
     if (!leagueConfigs[leagueKey]) return results;
     const { sport, league } = leagueConfigs[leagueKey];
     const base = `${espnAPI}${sport}/${league}`;
@@ -558,7 +656,7 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
                   ev.id || j.id || (comp.id || Math.random()).toString();
                 return {
                   uniqueId: id,
-                  league: leagueKey,
+                  league: normalizedLeagueName,
                   startTimeUTC: ev.date,
                   homeTeamScore: homeScore,
                   awayTeamScore: awayScore,
@@ -624,7 +722,7 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
         finishedCount++;
         const normalized = {
           uniqueId: id,
-          league: leagueKey,
+          league: normalizedLeagueName,
           startTimeUTC: ev.date,
           homeTeamScore: homeScore,
           awayTeamScore: awayScore,
@@ -651,5 +749,71 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
   } catch (error) {
     console.error('Error in getESPNScores', error);
     return [];
+  }
+};
+
+export const getESPNGameScore = async (leagueKey: string, gameId: string) => {
+  try {
+    if (aggregateLeagues[leagueKey]) {
+      for (const subLeague of aggregateLeagues[leagueKey]) {
+        const result = await getESPNGameScore(subLeague, gameId);
+        if (result) return result;
+      }
+      return null;
+    }
+
+    const normalizedLeagueName = getNormalizedLeagueName(leagueKey);
+    if (!leagueConfigs[leagueKey]) return null;
+    const { sport, league } = leagueConfigs[leagueKey];
+    const url = `${espnAPI}${sport}/${league}/summary?event=${gameId}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const header = data.header;
+    const competitions = header?.competitions?.[0];
+    if (!competitions) return null;
+
+    const competition = competitions;
+    const home = competition.competitors?.find((c) => c.homeAway === 'home');
+    const away = competition.competitors?.find((c) => c.homeAway === 'away');
+
+    const homeScore =
+      home?.score !== undefined && home?.score !== null
+        ? Number(home.score)
+        : null;
+    const awayScore =
+      away?.score !== undefined && away?.score !== null
+        ? Number(away.score)
+        : null;
+
+    if (homeScore === null && awayScore === null) return null;
+
+    const status = competition.status?.type || competition.status;
+    const displayClock = competition.status?.displayClock || '';
+
+    const isFinal =
+      status?.completed === true ||
+      status?.state === 'post' ||
+      (typeof status?.name === 'string' &&
+        /final|completed|post/i.test(status.name)) ||
+      (typeof displayClock === 'string' &&
+        /final|completed/i.test(displayClock));
+
+    return {
+      uniqueId: gameId,
+      league: normalizedLeagueName,
+      homeTeamScore: homeScore,
+      awayTeamScore: awayScore,
+      isFinal,
+      status: status?.name || displayClock || '',
+      startTimeUTC: competition.date,
+    };
+  } catch (error) {
+    console.error(
+      `Error fetching single game score for ${leagueKey} ${gameId}:`,
+      error,
+    );
+    return null;
   }
 };

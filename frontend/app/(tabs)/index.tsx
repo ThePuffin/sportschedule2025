@@ -2,14 +2,17 @@ import AppLogo from '@/components/AppLogo';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
 import ScoreToggle from '@/components/ScoreToggle';
+import Separator from '@/components/Separator';
 import SliderDatePicker from '@/components/SliderDatePicker';
 import TeamFilter from '@/components/TeamFilter';
+import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
+import { HorizontalScrollProvider, useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { getGamesStatus } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, useWindowDimensions } from 'react-native';
+import { PanResponder, ScrollView, useWindowDimensions, View } from 'react-native';
 import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import LoadingView from '../../components/LoadingView';
@@ -56,16 +59,24 @@ const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
   return Object.fromEntries(prunedEntries);
 };
 
-export default function GameofTheDay() {
-  const LeaguesWithoutAll = Object.values(League).filter((league) => league !== League.ALL);
+const GameofTheDayContent = () => {
+  const router = useRouter();
+  const { date: dateParam } = useLocalSearchParams<{ date: string }>();
+  const { isScrollingHorizontally } = useHorizontalScroll();
+  const allLeaguesList = Object.values(League);
   const currentDate = new Date();
   const [games, setGames] = useState<GameFormatted[]>([]);
-  const [selectDate, setSelectDate] = useState<Date>(currentDate);
-  const [selectLeagues, setSelectLeagues] = useState<League[]>(
-    getCache<League[]>('leaguesSelected') || LeaguesWithoutAll,
-  );
+  const [selectDate, setSelectDate] = useState<Date>(() => {
+    if (dateParam) {
+      const param = Array.isArray(dateParam) ? dateParam[0] : dateParam;
+      const d = new Date(param);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return currentDate;
+  });
+  const [selectLeagues, setSelectLeagues] = useState<League[]>(getCache<League[]>('leaguesSelected') || allLeaguesList);
   const [userLeagues, setUserLeagues] = useState<League[]>(
-    () => getCache<League[]>('leaguesSelected') || LeaguesWithoutAll,
+    () => getCache<League[]>('leaguesSelected') || allLeaguesList,
   );
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   // Add state for the filter slider
@@ -106,6 +117,42 @@ export default function GameofTheDay() {
   const gamesDayCache = useRef<{ [key: string]: GameFormatted[] }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
+
+  const selectDateRef = useRef(selectDate);
+  const isScrollingHorizontallyRef = useRef(isScrollingHorizontally);
+  const isInternalChange = useRef(false);
+
+  useEffect(() => {
+    selectDateRef.current = selectDate;
+  }, [selectDate]);
+
+  useEffect(() => {
+    isScrollingHorizontallyRef.current = isScrollingHorizontally;
+  }, [isScrollingHorizontally]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Don't capture horizontal swipes if we're scrolling horizontally (e.g., in FilterSlider)
+        if (isScrollingHorizontallyRef.current) {
+          return false;
+        }
+        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderEnd: (evt, gestureState) => {
+        if (Math.abs(gestureState.dx) > 50) {
+          const currentDate = selectDateRef.current;
+          const newDate = new Date(currentDate);
+          if (gestureState.dx > 0) {
+            newDate.setDate(newDate.getDate() - 1);
+          } else {
+            newDate.setDate(newDate.getDate() + 1);
+          }
+          handleDateChange(newDate, newDate);
+        }
+      },
+    }),
+  ).current;
 
   useEffect(() => {
     const updateFavorites = () => {
@@ -167,6 +214,7 @@ export default function GameofTheDay() {
       .sort((a, b) => new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime());
 
     const inProgress: GameFormatted[] = [];
+    const final: GameFormatted[] = [];
     const finished: GameFormatted[] = [];
     const scheduled: GameFormatted[] = [];
 
@@ -174,6 +222,8 @@ export default function GameofTheDay() {
       const status = getGamesStatus(game);
       if (status === GameStatus.IN_PROGRESS && (!game.homeTeamScore || game.homeTeamScore === null)) {
         inProgress.push(game);
+      } else if (status === GameStatus.FINAL) {
+        final.push(game);
       } else if (status === GameStatus.FINISHED || game.homeTeamScore != null) {
         finished.push(game);
       } else {
@@ -200,6 +250,9 @@ export default function GameofTheDay() {
       const timeB = b.games[0]?.startTimeUTC ? new Date(b.games[0].startTimeUTC).getTime() : 0;
       return timeA - timeB;
     });
+    if (final.length > 0) {
+      groups.push({ hour: translateWord('final'), games: sortGamesByFavorites(final) });
+    }
     if (finished.length > 0) {
       groups.push({ hour: translateWord('ended'), games: sortGamesByFavorites(finished) });
     }
@@ -287,17 +340,31 @@ export default function GameofTheDay() {
 
   const handleDateChange = useCallback(
     (startDate: Date, endDate: Date) => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       readonlyRef.current = true;
+      isInternalChange.current = true;
       setSelectDate(startDate);
+
+      const dateStr = startDate.toISOString().split('T')[0];
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      if (dateStr !== todayStr) {
+        router.setParams({ date: dateStr });
+      } else {
+        router.setParams({ date: undefined });
+      }
+
       const YYYYMMDD = new Date(startDate).toISOString().split('T')[0];
-      setIsLoading(true);
+      if (!gamesDayCache.current[YYYYMMDD]) {
+        setIsLoading(true);
+      }
 
       getGamesFromApi(startDate).finally(() => {
         readonlyRef.current = false;
         setIsLoading(false);
       });
     },
-    [getGamesFromApi],
+    [getGamesFromApi, router],
   );
 
   const handleFilterChange = useCallback(
@@ -308,7 +375,7 @@ export default function GameofTheDay() {
         setSelectLeagues(userLeagues);
         setTeamSelectedId('');
       } else if (filter === 'FAVORITES') {
-        setSelectLeagues(LeaguesWithoutAll);
+        setSelectLeagues(allLeaguesList);
         setTeamSelectedId('');
       } else {
         // Specific league
@@ -316,7 +383,7 @@ export default function GameofTheDay() {
         setTeamSelectedId('');
       }
     },
-    [LeaguesWithoutAll, userLeagues],
+    [allLeaguesList, userLeagues],
   );
 
   const handleTeamSelectionChange = useCallback((teamId: string | string[]) => {
@@ -347,7 +414,7 @@ export default function GameofTheDay() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '5px 15px 0 15px',
+          padding: '5px 15px 5px 15px',
         }}
       >
         <AppLogo />
@@ -476,6 +543,50 @@ export default function GameofTheDay() {
     initializeGames();
   }, []); // Only run once on mount
 
+  useEffect(() => {
+    const param = Array.isArray(dateParam) ? dateParam[0] : dateParam;
+    let d = new Date();
+    let invalidParam = false;
+
+    if (param) {
+      const parsed = new Date(param);
+      if (isNaN(parsed.getTime())) {
+        invalidParam = true;
+      } else {
+        const parsedStr = parsed.toISOString().split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(param) && param !== parsedStr) {
+          invalidParam = true;
+        } else {
+          d = parsed;
+        }
+      }
+    }
+
+    if (invalidParam) {
+      d = new Date();
+      setTimeout(() => {
+        router.setParams({ date: undefined });
+      }, 0);
+    }
+
+    const dStr = d.toISOString().split('T')[0];
+    const currentStr = selectDate.toISOString().split('T')[0];
+
+    if (dStr === currentStr) {
+      isInternalChange.current = false;
+      return;
+    }
+
+    if (isInternalChange.current) return;
+
+    setSelectDate(d);
+    const YYYYMMDD = dStr;
+    if (!gamesDayCache.current[YYYYMMDD]) {
+      setIsLoading(true);
+    }
+    getGamesFromApi(d).finally(() => setIsLoading(false));
+  }, [dateParam, selectDate, getGamesFromApi, router]);
+
   useFocusEffect(
     useCallback(() => {
       setGamesSelected(getCache<GameFormatted[]>('gameSelected') || []);
@@ -485,43 +596,65 @@ export default function GameofTheDay() {
 
   return (
     <ThemedView style={{ flex: 1 }}>
-      <ScrollView
-        ref={scrollViewRef}
-        onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
-        scrollEventThrottle={16}
-      >
-        <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-          <ThemedView>
-            <div style={{ position: 'relative', zIndex: 20 }}>
-              {displayScoreToggle()}
-              <div
-                style={
-                  windowWidth > 768
-                    ? {
-                        width: windowWidth < 1200 ? '95%' : '100%',
-                        margin: '0 auto',
-                        padding: 10,
-                        boxSizing: 'border-box',
-                      }
-                    : {}
-                }
-              >
-                <FilterSlider
-                  selectedFilter={activeFilter}
-                  onFilterChange={handleFilterChange}
-                  hasFavorites={hasFavorites}
-                  availableLeagues={userLeagues}
-                />
-                {displayFilters()}
-                <SliderDatePicker onDateChange={(date) => handleDateChange(date, date)} selectDate={selectDate} />
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          ref={scrollViewRef}
+          onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
+          scrollEventThrottle={16}
+        >
+          <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+            <ThemedView>
+              <div style={{ position: 'relative', zIndex: 20 }}>
+                {displayScoreToggle()}
+                <div
+                  style={
+                    windowWidth > 768
+                      ? {
+                          width: windowWidth < 1200 ? '95%' : '100%',
+                          margin: '0 auto',
+                          padding: 10,
+                          boxSizing: 'border-box',
+                        }
+                      : {}
+                  }
+                >
+                  <ThemedElements>
+                    <FilterSlider
+                      selectedFilter={activeFilter}
+                      onFilterChange={handleFilterChange}
+                      hasFavorites={hasFavorites}
+                      data={[
+                        { label: translateWord('all'), value: 'ALL' },
+                        ...userLeagues.filter((l) => l !== 'ALL').map((l) => ({ label: l, value: l })),
+                      ]}
+                    />
+                  </ThemedElements>
+                  <Separator />
+                  {displayFilters()}
+                  <Separator />
+                  <SliderDatePicker
+                    onDateChange={(date) => handleDateChange(date, date)}
+                    selectDate={selectDate}
+                    disabled={isLoading}
+                  />
+                </div>
               </div>
-            </div>
-          </ThemedView>
-        </div>
-        <ThemedView>{displayContent()}</ThemedView>
-      </ScrollView>
-
-      <ActionButton ref={ActionButtonRef} scrollViewRef={scrollViewRef} />
+            </ThemedView>
+          </div>
+          <View {...panResponder.panHandlers}>
+            <ThemedView>{displayContent()}</ThemedView>
+          </View>
+        </ScrollView>
+        <ActionButton ref={ActionButtonRef} scrollViewRef={scrollViewRef} />
+      </View>
     </ThemedView>
+  );
+};
+
+export default function GameofTheDay() {
+  return (
+    <HorizontalScrollProvider>
+      <GameofTheDayContent />
+    </HorizontalScrollProvider>
   );
 }

@@ -84,6 +84,46 @@ async function updateData() {
         fs.writeFileSync(TEAMS_TARGET_FILE, fileContent);
         console.log(`✅ Teams.tsx updated successfully at ${TEAMS_TARGET_FILE}`);
       }
+
+      // --- Update university logos keyed by id only ---
+      try {
+        const collegeLeagues = ['NCAAF', 'NCAAB', 'NCCABB', 'WNCAAB'];
+        const logosObj = {};
+        teams.forEach((t) => {
+          if (collegeLeagues.includes(t.league)) {
+            const parts = t.uniqueId ? t.uniqueId.split('-') : [];
+            let key = parts.length > 1 ? parts[1] : t.abbrev || t.id || '';
+            key = key.trim().toUpperCase();
+            if (!key) return;
+
+            const logo = t.teamLogo || '';
+            if (logosObj[key]) {
+              // if we already have this key stored, keep the first one
+              return;
+            }
+            if (logo) {
+              logosObj[key] = logo;
+            }
+          }
+        });
+
+        const logosFileContent = [
+          'export const UniversityLogos: Record<string, string> = {',
+          ...Object.keys(logosObj).map((key) => `  '${key}': '${logosObj[key]}',`),
+          '};',
+          '',
+        ].join('\n');
+
+        const LOGOS_TARGET_FILE = path.join(__dirname, 'frontend/constants/UniversityLogos.tsx');
+        if (fs.existsSync(LOGOS_TARGET_FILE) && fs.readFileSync(LOGOS_TARGET_FILE, 'utf8') === logosFileContent) {
+          console.log('👍 UniversityLogos.tsx is already up to date.');
+        } else {
+          fs.writeFileSync(LOGOS_TARGET_FILE, logosFileContent);
+          console.log(`✅ UniversityLogos.tsx updated successfully at ${LOGOS_TARGET_FILE}`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not update university logos:', e.message);
+      }
     }
   } catch (error) {
     console.warn('⚠️ Could not update teams:', error.message);

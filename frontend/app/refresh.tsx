@@ -9,8 +9,8 @@ import {
   refreshTeams as refreshTeamsApi,
 } from '@/utils/fetchData';
 import { Stack } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Image, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, ScrollView, View, useWindowDimensions } from 'react-native';
 import LoadingView from '../components/LoadingView';
 
 let width: number;
@@ -18,6 +18,7 @@ let width: number;
 export default function GameofTheDay() {
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const scrollViewRef = useRef(null);
 
   const handleFetchLeagues = async () => {
     setIsLoading(true);
@@ -65,10 +66,16 @@ export default function GameofTheDay() {
 
   const { width: windowWidth } = useWindowDimensions();
   width = windowWidth;
-  const isTwoColumns = leaguesAvailable.length > 6;
+  const isTwoColumns = leaguesAvailable.length > 6 && width >= 700;
   const gridTemplateColumns = isTwoColumns ? 'repeat(2, minmax(0, 1fr))' : 'repeat(1, 1fr)';
-  const containerMaxWidth = isTwoColumns ? (width < 700 ? '90%' : '600px') : '300px';
-  const buttonMaxWidth = isTwoColumns ? (width < 700 ? '100%' : '300px') : width < 600 ? '100%' : '300px';
+  const containerMaxWidth = isTwoColumns ? '600px' : width < 700 ? '90%' : '300px';
+  const buttonMaxWidth = isTwoColumns ? '300px' : width < 700 ? '100%' : '300px';
+
+  const topGridTemplateColumns = width < 700 ? 'repeat(1, 1fr)' : 'repeat(2, minmax(0, 1fr))';
+  const topContainerMaxWidth = width < 700 ? '90%' : '600px';
+  const topButtonMaxWidth = width < 700 ? '100%' : '300px';
+  const buttonHeight = width < 700 ? '70px' : '50px';
+  const gap = width < 700 ? '20px' : '50px';
 
   const displayNoContent = () => {
     if (isLoading) {
@@ -89,165 +96,198 @@ export default function GameofTheDay() {
   }
 
   return (
-    <ThemedView>
+    <ThemedView style={{ flex: 1 }}>
       <Stack.Screen options={{ headerShown: false }} />
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '5px 15px 0 15px',
-        }}
-      >
-        <AppLogo />
-      </div>
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          width: '100%',
-          minHeight: '100vh',
-          padding: '20px',
-        }}
-      >
+      <ScrollView ref={scrollViewRef} scrollEventThrottle={16}>
         <div
-          role="button"
-          tabIndex={isLoading ? -1 : 0}
-          aria-disabled={isLoading}
-          onClick={() => !isLoading && handleRefreshTeams()}
-          onKeyDown={(e) => {
-            if (isLoading) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleRefreshTeams();
-            }
-          }}
           style={{
-            padding: '10px 20px',
-            borderRadius: '8px',
-            border: 'none',
-            backgroundColor: isLoading ? '#ccc' : '#007bff',
-            color: '#fff',
-            fontSize: '16px',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-            transition: 'background 0.2s',
-            width: '100%',
-            maxWidth: buttonMaxWidth,
-            minWidth: buttonMaxWidth === '100%' ? undefined : '300px',
-            display: 'block',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '5px 15px 0 15px',
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            <ThemedText style={{ color: '#fff', fontSize: '16px', marginRight: 10 }}>TEAMS</ThemedText>
-          </View>
+          <AppLogo />
         </div>
-        <br />
-        <div
-          role="button"
-          tabIndex={isLoading ? -1 : 0}
-          aria-disabled={isLoading}
-          onClick={() => !isLoading && handleRefreshScores()}
-          onKeyDown={(e) => {
-            if (isLoading) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleRefreshScores();
-            }
-          }}
-          style={{
-            padding: '10px 20px',
-            borderRadius: '8px',
-            border: 'none',
-            backgroundColor: isLoading ? '#ccc' : '#007bff',
-            color: '#fff',
-            fontSize: '16px',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-            transition: 'background 0.2s',
-            width: '100%',
-            maxWidth: buttonMaxWidth,
-            minWidth: buttonMaxWidth === '100%' ? undefined : '300px',
-            display: 'block',
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            <ThemedText style={{ color: '#fff', fontSize: '16px', marginRight: 10 }}>SCORES</ThemedText>
-          </View>
-        </div>
-        <br />
-        <hr style={{ width: '300px' }} />
-        <br />
-
-        {/* Grid container for league buttons */}
         <View
-          style={
-            {
-              display: 'grid',
-              gridTemplateColumns: gridTemplateColumns,
-              gap: '50px',
-              width: '100%',
-              maxWidth: containerMaxWidth,
-
-              alignItems: 'center',
-
-              justifyItems: 'center',
-            } as any
-          }
+          style={{
+            justifyContent: 'center',
+            alignItems: 'center',
+            width: '100%',
+            padding: '20px',
+          }}
         >
-          {leaguesAvailable.map((league) => (
-            <View
-              key={league}
-              style={{
-                justifyContent: 'center',
-                alignItems: 'center',
+          <View
+            style={
+              {
+                display: 'grid',
+                gridTemplateColumns: topGridTemplateColumns,
+                gap,
                 width: '100%',
+                maxWidth: topContainerMaxWidth,
+                alignItems: 'center',
+                justifyItems: 'center',
+              } as any
+            }
+          >
+            <div
+              role="button"
+              tabIndex={isLoading ? -1 : 0}
+              aria-disabled={isLoading}
+              onClick={() => !isLoading && handleRefreshTeams()}
+              onKeyDown={(e) => {
+                if (isLoading) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleRefreshTeams();
+                }
+              }}
+              style={{
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isLoading ? '#ccc' : '#007bff',
+                color: '#fff',
+                fontSize: '16px',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                transition: 'background 0.2s',
+                width: '100%',
+                maxWidth: topButtonMaxWidth,
+                minWidth: '100px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: buttonHeight,
               }}
             >
-              <div
-                role="button"
-                tabIndex={isLoading ? -1 : 0}
-                aria-disabled={isLoading}
-                onClick={() => !isLoading && handleRefreshGamesLeague(league)}
-                onKeyDown={(e) => {
-                  if (isLoading) return;
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleRefreshGamesLeague(league);
-                  }
-                }}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                <ThemedText
+                  style={{ color: '#fff', fontSize: '16px', marginRight: 10, textAlign: 'center', flexShrink: 1 }}
+                >
+                  TEAMS
+                </ThemedText>
+              </View>
+            </div>
+            <div
+              role="button"
+              tabIndex={isLoading ? -1 : 0}
+              aria-disabled={isLoading}
+              onClick={() => !isLoading && handleRefreshScores()}
+              onKeyDown={(e) => {
+                if (isLoading) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleRefreshScores();
+                }
+              }}
+              style={{
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isLoading ? '#ccc' : '#007bff',
+                color: '#fff',
+                fontSize: '16px',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                transition: 'background 0.2s',
+                width: '100%',
+                maxWidth: topButtonMaxWidth,
+                minWidth: '100px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: buttonHeight,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                <ThemedText
+                  style={{ color: '#fff', fontSize: '16px', marginRight: 10, textAlign: 'center', flexShrink: 1 }}
+                >
+                  SCORES
+                </ThemedText>
+              </View>
+            </div>
+          </View>
+          <br />
+          <hr style={{ width: '300px' }} />
+          <br />
+
+          {/* Grid container for league buttons */}
+          <View
+            style={
+              {
+                display: 'grid',
+                gridTemplateColumns: gridTemplateColumns,
+                gap,
+                width: '100%',
+                maxWidth: containerMaxWidth,
+                alignItems: 'center',
+
+                justifyItems: 'center',
+              } as any
+            }
+          >
+            {leaguesAvailable.map((league) => (
+              <View
+                key={league}
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  backgroundColor: isLoading ? '#ccc' : '#007bff',
-                  color: '#fff',
-                  fontSize: '16px',
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                  transition: 'background 0.2s',
-                  minWidth: isTwoColumns ? '100px' : '300px',
-                  maxWidth: buttonMaxWidth,
+                  justifyContent: 'center',
+                  alignItems: 'center',
                   width: '100%',
-                  display: 'block',
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <ThemedText style={{ color: '#fff', fontSize: '16px', marginRight: 10 }}>
-                    {league.replace('-', ' ').toUpperCase()}
-                  </ThemedText>
-                  <Image
-                    source={leagueLogos[league.toUpperCase()] || leagueLogos.DEFAULT}
-                    style={{ height: 20, width: 40, resizeMode: 'contain' }}
-                    accessibilityLabel={`${league} logo`}
-                  />
-                </View>
-              </div>
-            </View>
-          ))}
+                <div
+                  role="button"
+                  tabIndex={isLoading ? -1 : 0}
+                  aria-disabled={isLoading}
+                  onClick={() => !isLoading && handleRefreshGamesLeague(league)}
+                  onKeyDown={(e) => {
+                    if (isLoading) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleRefreshGamesLeague(league);
+                    }
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '8px',
+
+                    border: '1px solid #ddd',
+
+                    backgroundColor: isLoading ? '#ccc' : '#007bff',
+                    color: '#fff',
+                    fontSize: '16px',
+                    cursor: isLoading ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                    transition: 'background 0.2s',
+                    minWidth: isTwoColumns || width < 700 ? '100px' : '300px',
+                    maxWidth: buttonMaxWidth,
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: buttonHeight,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                    <ThemedText
+                      style={{ color: '#fff', fontSize: '16px', marginRight: 10, textAlign: 'center', flexShrink: 1 }}
+                    >
+                      {league.replace('-', ' ').toUpperCase()}
+                    </ThemedText>
+                    <Image
+                      source={leagueLogos[league.toUpperCase()] || leagueLogos.DEFAULT}
+                      style={{ height: 20, width: 40, resizeMode: 'contain' }}
+                      accessibilityLabel={`${league} logo`}
+                    />
+                  </View>
+                </div>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </ThemedView>
   );
 }

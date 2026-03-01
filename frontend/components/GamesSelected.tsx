@@ -6,16 +6,20 @@ import CardLarge from './CardLarge';
 export default function GamesSelected({ data = [], onAction, teamNumber = 1 }: Readonly<GamesSelectedProps>) {
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 768;
+  const isMediumDevice = width >= 768 && width < 1200;
 
   const verticalMode = useMemo(() => {
     return (teamNumber > 6 && !isSmallDevice) || isSmallDevice;
   }, [teamNumber, isSmallDevice]);
 
   let cardWidth = '100%';
-  if (!isSmallDevice) {
-    cardWidth = teamNumber === 1 ? '33%' : `${100 / teamNumber}%`;
+  const maxColumns = isSmallDevice ? 2 : isMediumDevice ? 4 : 6;
+  const effectiveColumns = Math.max(1, Math.min(teamNumber, maxColumns));
+
+  if (!isSmallDevice && teamNumber === 1) {
+    cardWidth = '33%';
   } else {
-    cardWidth = '50%';
+    cardWidth = `${100 / effectiveColumns}%`;
   }
 
   return (

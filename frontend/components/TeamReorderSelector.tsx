@@ -93,7 +93,7 @@ export default function TeamReorderSelector({
         const filteredItems = allTeams.filter(
           (team) =>
             (!teams.includes(team.uniqueId) || team.uniqueId === selectedId) &&
-            (allowedLeagues.length === 0 || allowedLeagues.includes(team.league)),
+            (allowedLeagues.length === 0 || allowedLeagues.includes(team.league) || team.uniqueId === selectedId),
         );
         const isFilled = !!selectedId;
         const countFilled = teams.filter((t) => !!t).length;

@@ -7,6 +7,7 @@ import { CollegeLeague, League } from '../utils/enum';
 import { getESPNTeams } from '../utils/fetchData/espnAllData';
 import { HockeyData } from '../utils/fetchData/hockeyData';
 import { TeamType } from '../utils/interface/team';
+import { UniversityLogos } from '../utils/UniversityLogos';
 import { randomNumber } from '../utils/utils';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
@@ -19,11 +20,13 @@ export class TeamService {
 
   async create(
     teamDto: CreateTeamDto | UpdateTeamDto | TeamType,
+    skipGenerateFiles: boolean = false,
   ): Promise<any> {
     const { uniqueId } = teamDto;
 
+    let saved: any;
     if (uniqueId) {
-      const saved = await this.teamModel
+      saved = await this.teamModel
         .findOneAndUpdate(
           { uniqueId },
           { $set: teamDto },
@@ -31,12 +34,25 @@ export class TeamService {
         )
         .lean()
         .exec();
-      return this.addRecord({ ...saved, ...teamDto });
+    } else {
+      const newTeam = new this.teamModel(teamDto);
+      saved = await newTeam.save();
+      saved = saved.toObject ? saved.toObject() : saved;
     }
 
-    const newTeam = new this.teamModel(teamDto);
-    const saved = await newTeam.save();
-    return this.addRecord({ ...saved.toObject(), ...teamDto });
+    const record = this.addRecord({ ...saved, ...teamDto });
+
+    // Skip regenerating files during batch imports for performance
+    // Files will be regenerated once at the end of the batch
+    if (!skipGenerateFiles) {
+      try {
+        await this.generateLeaguesTeamsAndColorsFiles();
+      } catch (err) {
+        console.error('Failed to regenerate league/team files:', err);
+      }
+    }
+
+    return record;
   }
 
   async getTeams(leagueParam?: string): Promise<any> {
@@ -47,17 +63,11 @@ export class TeamService {
     try {
       this.isFetchingTeams = true;
       const allActivesTeams: any[] = [];
-      const collegeLeagueValues = Object.values(
-        CollegeLeague,
-      ) as CollegeLeague[];
       let leagues: string[] = [];
       if (leagueParam) {
         leagues = [leagueParam.toUpperCase()];
       } else {
-        leagues = Object.values(League).filter(
-          (league) =>
-            !collegeLeagueValues.includes(league as unknown as CollegeLeague),
-        );
+        leagues = Object.values(League);
       }
       for (const league of leagues) {
         const activeTeams: TeamType[] = [];
@@ -84,7 +94,16 @@ export class TeamService {
         let updateNumber = 0;
         for (const activeTeam of activeTeams) {
           activeTeam.updateDate = new Date().toISOString();
-          const saved = await this.create(activeTeam);
+          // if ESPN didn't give us a logo, try our manual mapping before saving
+          if (!activeTeam.teamLogo) {
+            const parts = activeTeam.uniqueId?.split('-') || [];
+            const abbrev = parts[1] || activeTeam.abbrev || '';
+            if (abbrev && UniversityLogos[abbrev]) {
+              activeTeam.teamLogo = UniversityLogos[abbrev];
+            }
+          }
+          // Skip file generation during batch import for performance
+          const saved = await this.create(activeTeam, true);
           savedTeams.push(saved);
           updateNumber++;
           console.info(
@@ -100,9 +119,8 @@ export class TeamService {
         allActivesTeams.push(...savedTeams);
       }
 
-      if (process.env.NODE_ENV === 'development') {
-        await this.generateTeamsAndColorsFiles();
-      }
+      // Generate files once after all teams have been imported
+      await this.generateLeaguesTeamsAndColorsFiles();
 
       return allActivesTeams;
     } catch (error) {
@@ -131,7 +149,7 @@ export class TeamService {
       this.getTeams();
     }
     if (process.env.NODE_ENV === 'development') {
-      await this.generateTeamsAndColorsFiles();
+      await this.generateLeaguesTeamsAndColorsFiles();
     }
     return allTeams.map((team) => this.addRecord(team));
   }
@@ -155,17 +173,26 @@ export class TeamService {
     return teams.map((team) => this.addRecord(team));
   }
 
-  update(uniqueId: string, updateTeamDto: UpdateTeamDto) {
+  async update(uniqueId: string, updateTeamDto: UpdateTeamDto) {
     const filter = { uniqueId: uniqueId };
-    return this.teamModel.updateOne(filter, updateTeamDto);
+    const res = await this.teamModel.updateOne(filter, updateTeamDto).exec();
+
+    // regenerate the frontend/back mapping files after any update.
+    try {
+      await this.generateLeaguesTeamsAndColorsFiles();
+    } catch (err) {
+      console.error('Failed to regenerate league/team files:', err);
+    }
+
+    return res;
   }
 
   async updateRecord(uniqueId: string, record: string) {
     if (!record) return;
     const parts = record.split('-');
-    const wins = parseInt(parts[0], 10);
-    const losses = parseInt(parts[1], 10);
-    const ties = parts[2] ? parseInt(parts[2], 10) : null;
+    const wins = Number.parseInt(parts[0], 10);
+    const losses = Number.parseInt(parts[1], 10);
+    const ties = parts[2] ? Number.parseInt(parts[2], 10) : null;
 
     const updateData: any = { wins, losses };
     if (ties !== null) {
@@ -193,6 +220,14 @@ export class TeamService {
     return deleted;
   }
 
+  async removeByLeague(league: string): Promise<any> {
+    const filter = { league: league };
+    console.log(`Removing teams with league: ${league}`);
+    const deleted = await this.teamModel.deleteMany(filter).exec();
+    console.log(`Removed ${deleted.deletedCount} teams`);
+    return deleted;
+  }
+
   async removeAll() {
     await this.teamModel.deleteMany({});
     const teams = await this.teamModel.find().exec();
@@ -201,11 +236,23 @@ export class TeamService {
     }
   }
 
-  private async generateTeamsAndColorsFiles() {
+  private async generateLeaguesTeamsAndColorsFiles() {
     try {
+      const AllLeagues = await this.findAllLeagues();
+      const leaguesLines = AllLeagues.map(
+        (league) => `  '${league}': '${league}',`,
+      );
+      const leaguesFileContent = `export const LeaguesEnum: Record<string, string> = {\n${leaguesLines.join(
+        '\n',
+      )}\n};\n`;
+      const leaguesFilePath = path.join(
+        process.cwd(),
+        '../frontend/constants/Leagues.tsx',
+      );
+      await fs.promises.writeFile(leaguesFilePath, leaguesFileContent);
       const allTeams = await this.teamModel
         .find()
-        .sort({ label: 1 })
+        .sort({ uniqueId: 1 })
         .lean()
         .exec();
       const lines = allTeams.map(
@@ -239,6 +286,58 @@ export class TeamService {
         'src/utils/ColorsTeam.ts',
       );
       await fs.promises.writeFile(colorsFilePathBack, colorsFileContent);
+
+      // --- generate a mapping of university logos keyed by team id (abbrev) ---
+      // only include college leagues so we don't duplicate professional teams.
+      // we want a single entry per abbreviation and prefer the first non-empty
+      // logo we encounter; later duplicates are ignored.
+      const logoMap = new Map<string, string>();
+      allTeams
+        .filter((team: any) =>
+          Object.values(CollegeLeague).includes(team.league),
+        )
+        .forEach((team: any) => {
+          // use the portion of uniqueId after the hyphen (usually the abbreviation)
+          const parts = team.uniqueId ? team.uniqueId.split('-') : [];
+          let id = parts.length > 1 ? parts[1] : team.abbrev || '';
+          id = id.trim().toUpperCase();
+          if (!id) return;
+
+          const logo = team.teamLogo || '';
+
+          if (logoMap.has(id)) {
+            // if we already have a non-empty logo, keep it; otherwise replace
+            // the empty placeholder with whatever we have now.
+            if (logoMap.get(id)) {
+              return;
+            }
+          }
+          logoMap.set(id, logo);
+        });
+
+      // --- create content for university logos file ---
+      // sort by key to make output deterministic and easier to diff.
+      const sortedEntries = Array.from(logoMap.entries()).sort(([a], [b]) =>
+        a.localeCompare(b),
+      );
+      const logoLines = sortedEntries.map(
+        ([id, logo]) => `  '${id}': '${logo}',`,
+      );
+      const logosFileContent = `export const UniversityLogos: Record<string, string> = {\n${logoLines.join(
+        '\n',
+      )}\n};\n`;
+
+      const logosFilePath = path.join(
+        process.cwd(),
+        '../frontend/constants/UniversityLogos.tsx',
+      );
+      await fs.promises.writeFile(logosFilePath, logosFileContent);
+
+      const logosFilePathBack = path.join(
+        process.cwd(),
+        'src/utils/UniversityLogos.ts',
+      );
+      await fs.promises.writeFile(logosFilePathBack, logosFileContent);
     } catch (error) {
       console.error(
         'Error generating TeamsEnum or ColorsTeamEnum file:',

@@ -4,7 +4,7 @@ import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
-import { FontAwesome, Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -23,6 +23,7 @@ import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import FilterSlider from '../../components/FilterSlider';
 import GamesSelected from '../../components/GamesSelected';
 import LoadingView from '../../components/LoadingView';
+import Separator from '../../components/Separator';
 import TeamReorderSelector from '../../components/TeamReorderSelector';
 import { addDays, readableDate } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
@@ -354,7 +355,7 @@ export default function Calendar() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '5px 15px 0 15px',
+          padding: '5px 15px 5px 15px',
         }}
       >
         <AppLogo />
@@ -374,9 +375,6 @@ export default function Calendar() {
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView>
             <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
-              <div style={{ position: 'relative', zIndex: 20 }}>
-                <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
-              </div>
               <ThemedElements>
                 <div
                   style={{
@@ -405,7 +403,7 @@ export default function Calendar() {
                       flexShrink: 0,
                     }}
                   >
-                    <FontAwesome name="sliders" size={20} color={iconColor} />
+                    <MaterialIcons name="playlist-add" size={24} color={iconColor} />
                   </TouchableOpacity>
                   <View
                     style={
@@ -420,6 +418,7 @@ export default function Calendar() {
                     }
                   >
                     <FilterSlider
+                      multipleSelection={true}
                       data={[
                         { label: translateWord('all'), value: 'ALL' },
                         ...filteredTeamsSelected
@@ -459,6 +458,12 @@ export default function Calendar() {
                   >
                     <Ionicons name="bookmarks-outline" size={20} color={iconColor} />
                   </TouchableOpacity>
+                </div>
+              </ThemedElements>
+              <Separator />
+              <ThemedElements style={{ zIndex: 20 }}>
+                <div style={{ position: 'relative' }}>
+                  <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
                 </div>
               </ThemedElements>
             </div>

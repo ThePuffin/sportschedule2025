@@ -11,8 +11,8 @@ export enum League {
   NCAAB = 'NCAAB',
   NCCABB = 'NCCABB',
   WNCAAB = 'WNCAAB',
-  'OLYMPICS_HOCKEY_MEN' = 'OLYMPICS-MEN',
-  'OLYMPICS_HOCKEY_WOMEN' = 'OLYMPICS-WOMEN',
+  'OLYMPICS-MEN' = 'OLYMPICS-MEN',
+  'OLYMPICS-WOMEN' = 'OLYMPICS-WOMEN',
 }
 
 export enum CollegeLeague {
@@ -40,10 +40,8 @@ export const emoticonEnum = {
   WNCAAB: '⛹️‍♀️',
   WNBA: '⛹️‍♀️',
   MLS: '⚽',
-  OLYMPICS_HOCKEY_MEN: '🏒',
-  OLYMPICS_HOCKEY_WOMEN: '🏒',
-  'OLYMPICS-MEN': '🏒',
-  'OLYMPICS-WOMEN': '🏒',
+  'OLYMPICS-MEN': '🏅',
+  'OLYMPICS-WOMEN': '🏅',  
 };
 
 export const timeDurationEnum = {

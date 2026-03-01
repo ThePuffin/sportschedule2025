@@ -5,7 +5,7 @@ import { getCache } from '@/utils/fetchData';
 import { SelectorProps } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -33,6 +33,9 @@ export default function Selector({
   style,
   textStyle,
   iconColor,
+  onOpen,
+  onClose,
+  showSelectAll = true,
 }: Readonly<
   SelectorProps & {
     placeholder?: string;
@@ -40,6 +43,9 @@ export default function Selector({
     style?: StyleProp<ViewStyle>;
     textStyle?: StyleProp<TextStyle>;
     iconColor?: string;
+    onOpen?: () => void;
+    onClose?: () => void;
+    showSelectAll?: boolean;
   }
 >) {
   const { items, i, itemSelectedId } = data;
@@ -61,11 +67,21 @@ export default function Selector({
   const itemBackgroundColor = useThemeColor({ light: '#f0f0f0', dark: '#2c2c2e' }, 'background');
   const effectiveIconColor = iconColor ?? textColor;
 
+  const openSelector = useCallback(() => {
+    setVisible(true);
+    onOpen?.();
+  }, [onOpen]);
+
+  const closeSelector = useCallback(() => {
+    setVisible(false);
+    onClose?.();
+  }, [onClose]);
+
   useEffect(() => {
     if (startOpen) {
-      setVisible(true);
+      openSelector();
     }
-  }, [startOpen]);
+  }, [startOpen, openSelector]);
 
   useEffect(() => {
     const loadFavs = () => {
@@ -86,7 +102,7 @@ export default function Selector({
         inputRef.current?.focus();
       }, 700);
     }
-  }, [visible]);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -178,7 +194,7 @@ export default function Selector({
   const isAllSelected = allOptions.length > 0 && allOptions.every((o) => tempSelectedIds.includes(o.id));
 
   const listData =
-    allowMultipleSelection && filteredOptions.length > 1
+    allowMultipleSelection && showSelectAll && filteredOptions.length > 1
       ? [
           {
             id: 'SELECT_ALL',
@@ -222,7 +238,7 @@ export default function Selector({
       if (!tempSelectedId) userClearedRef.current = true;
       onItemSelectionChange(tempSelectedId, i);
     }
-    setVisible(false);
+    closeSelector();
   };
 
   const handleClear = () => {
@@ -294,7 +310,7 @@ export default function Selector({
     <View style={styles.container}>
       <TouchableOpacity
         style={[styles.selectorButton, { borderColor }, style, isDisabled && styles.selectorButtonDisabled]}
-        onPress={() => setVisible(true)}
+        onPress={openSelector}
         disabled={isDisabled}
       >
         {renderTrigger()}
@@ -314,31 +330,15 @@ export default function Selector({
         </View>
       </TouchableOpacity>
 
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setVisible(false);
-        }}
-      >
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={closeSelector}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => {
-              setVisible(false);
-            }}
-          >
+          <Pressable style={styles.modalOverlay} onPress={closeSelector}>
             <Pressable style={[styles.modalContent, { backgroundColor }]} onPress={(e) => e.stopPropagation()}>
               <View style={styles.header}>
                 <ThemedText style={styles.headerTitle}>
                   {allowMultipleSelection ? translateWord('selectMultiple') : translateWord('select') || ''}
                 </ThemedText>
-                <TouchableOpacity
-                  onPress={() => {
-                    setVisible(false);
-                  }}
-                >
+                <TouchableOpacity onPress={closeSelector}>
                   <Icon name="times" type="font-awesome" size={20} color={textColor} />
                 </TouchableOpacity>
               </View>
@@ -460,14 +460,16 @@ export default function Selector({
                             {item.label}
                           </ThemedText>
                         </View>
-                        {isSelected &&
-                          (item.league && emoticonEnum[item.league as keyof typeof emoticonEnum] ? (
-                            <Text style={{ fontSize: 16, color: textColor }}>
-                              {emoticonEnum[item.league as keyof typeof emoticonEnum]}
-                            </Text>
-                          ) : (
+                        {isSelected && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {item.league && emoticonEnum[item.league as keyof typeof emoticonEnum] && (
+                              <Text style={{ fontSize: 16, color: textColor, marginRight: 10 }}>
+                                {emoticonEnum[item.league as keyof typeof emoticonEnum]}
+                              </Text>
+                            )}
                             <Icon name="check" type="font-awesome" size={14} color={textColor} />
-                          ))}
+                          </View>
+                        )}
                       </TouchableOpacity>
                     </View>
                   );
@@ -483,9 +485,7 @@ export default function Selector({
                     styles.buttonCancel,
                     { backgroundColor, borderColor: textColor },
                   ]}
-                  onPress={() => {
-                    setVisible(false);
-                  }}
+                  onPress={closeSelector}
                 >
                   <Text style={[styles.textStyle, styles.textStyleCancel, { color: textColor }]}>
                     {translateWord('cancel')}

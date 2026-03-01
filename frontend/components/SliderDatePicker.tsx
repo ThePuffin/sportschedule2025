@@ -1,3 +1,4 @@
+import { useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
@@ -7,11 +8,13 @@ import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDime
 interface SliderDatePickerProps {
   selectDate: Date;
   onDateChange: (date: Date) => void;
+  disabled?: boolean;
 }
 
-export default function SliderDatePicker({ selectDate, onDateChange }: SliderDatePickerProps) {
+export default function SliderDatePicker({ selectDate, onDateChange, disabled = false }: SliderDatePickerProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const monthScrollViewRef = useRef<ScrollView>(null);
+  const { setIsScrollingHorizontally } = useHorizontalScroll();
   const [dates, setDates] = useState<Date[]>([]);
   const [months, setMonths] = useState<Date[]>([]);
   const [locale, setLocale] = useState('en-US');
@@ -130,16 +133,19 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
 
           const onMouseDown = (e: MouseEvent) => {
             isDown = true;
+            setIsScrollingHorizontally(true);
             element.style.cursor = 'grabbing';
             startX = e.pageX - element.offsetLeft;
             scrollLeft = element.scrollLeft;
           };
           const onMouseLeave = () => {
             isDown = false;
+            setIsScrollingHorizontally(false);
             element.style.cursor = 'grab';
           };
           const onMouseUp = () => {
             isDown = false;
+            setIsScrollingHorizontally(false);
             element.style.cursor = 'grab';
           };
           const onMouseMove = (e: MouseEvent) => {
@@ -165,7 +171,7 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
           };
         }
       }
-    }, [ref]);
+    }, [ref, setIsScrollingHorizontally]);
   };
 
   useDragScroll(scrollViewRef);
@@ -175,7 +181,7 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
     <View
       style={[
         styles.container,
-        { backgroundColor },
+        { backgroundColor, opacity: disabled ? 0.5 : 1 },
         Platform.OS === 'web' &&
           ({
             maskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
@@ -195,7 +201,8 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
             const isCurrentMonth = date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
             return (
               <TouchableOpacity
-                key={index}
+                key={date.toLocaleString(locale, { month: 'long', year: 'numeric' })}
+                disabled={disabled}
                 style={[
                   styles.monthItem,
                   {
@@ -240,6 +247,7 @@ export default function SliderDatePicker({ selectDate, onDateChange }: SliderDat
           return (
             <TouchableOpacity
               key={index}
+              disabled={disabled}
               style={[
                 styles.dateItem,
                 {

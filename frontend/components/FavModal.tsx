@@ -7,7 +7,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchLeagues, getCache, saveCache } from '@/utils/fetchData';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 const maxFavorites = 5;
@@ -25,32 +25,31 @@ const FavModal = ({
 }) => {
   const [isSmallDevice, setIsSmallDevice] = useState(Dimensions.get('window').width < 768);
   const [localFavorites, setLocalFavorites] = useState<string[]>(favoriteTeams);
-  const [localLeagues, setLocalLeagues] = useState<string[]>([]);
+  const [localLeagues, setLocalLeagues] = useState<string[]>(() => {
+    const cached = getCache<string[]>('leaguesSelected');
+    return cached && cached.length > 0 ? cached : Object.values(LeaguesEnum);
+  });
   const [allLeagues, setAllLeagues] = useState<string[]>(() => {
     const cached = getCache<string[]>('allLeagues');
     return cached && cached.length > 0 ? cached : Object.values(LeaguesEnum);
   });
   const [showScores, setShowScores] = useState(false);
+  const hasFavorites = favoriteTeams.length > 0;
+  const [isLeagueSelectorOpen, setIsLeagueSelectorOpen] = useState(!hasFavorites);
 
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
   const borderColor = useThemeColor({}, 'text');
-  const itemBackgroundColor = useThemeColor({ light: '#f0f0f0', dark: '#2c2c2e' }, 'background');
 
   useEffect(() => {
     if (isOpen) {
       const cached = getCache<string[]>('favoriteTeams');
-      setLocalFavorites(cached || favoriteTeams);
+      const currentFavorites = cached || favoriteTeams;
+      setLocalFavorites(currentFavorites);
+      setIsLeagueSelectorOpen(currentFavorites.length === 0);
 
       const cachedShowScores = getCache<boolean>('showScores');
       setShowScores(cachedShowScores ?? false);
-
-      const cachedLeagues = getCache<string[]>('leaguesSelected');
-      if (cachedLeagues && cachedLeagues.length > 0) {
-        setLocalLeagues(cachedLeagues);
-      } else {
-        setLocalLeagues(Object.values(LeaguesEnum));
-      }
 
       fetchLeagues((leagues: string[]) => {
         const filtered = leagues.filter((l) => l !== 'ALL');
@@ -61,7 +60,7 @@ const FavModal = ({
         setLocalLeagues(cachedLeagues && cachedLeagues.length > 0 ? cachedLeagues : filtered);
       });
     }
-  }, [isOpen]);
+  }, [isOpen, favoriteTeams]);
 
   useEffect(() => {
     const onChange = () => {
@@ -99,8 +98,10 @@ const FavModal = ({
     onClose();
   };
 
-  const hasFavorites = favoriteTeams.length > 0;
   const hasSelection = localFavorites.some((t) => !!t);
+
+  const handleSelectorOpen = useCallback(() => setIsLeagueSelectorOpen(true), []);
+  const handleSelectorClose = useCallback(() => setIsLeagueSelectorOpen(false), []);
 
   return (
     <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => hasFavorites && onClose()}>
@@ -109,49 +110,55 @@ const FavModal = ({
           style={[styles.modalView, { backgroundColor }, isSmallDevice && { width: '90%', maxHeight: '90%' }]}
           onPress={(e) => e.stopPropagation()}
         >
-          <Text style={[styles.modalText, { color: textColor }]}>{translateWord('leagueSurveilled')}:</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.modalText, { color: textColor }]}>{translateWord('leagueSurveilled')}:</Text>
 
-          <View style={{ marginBottom: 15, zIndex: 20, flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ marginRight: 5, width: 20 }} />
-            <View style={{ flex: 1 }}>
-              <Selector
-                key={`league-selector-${isOpen}`}
-                data={{
-                  i: 999,
-                  items: allLeagues,
-                  itemsSelectedIds: localLeagues,
-                  itemSelectedId: '',
-                }}
-                onItemSelectionChange={(ids) => {
-                  const newIds = Array.isArray(ids) ? ids : [];
-                  if (newIds.length > 0) {
+            <View style={{ marginBottom: 15, zIndex: 20, flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ marginRight: 5, width: 20 }} />
+              <View style={{ flex: 1 }}>
+                <Selector
+                  key={`league-selector-${isOpen}`}
+                  data={{
+                    i: 999,
+                    items: allLeagues,
+                    itemsSelectedIds: localLeagues,
+                    itemSelectedId: '',
+                  }}
+                  onItemSelectionChange={(ids) => {
+                    const newIds = Array.isArray(ids) ? ids : [];
                     setLocalLeagues(newIds);
-                  }
-                }}
-                allowMultipleSelection={true}
-                isClearable={false}
-                placeholder={translateWord('filterLeagues')}
-                startOpen={!hasFavorites}
-                style={{ backgroundColor, borderColor }}
-                textStyle={{ color: textColor, fontWeight: 'normal' }}
-                iconColor={textColor}
-              />
+                  }}
+                  allowMultipleSelection={true}
+                  isClearable={false}
+                  placeholder={translateWord('filterLeagues')}
+                  startOpen={!hasFavorites}
+                  style={{ backgroundColor, borderColor }}
+                  textStyle={{ color: textColor, fontWeight: 'normal' }}
+                  iconColor={textColor}
+                  onOpen={handleSelectorOpen}
+                  onClose={handleSelectorClose}
+                />
+              </View>
             </View>
-          </View>
 
-          <Text style={[styles.modalText, { color: textColor }]}>{translateWord('yourFav')}:</Text>
-          <View style={styles.selector}>
-            <TeamReorderSelector
-              teams={localFavorites}
-              allTeams={teamsForFavorites}
-              maxTeams={maxFavorites}
-              onChange={setLocalFavorites}
-              allowedLeagues={localLeagues}
-            />
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15 }}>
-            <Text style={{ marginRight: 10, color: textColor }}>{translateWord('scoreView')} :</Text>
-            <ScoreToggle value={showScores} onValueChange={setShowScores} />
+            {!isLeagueSelectorOpen && (
+              <>
+                <Text style={[styles.modalText, { color: textColor }]}>{translateWord('yourFav')}:</Text>
+                <View style={styles.selector}>
+                  <TeamReorderSelector
+                    teams={localFavorites}
+                    allTeams={teamsForFavorites}
+                    maxTeams={maxFavorites}
+                    onChange={setLocalFavorites}
+                    allowedLeagues={localLeagues}
+                  />
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15 }}>
+                  <Text style={{ marginRight: 10, color: textColor }}>{translateWord('scoreView')} :</Text>
+                  <ScoreToggle value={showScores} onValueChange={setShowScores} />
+                </View>
+              </>
+            )}
           </View>
 
           <View style={styles.buttonsContainer}>
