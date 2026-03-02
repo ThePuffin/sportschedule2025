@@ -158,7 +158,6 @@ const fetchWithCacheStrategy = async <T>(
 export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: GameFormatted[] }> => {
   const cacheKey = `games_hour_${date}`;
 
-  // Vérifie si le cache est valide (moins de 2 minutes)
   if (isCacheValid(cacheKey, 2 / 60)) {
     const cached = getCache<{ [key: string]: GameFormatted[] }>(cacheKey);
     if (cached) return cached;
@@ -278,4 +277,27 @@ export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
     undefined,
     10000,
   );
+};
+
+export const fetchDateRangeFromApi = async () => {
+  try {
+    const cacheKey = 'date_range_limits';
+
+    if (isCacheValid(cacheKey, 24)) {
+      const cached = getCache<{ minDate: string | null; maxDate: string | null }>(cacheKey);
+      if (cached && cached.minDate && cached.maxDate) return cached;
+    }
+
+    const dates = await fetchWithCacheStrategy<{ minDate: string | null; maxDate: string | null }>(
+      `${EXPO_PUBLIC_API_BASE_URL}/games/dates/range`,
+      cacheKey,
+      { minDate: null, maxDate: null },
+      undefined,
+      undefined,
+      60000,
+    );
+    return dates;
+  } catch (error) {
+    console.error('Error fetching date range from API:', error);
+  }
 };

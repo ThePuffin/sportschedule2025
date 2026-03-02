@@ -141,9 +141,14 @@ export default function Selector({
         };
       })
       .sort((a, b) => {
+        const isAllA = a.id === 'all' || a.id === 'ALL' || a.id === '';
+        const isAllB = b.id === 'all' || b.id === 'ALL' || b.id === '';
+        if (isAllA && !isAllB) return -1;
+        if (!isAllA && isAllB) return 1;
+
         if (a.isFav && !b.isFav) return -1;
         if (!a.isFav && b.isFav) return 1;
-        return 0;
+        return a.label.localeCompare(b.label);
       });
   };
 
@@ -280,10 +285,12 @@ export default function Selector({
     if (!allowMultipleSelection && itemSelectedId) {
       const selectedItem = allOptions.find((o) => o.id === itemSelectedId);
       if (selectedItem) {
-        logo = (selectedItem.original as any)?.logo || (selectedItem.original as any)?.teamLogo;
-        if (!logo) {
-          if (leagueLogos[selectedItem.id]) logo = leagueLogos[selectedItem.id];
-          else if (selectedItem.league && leagueLogos[selectedItem.league]) logo = leagueLogos[selectedItem.league];
+        if (selectedItem.league && leagueLogos[selectedItem.league]) {
+          logo = leagueLogos[selectedItem.league];
+        } else if (leagueLogos[selectedItem.id]) {
+          logo = leagueLogos[selectedItem.id];
+        } else {
+          logo = (selectedItem.original as any)?.logo || (selectedItem.original as any)?.teamLogo;
         }
       }
     }
@@ -419,10 +426,13 @@ export default function Selector({
                       ? !tempSelectedId
                       : tempSelectedId === item.id;
 
-                  let logo = (item.original as any)?.logo || (item.original as any)?.teamLogo;
-                  if (!logo) {
-                    if (leagueLogos[item.id]) logo = leagueLogos[item.id];
-                    else if (item.league && leagueLogos[item.league]) logo = leagueLogos[item.league];
+                  let logo = null;
+                  if (item.league && leagueLogos[item.league]) {
+                    logo = leagueLogos[item.league];
+                  } else if (leagueLogos[item.id]) {
+                    logo = leagueLogos[item.id];
+                  } else {
+                    logo = (item.original as any)?.logo || (item.original as any)?.teamLogo;
                   }
 
                   const showSeparator = index > 0 && listData[index - 1].isFav && !item.isFav;

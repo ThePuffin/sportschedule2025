@@ -17,6 +17,7 @@ import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import LoadingView from '../../components/LoadingView';
 import { GameStatus, League } from '../../constants/enum';
+import { fetchDateRangeLimits, getDateRangeLimits } from '../../utils/dateRange';
 import { fetchGamesByHour, fetchLeagues, getCache, saveCache } from '../../utils/fetchData';
 import { GameFormatted } from '../../utils/types';
 import { randomNumber, translateWord } from '../../utils/utils';
@@ -88,30 +89,17 @@ const GameofTheDayContent = () => {
   const readonlyRef = useRef(false);
   const hasInitializedRef = useRef(false);
 
+  const [dateLimits, setDateLimits] = useState(() => getDateRangeLimits());
+
+  useEffect(() => {
+    fetchDateRangeLimits().then(setDateLimits);
+  }, []);
+
+  const { minDate, maxDate } = dateLimits;
+
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>(
     () => getCache<GameFormatted[]>('gameSelected') || [],
   );
-
-  const teamsOfTheDay = useMemo(() => {
-    const teamsMap = new Map<string, { label: string; uniqueId: string; league: string }>();
-
-    games.forEach((game) => {
-      if (selectLeagues.includes(game.league as League)) {
-        teamsMap.set(game.homeTeamId, {
-          label: game.homeTeam,
-          uniqueId: game.homeTeamId,
-          league: game.league,
-        });
-        teamsMap.set(game.awayTeamId, {
-          label: game.awayTeam,
-          uniqueId: game.awayTeamId,
-          league: game.league,
-        });
-      }
-    });
-
-    return Array.from(teamsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [games, selectLeagues]);
 
   const [teamSelectedId, setTeamSelectedId] = useState<string>('');
   const gamesDayCache = useRef<{ [key: string]: GameFormatted[] }>({});
@@ -340,21 +328,21 @@ const GameofTheDayContent = () => {
 
   const handleDateChange = useCallback(
     (startDate: Date, endDate: Date) => {
+      const dateStr = startDate.toISOString().split('T')[0];
+      const currentStr = selectDateRef.current.toISOString().split('T')[0];
+
+      router.setParams({ date: dateStr });
+
+      if (dateStr === currentStr) {
+        return;
+      }
+
       scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       readonlyRef.current = true;
       isInternalChange.current = true;
       setSelectDate(startDate);
 
-      const dateStr = startDate.toISOString().split('T')[0];
-      const todayStr = new Date().toISOString().split('T')[0];
-
-      if (dateStr !== todayStr) {
-        router.setParams({ date: dateStr });
-      } else {
-        router.setParams({ date: undefined });
-      }
-
-      const YYYYMMDD = new Date(startDate).toISOString().split('T')[0];
+      const YYYYMMDD = dateStr;
       if (!gamesDayCache.current[YYYYMMDD]) {
         setIsLoading(true);
       }
@@ -406,6 +394,47 @@ const GameofTheDayContent = () => {
   const handleScoreToggle = useCallback((value: boolean) => {
     setShowScores(value);
   }, []);
+
+  const teamsOfTheDay = useMemo(() => {
+    const teamsMap = new Map<string, Team>();
+
+    games.forEach((game) => {
+      if (!selectLeagues.includes(game.league as League)) return;
+
+      if (!teamsMap.has(game.homeTeamId)) {
+        teamsMap.set(game.homeTeamId, {
+          uniqueId: game.homeTeamId,
+          value: game.homeTeamId,
+          id: game.homeTeamId,
+          label: game.homeTeam,
+          teamLogo: game.homeTeamLogo,
+          teamCommonName: game.homeTeam,
+          league: game.league,
+          abbrev: game.homeTeamShort,
+          conferenceName: '',
+          divisionName: '',
+          updateDate: '',
+        });
+      }
+      if (!teamsMap.has(game.awayTeamId)) {
+        teamsMap.set(game.awayTeamId, {
+          uniqueId: game.awayTeamId,
+          value: game.awayTeamId,
+          id: game.awayTeamId,
+          label: game.awayTeam,
+          teamLogo: game.awayTeamLogo,
+          teamCommonName: game.awayTeam,
+          league: game.league,
+          abbrev: game.awayTeamShort,
+          conferenceName: '',
+          divisionName: '',
+          updateDate: '',
+        });
+      }
+    });
+
+    return Array.from(teamsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [games, selectLeagues]);
 
   const displayScoreToggle = useCallback(() => {
     return (
@@ -557,7 +586,11 @@ const GameofTheDayContent = () => {
         if (/^\d{4}-\d{2}-\d{2}$/.test(param) && param !== parsedStr) {
           invalidParam = true;
         } else {
-          d = parsed;
+          if (parsed < minDate || parsed > maxDate) {
+            invalidParam = true;
+          } else {
+            d = parsed;
+          }
         }
       }
     }
@@ -585,7 +618,7 @@ const GameofTheDayContent = () => {
       setIsLoading(true);
     }
     getGamesFromApi(d).finally(() => setIsLoading(false));
-  }, [dateParam, selectDate, getGamesFromApi, router]);
+  }, [dateParam, selectDate, getGamesFromApi, router, minDate, maxDate]);
 
   useFocusEffect(
     useCallback(() => {
@@ -636,6 +669,8 @@ const GameofTheDayContent = () => {
                     onDateChange={(date) => handleDateChange(date, date)}
                     selectDate={selectDate}
                     disabled={isLoading}
+                    minDate={minDate}
+                    maxDate={maxDate}
                   />
                 </div>
               </div>

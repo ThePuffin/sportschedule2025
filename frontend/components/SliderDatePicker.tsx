@@ -2,16 +2,24 @@ import { useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 interface SliderDatePickerProps {
   selectDate: Date;
   onDateChange: (date: Date) => void;
   disabled?: boolean;
+  minDate?: Date | string;
+  maxDate?: Date | string;
 }
 
-export default function SliderDatePicker({ selectDate, onDateChange, disabled = false }: SliderDatePickerProps) {
+export default function SliderDatePicker({
+  selectDate,
+  onDateChange,
+  disabled = false,
+  minDate,
+  maxDate,
+}: SliderDatePickerProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const monthScrollViewRef = useRef<ScrollView>(null);
   const { setIsScrollingHorizontally } = useHorizontalScroll();
@@ -34,6 +42,10 @@ export default function SliderDatePicker({ selectDate, onDateChange, disabled = 
   const { width: windowWidth } = useWindowDimensions();
   const today = new Date();
 
+  // Sécurisation des dates limites (conversion string -> Date si nécessaire)
+  const safeMinDate = useMemo(() => (minDate ? new Date(minDate) : undefined), [minDate]);
+  const safeMaxDate = useMemo(() => (maxDate ? new Date(maxDate) : undefined), [maxDate]);
+
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
       setLocale(navigator.language || 'en-US');
@@ -42,19 +54,63 @@ export default function SliderDatePicker({ selectDate, onDateChange, disabled = 
 
   useEffect(() => {
     const startOfMonth = new Date(selectDate.getFullYear(), selectDate.getMonth(), 1);
+
+    if (safeMinDate && safeMaxDate) {
+      const minMonth = new Date(safeMinDate.getFullYear(), safeMinDate.getMonth(), 1);
+      const maxMonth = new Date(safeMaxDate.getFullYear(), safeMaxDate.getMonth(), 1);
+
+      if (
+        months.length > 0 &&
+        months[0].getTime() === minMonth.getTime() &&
+        months[months.length - 1].getTime() === maxMonth.getTime()
+      ) {
+        return;
+      }
+
+      const newMonths: Date[] = [];
+      const current = new Date(minMonth);
+      while (current <= maxMonth) {
+        newMonths.push(new Date(current));
+        current.setMonth(current.getMonth() + 1);
+      }
+      setMonths(newMonths);
+      return;
+    }
+
+    let isRangeValid = true;
+    if (months.length > 0) {
+      if (safeMinDate) {
+        const minMonth = new Date(safeMinDate.getFullYear(), safeMinDate.getMonth(), 1);
+        if (months[0] < minMonth) isRangeValid = false;
+      }
+      if (safeMaxDate) {
+        const maxMonth = new Date(safeMaxDate.getFullYear(), safeMaxDate.getMonth(), 1);
+        if (months[months.length - 1] > maxMonth) isRangeValid = false;
+      }
+    }
+
     const isMonthInCurrentRange =
       months.length > 0 && months[0] <= startOfMonth && months[months.length - 1] >= startOfMonth;
 
-    if (!isMonthInCurrentRange) {
+    if (!isMonthInCurrentRange || !isRangeValid) {
       const newMonths: Date[] = [];
       for (let i = -6; i <= 6; i++) {
         const d = new Date(startOfMonth);
         d.setMonth(startOfMonth.getMonth() + i);
+
+        if (safeMinDate) {
+          const minMonth = new Date(safeMinDate.getFullYear(), safeMinDate.getMonth(), 1);
+          if (d < minMonth) continue;
+        }
+        if (safeMaxDate) {
+          const maxMonth = new Date(safeMaxDate.getFullYear(), safeMaxDate.getMonth(), 1);
+          if (d > maxMonth) continue;
+        }
         newMonths.push(d);
       }
       setMonths(newMonths);
     }
-  }, [selectDate]);
+  }, [selectDate, safeMinDate, safeMaxDate]);
 
   useEffect(() => {
     if (months.length > 0 && monthScrollViewRef.current) {
@@ -69,19 +125,36 @@ export default function SliderDatePicker({ selectDate, onDateChange, disabled = 
   }, [selectDate, months, windowWidth]);
 
   useEffect(() => {
+    let isRangeValid = true;
+    if (dates.length > 0) {
+      if (safeMinDate) {
+        const minTime = new Date(safeMinDate).setHours(0, 0, 0, 0);
+        if (dates[0].getTime() < minTime) isRangeValid = false;
+      }
+      if (safeMaxDate) {
+        const maxTime = new Date(safeMaxDate).setHours(0, 0, 0, 0);
+        if (dates[dates.length - 1].getTime() > maxTime) isRangeValid = false;
+      }
+    }
+
     const isDateInCurrentRange = dates.length > 0 && dates[0] <= selectDate && dates[dates.length - 1] >= selectDate;
 
-    if (!isDateInCurrentRange) {
+    if (!isDateInCurrentRange || !isRangeValid) {
       const baseDate = new Date(selectDate);
       const newDates: Date[] = [];
       for (let i = -30; i <= 30; i++) {
         const d = new Date(baseDate);
         d.setDate(baseDate.getDate() + i);
+
+        const dTime = new Date(d).setHours(0, 0, 0, 0);
+        if (safeMinDate && dTime < new Date(safeMinDate).setHours(0, 0, 0, 0)) continue;
+        if (safeMaxDate && dTime > new Date(safeMaxDate).setHours(0, 0, 0, 0)) continue;
+
         newDates.push(d);
       }
       setDates(newDates);
     }
-  }, [selectDate]);
+  }, [selectDate, safeMinDate, safeMaxDate]);
 
   useEffect(() => {
     if (dates.length > 0 && scrollViewRef.current) {
@@ -118,6 +191,13 @@ export default function SliderDatePicker({ selectDate, onDateChange, disabled = 
     newDate.setMonth(date.getMonth());
     const daysInMonth = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate();
     newDate.setDate(Math.min(targetDay, daysInMonth));
+
+    if (safeMinDate && newDate < safeMinDate) {
+      newDate.setTime(safeMinDate.getTime());
+    }
+    if (safeMaxDate && newDate > safeMaxDate) {
+      newDate.setTime(safeMaxDate.getTime());
+    }
     onDateChange(newDate);
   };
 

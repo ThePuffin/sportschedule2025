@@ -87,7 +87,7 @@ const FavModal = ({
   }));
 
   const handleSave = () => {
-    onSave(localFavorites);
+    onSave(localFavorites.filter((team) => team !== ''));
     saveCache('leaguesSelected', localLeagues);
     saveCache('showScores', showScores);
     if (globalThis.window !== undefined) {

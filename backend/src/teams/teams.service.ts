@@ -15,7 +15,7 @@ import { Team } from './schemas/team.schema';
 
 @Injectable()
 export class TeamService {
-  private isFetchingTeams: boolean = false;
+  private isFetchingTeams: { [league: string]: boolean } = {};
   constructor(@InjectModel(Team.name) public teamModel: Model<Team>) {}
 
   async create(
@@ -44,11 +44,13 @@ export class TeamService {
 
     // Skip regenerating files during batch imports for performance
     // Files will be regenerated once at the end of the batch
-    if (!skipGenerateFiles) {
-      try {
-        await this.generateLeaguesTeamsAndColorsFiles();
-      } catch (err) {
-        console.error('Failed to regenerate league/team files:', err);
+    if (process.env.NODE_ENV === 'development') {
+      if (!skipGenerateFiles) {
+        try {
+          await this.generateLeaguesTeamsAndColorsFiles();
+        } catch (err) {
+          console.error('Failed to regenerate league/team files:', err);
+        }
       }
     }
 
@@ -56,16 +58,16 @@ export class TeamService {
   }
 
   async getTeams(leagueParam?: string): Promise<any> {
-    if (this.isFetchingTeams) {
+    const leagueKey = leagueParam ? leagueParam.toUpperCase() : 'ALL';
+    if (this.isFetchingTeams[leagueKey]) {
       console.info(`getTeams is already running.`);
       return;
     }
     try {
-      this.isFetchingTeams = true;
+      this.isFetchingTeams[leagueKey] = true;
       const allActivesTeams: any[] = [];
       let leagues: string[] = [];
       if (leagueParam) {
-        leagues = [leagueParam.toUpperCase()];
       } else {
         leagues = Object.values(League);
       }
@@ -120,14 +122,15 @@ export class TeamService {
       }
 
       // Generate files once after all teams have been imported
-      await this.generateLeaguesTeamsAndColorsFiles();
-
+      if (process.env.NODE_ENV === 'development') {
+        await this.generateLeaguesTeamsAndColorsFiles();
+      }
       return allActivesTeams;
     } catch (error) {
       console.error(error);
       throw new Error('Error fetching teams: ' + error.message);
     } finally {
-      this.isFetchingTeams = false;
+      this.isFetchingTeams[leagueKey] = false;
     }
   }
 
@@ -146,7 +149,7 @@ export class TeamService {
     const lastMonth = new Date();
     lastMonth.setDate(lastMonth.getMonth() - 1);
     if (new Date(randomTeam?.updateDate) < lastMonth) {
-      this.getTeams();
+      await this.getTeams();
     }
     if (process.env.NODE_ENV === 'development') {
       await this.generateLeaguesTeamsAndColorsFiles();
@@ -178,10 +181,12 @@ export class TeamService {
     const res = await this.teamModel.updateOne(filter, updateTeamDto).exec();
 
     // regenerate the frontend/back mapping files after any update.
-    try {
-      await this.generateLeaguesTeamsAndColorsFiles();
-    } catch (err) {
-      console.error('Failed to regenerate league/team files:', err);
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        await this.generateLeaguesTeamsAndColorsFiles();
+      } catch (err) {
+        console.error('Failed to regenerate league/team files:', err);
+      }
     }
 
     return res;
