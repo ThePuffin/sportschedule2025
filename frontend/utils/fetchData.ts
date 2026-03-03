@@ -47,8 +47,8 @@ const isTeamGamesEntryFresh = (entry?: TeamGamesCacheEntry): entry is TeamGamesC
 };
 
 // Helper to check if cache is still valid (less than 1 hours old or defined maxDuration)
-const isCacheValid = (cacheKey: string, maxDuration: number = 1): boolean => {
-  const timestamp = localStorage.getItem(`${cacheKey}_timestamp`);
+const isCacheValid = (cacheKey: string, maxDuration: number = 1, storage: Storage = localStorage): boolean => {
+  const timestamp = storage.getItem(`${cacheKey}_timestamp`);
   if (!timestamp) return false;
   const cached = Number.parseInt(timestamp, 10);
   const now = Date.now();
@@ -57,18 +57,18 @@ const isCacheValid = (cacheKey: string, maxDuration: number = 1): boolean => {
 };
 
 // Helper to save data with timestamp and compression
-export const saveCache = (cacheKey: string, data: unknown): void => {
+export const saveCache = (cacheKey: string, data: unknown, storage: Storage = localStorage): void => {
   const jsonString = JSON.stringify(data);
   const compressed = fflate.compressSync(fflate.strToU8(jsonString));
   // Use strFromU8 with true to create a binary string for localStorage
   const storableString = fflate.strFromU8(compressed, true);
-  localStorage.setItem(cacheKey, storableString);
-  localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
+  storage.setItem(cacheKey, storableString);
+  storage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
 };
 
 // Helper to get cached and decompressed data
-export const getCache = <T>(cacheKey: string): T | null => {
-  const storableString = localStorage.getItem(cacheKey);
+export const getCache = <T>(cacheKey: string, storage: Storage = localStorage): T | null => {
+  const storableString = storage.getItem(cacheKey);
   if (!storableString) return null;
   try {
     // Use strToU8 with true to convert binary string back to Uint8Array
@@ -79,8 +79,8 @@ export const getCache = <T>(cacheKey: string): T | null => {
   } catch (e) {
     console.error(`Failed to parse or decompress cache for ${cacheKey}`, e);
     // Clear corrupted cache
-    localStorage.removeItem(cacheKey);
-    localStorage.removeItem(`${cacheKey}_timestamp`);
+    storage.removeItem(cacheKey);
+    storage.removeItem(`${cacheKey}_timestamp`);
     return null;
   }
 };
@@ -117,11 +117,12 @@ const fetchWithCacheStrategy = async <T>(
   customGetCache?: () => T | null,
   customSaveCache?: (data: T) => void,
   retryTimeout: number = 10000,
+  storage: Storage = localStorage,
 ): Promise<T> => {
   try {
     const res = await fetchWithTimeout(url, 5000);
     const data = (await res.json()) as T;
-    if (cacheKey) saveCache(cacheKey, data);
+    if (cacheKey) saveCache(cacheKey, data, storage);
     if (customSaveCache) customSaveCache(data);
     return data;
   } catch (error) {
@@ -131,7 +132,7 @@ const fetchWithCacheStrategy = async <T>(
     if (customGetCache) {
       cached = customGetCache();
     } else if (cacheKey) {
-      cached = getCache<T>(cacheKey);
+      cached = getCache<T>(cacheKey, storage);
     }
 
     if (isCacheContentValid(cached)) {
@@ -145,7 +146,7 @@ const fetchWithCacheStrategy = async <T>(
     try {
       const res = await fetchWithTimeout(url, retryTimeout);
       const data = (await res.json()) as T;
-      if (cacheKey) saveCache(cacheKey, data);
+      if (cacheKey) saveCache(cacheKey, data, storage);
       if (customSaveCache) customSaveCache(data);
       return data;
     } catch (retryError) {
@@ -158,8 +159,8 @@ const fetchWithCacheStrategy = async <T>(
 export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: GameFormatted[] }> => {
   const cacheKey = `games_hour_${date}`;
 
-  if (isCacheValid(cacheKey, 2 / 60)) {
-    const cached = getCache<{ [key: string]: GameFormatted[] }>(cacheKey);
+  if (isCacheValid(cacheKey, 2 / 60, sessionStorage)) {
+    const cached = getCache<{ [key: string]: GameFormatted[] }>(cacheKey, sessionStorage);
     if (cached) return cached;
   }
 
@@ -167,6 +168,10 @@ export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: G
     `${EXPO_PUBLIC_API_BASE_URL}/games/hour/${date}`,
     cacheKey,
     {},
+    undefined,
+    undefined,
+    10000,
+    sessionStorage,
   );
 };
 

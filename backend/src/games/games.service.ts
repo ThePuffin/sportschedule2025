@@ -14,7 +14,7 @@ import {
 import { HockeyData } from '../utils/fetchData/hockeyData';
 import { TeamType } from '../utils/interface/team';
 import { UniversityLogos } from '../utils/UniversityLogos';
-import { needRefresh, randomNumber } from '../utils/utils';
+import { needRefresh } from '../utils/utils';
 import { CreateGameDto } from './dto/create-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { Game } from './schemas/game.schema';
@@ -524,14 +524,8 @@ export class GameService {
 
           if (filtredGames.length === 0) continue;
 
-          const gamesIndex = randomNumber(filtredGames.length - 1);
-          const randomGames = filtredGames[gamesIndex];
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          if (new Date(randomGames?.updateDate) < yesterday) {
-            console.info(
-              `Data for ${currentLeague} is stale (older than 24h). Refreshing...`,
-            );
+          if (needRefresh(currentLeague, { data: filtredGames })) {
+            console.info(`Data for ${currentLeague} is stale. Refreshing...`);
             await this.getLeagueGames(currentLeague, false);
           }
         }
@@ -987,26 +981,25 @@ export class GameService {
       return {};
     } else {
       if (gameDate >= yesterdayString) {
-        for (const currentLeague of Object.values(League)) {
+        const leaguesInGames = Array.from(
+          new Set(games.map((g) => g.league).filter(Boolean)),
+        );
+        for (const currentLeague of leaguesInGames) {
           const filtredGames = games.filter(
             ({ isActive, awayTeamId, league }) => {
               return (
                 isActive === true &&
                 awayTeamId !== undefined &&
                 awayTeamId !== '' &&
-                league.toUpperCase() === currentLeague.toUpperCase()
+                league?.toUpperCase() === currentLeague.toUpperCase()
               );
             },
           );
 
-          const gamesIndex = randomNumber(filtredGames.length - 1);
-          const randomGames = filtredGames[gamesIndex];
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          if (new Date(randomGames?.updateDate) < yesterday) {
-            console.info(
-              `Data for ${currentLeague} is stale (older than 24h). Refreshing...`,
-            );
+          if (filtredGames.length === 0) continue;
+
+          if (needRefresh(currentLeague, { data: filtredGames })) {
+            console.info(`Data for ${currentLeague} is stale. Refreshing...`);
             await this.getLeagueGames(currentLeague, false);
           }
         }
