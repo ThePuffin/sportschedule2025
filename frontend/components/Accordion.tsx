@@ -20,6 +20,7 @@ export default function Accordion({
   showScores,
   gamesSelected,
   onSelection,
+  showTime = false,
 }: Readonly<
   AccordionProps & { onRetry?: () => void; showScores?: boolean; onSelection?: (game: GameFormatted) => void }
 >) {
@@ -40,11 +41,11 @@ export default function Accordion({
   const makeCards = () => {
     if (!gamesFiltred?.length) return <NoResults onRetry={onRetry} />;
 
-    return gamesFiltred.map((game) => {
+    return gamesFiltred.map((game, index) => {
       const isSelected = gamesSelected?.some((g) => g._id === game._id || (g.uniqueId && g.uniqueId === game.uniqueId));
       return (
         <div
-          key={`${game.homeTeamId}-${game.startTimeUTC}`}
+          key={game.uniqueId || game._id || `${game.homeTeamId}-${game.startTimeUTC}-${index}`}
           style={{ width: isSmallDevice ? '100%' : 'calc((100% - 30px) / 3)' }}
         >
           <CardLarge
@@ -55,6 +56,7 @@ export default function Accordion({
             showScores={showScores}
             onSelection={onSelection}
             isSelected={isSelected}
+            showTime={showTime}
           />
         </div>
       );

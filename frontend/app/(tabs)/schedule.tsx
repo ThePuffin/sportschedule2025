@@ -7,7 +7,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
 import { FontAwesome6, Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
@@ -27,7 +27,25 @@ import {
 } from '../../utils/fetchData';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
 
+const mergeGames = (initial: FilterGames, remaining: FilterGames): FilterGames => {
+  const merged = { ...initial };
+  Object.keys(remaining).forEach((date) => {
+    if (merged[date]) {
+      const existingIds = new Set(merged[date].map((g) => g.uniqueId));
+      const newGames = remaining[date].filter((g) => !existingIds.has(g.uniqueId));
+      merged[date] = [...merged[date], ...newGames].sort(
+        (a, b) => new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime(),
+      );
+    } else {
+      merged[date] = remaining[date];
+    }
+  });
+  return merged;
+};
+
 export default function Schedule() {
+  const router = useRouter();
+  const { league: leagueParam } = useLocalSearchParams<{ league: string }>();
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamSelected, setTeamSelected] = useState<string>('');
@@ -91,6 +109,13 @@ export default function Schedule() {
       const cachedTeams = getCache<Team[]>('teams');
       const teamSelectedLS = localStorage.getItem('teamSelected') || '';
       const storedLeagues = getCache<string[]>('leaguesSelected') || [];
+
+      let forcedLeague = '';
+      if (leagueParam) {
+        const param = (Array.isArray(leagueParam) ? leagueParam[0] : leagueParam).toUpperCase();
+        forcedLeague = param;
+      }
+
       let foundTeam = cachedTeams?.find((t) => t.uniqueId === teamSelectedLS);
 
       if (!foundTeam || (storedLeagues.length > 0 && !storedLeagues.includes(foundTeam.league))) {
@@ -110,19 +135,19 @@ export default function Schedule() {
         if (cachedTeams) {
           setLeaguesAvailable([selectedTeam.league]);
           setTeams([selectedTeam]);
-          getSelectedTeams(cachedTeams);
+          getSelectedTeams(cachedTeams, forcedLeague);
         }
         const teamsData: Team[] = await fetchTeams();
         setTeams(teamsData);
         // cache teams for offline/cold-start
         saveCache('teams', teamsData);
         // restore selection using freshly fetched teams
-        getSelectedTeams(teamsData);
+        getSelectedTeams(teamsData, forcedLeague);
       } catch (err) {
         console.error('fetch teams failed, using cached teams if available', err);
         if (cachedTeams) {
           setTeams(cachedTeams);
-          getSelectedTeams(cachedTeams);
+          getSelectedTeams(cachedTeams, forcedLeague);
         } else {
           // fallback: try to restore selection from persisted keys (teams unknown)
           getStoredData();
@@ -139,7 +164,7 @@ export default function Schedule() {
       }
     }
     fetchTeamsAndRestore();
-  }, []);
+  }, [leagueParam]);
 
   useFocusEffect(
     useCallback(() => {
@@ -156,9 +181,37 @@ export default function Schedule() {
     }
   }, [teamSelected, teams]);
 
-  const getSelectedTeams = (allTeams: Team[]) => {
+  const getSelectedTeams = (allTeams: Team[], forcedLeague?: string) => {
     let selection = localStorage.getItem('teamSelected') || '';
-    if (selection.length === 0) {
+    let leagueToSet = '';
+
+    if (forcedLeague) {
+      const validLeague = allTeams.some((t) => t.league === forcedLeague);
+      const storedLeagues = getCache<string[]>('leaguesSelected') || [];
+      const isAvailable = storedLeagues.length === 0 || storedLeagues.includes(forcedLeague);
+
+      if (validLeague && isAvailable) {
+        leagueToSet = forcedLeague;
+        const storedTeamsLeagues = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
+        if (storedTeamsLeagues[forcedLeague]) {
+          selection = storedTeamsLeagues[forcedLeague];
+        } else {
+          const favoriteTeams = getCache<string[]>('favoriteTeams') || [];
+          const teamsInLeague = allTeams.filter((t) => t.league === forcedLeague);
+          const fav = favoriteTeams.find((fid) => teamsInLeague.some((t) => t.uniqueId === fid));
+          if (fav) {
+            selection = fav;
+          } else {
+            selection = 'all';
+          }
+        }
+        if (selection === 'all') {
+          localStorage.setItem('leagueSelected', forcedLeague);
+        }
+      }
+    }
+
+    if (!leagueToSet && selection.length === 0) {
       const teamsSelected = getCache<Team[]>('teamsSelected');
 
       let teamsSelectedIds = teamsSelected || [];
@@ -226,6 +279,7 @@ export default function Schedule() {
     setTeamFilter('');
     setMonthFilter([]);
     const finalLeagueId = Array.isArray(leagueSelectedId) ? leagueSelectedId[0] : leagueSelectedId;
+    router.setParams({ league: finalLeagueId });
     localStorage.setItem('leagueSelected', finalLeagueId);
     const teamsAvailableInLeague = teams.filter(({ league }) => league === finalLeagueId);
     allOption.league = finalLeagueId;
@@ -566,6 +620,7 @@ export default function Schedule() {
               gamesFiltred={games}
               open={!isSmallDevice || teamFilter?.length > 0 || i === 0}
               showDate={true}
+              showTime={true}
               isCounted={true}
             />
           </div>
@@ -611,7 +666,14 @@ export default function Schedule() {
           setGames(removeOldGames(smallScheduleData));
           setGamesTeamId(teamSelected);
           setleagueOfSelectedTeam(selectionLeague);
-          scheduleData = await fetchRemainingGamesByLeague(selectionLeague);
+          const remainingScheduleData = await fetchRemainingGamesByLeague(
+            selectionLeague,
+            undefined,
+            50,
+            undefined,
+            true,
+          );
+          scheduleData = mergeGames(smallScheduleData, remainingScheduleData);
         } else {
           scheduleData = await fetchRemainingGamesByTeam(teamSelected);
         }

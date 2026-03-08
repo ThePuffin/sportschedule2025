@@ -62,6 +62,11 @@ export interface Team {
   awayTeamBackgroundColor?: string;
   homeTeamColor?: string;
   homeTeamBackgroundColor?: string;
+  teamLogoDark?: string;
+  wins?: number;
+  losses?: number;
+  ties?: number;
+  otLosses?: number;
 }
 
 export interface FilterGames {
@@ -77,6 +82,7 @@ export type AccordionProps = {
   readonly disableToggle?: boolean;
   readonly showDate?: boolean;
   readonly gamesSelected?: readonly GameFormatted[];
+  readonly showTime?: boolean;
 };
 
 export interface ButtonsProps {

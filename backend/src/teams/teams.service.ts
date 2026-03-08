@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { DeleteResult } from 'mongodb';
 import { Model } from 'mongoose';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -68,6 +69,7 @@ export class TeamService {
       const allActivesTeams: any[] = [];
       let leagues: string[] = [];
       if (leagueParam) {
+        leagues = [leagueParam.toUpperCase()];
       } else {
         leagues = Object.values(League);
       }
@@ -134,9 +136,19 @@ export class TeamService {
     }
   }
 
-  async findAll(): Promise<any[]> {
+  async updateRecords(updates: { uniqueId: string; record: string }[]) {
+    for (const { uniqueId, record } of updates) {
+      await this.updateRecord(uniqueId, record);
+    }
+  }
+
+  async findAll(leagues?: string[]): Promise<any[]> {
+    const filter: any = {};
+    if (leagues && leagues.length > 0) {
+      filter.league = { $in: leagues };
+    }
     const allTeams = await this.teamModel
-      .find()
+      .find(filter)
       .sort({ label: 1 })
       .lean()
       .exec();
@@ -161,7 +173,7 @@ export class TeamService {
     const allTeams = await this.teamModel.find().exec();
     const leagues = allTeams.map((team) => team.league);
     const uniqueLeagues = Array.from(new Set(leagues));
-    return uniqueLeagues.sort();
+    return uniqueLeagues.sort((a, b) => a.localeCompare(b));
   }
 
   async findOne(uniqueId: string) {
@@ -225,7 +237,7 @@ export class TeamService {
     return deleted;
   }
 
-  async removeByLeague(league: string): Promise<any> {
+  async removeByLeague(league: string): Promise<DeleteResult> {
     const filter = { league: league };
     console.log(`Removing teams with league: ${league}`);
     const deleted = await this.teamModel.deleteMany(filter).exec();
@@ -233,12 +245,8 @@ export class TeamService {
     return deleted;
   }
 
-  async removeAll() {
-    await this.teamModel.deleteMany({});
-    const teams = await this.teamModel.find().exec();
-    for (const team of teams) {
-      await this.remove(team.uniqueId);
-    }
+  async removeAll(): Promise<DeleteResult> {
+    return this.teamModel.deleteMany({}).exec();
   }
 
   private async generateLeaguesTeamsAndColorsFiles() {

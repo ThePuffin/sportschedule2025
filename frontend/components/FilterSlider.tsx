@@ -20,10 +20,7 @@ interface FilterSliderProps {
   selectedFilter?: string;
   selectedFilters?: string[];
   onFilterChange?: (value: string) => void;
-  showFavorites?: boolean;
-  hasFavorites?: boolean;
   favoriteValues?: string[];
-  showAll?: boolean;
   style?: StyleProp<ViewStyle>;
   itemStyle?: StyleProp<ViewStyle>;
   selectedItemStyle?: StyleProp<ViewStyle>;

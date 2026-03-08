@@ -8,7 +8,6 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -42,7 +41,7 @@ export default function Calendar() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
-  const [maxTeamsNumber, setMaxTeamsNumber] = useState(6);
+  const maxTeamsNumber = 9;
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [allowedLeagues, setAllowedLeagues] = useState<string[]>([]);
@@ -60,19 +59,6 @@ export default function Calendar() {
       globalThis.window.addEventListener('leaguesUpdated', updateLeagues);
       return () => globalThis.window.removeEventListener('leaguesUpdated', updateLeagues);
     }
-  }, []);
-
-  useEffect(() => {
-    const updateDeviceType = () => {
-      const { width } = Dimensions.get('window');
-      if (width <= 1075) {
-        setMaxTeamsNumber(6);
-      } else {
-        setMaxTeamsNumber(8);
-      }
-    };
-
-    updateDeviceType();
   }, []);
 
   const filteredTeamsSelected = useMemo(() => {

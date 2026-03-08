@@ -29,7 +29,7 @@ export default function CardLarge({
   animateEntry = false,
   verticalMode = false,
   showTime = false,
-}: Readonly<CardsProps & { showTime?: boolean }>) {
+}: Readonly<CardsProps & { showTime?: boolean; showScores?: boolean }>) {
   let { homeTeamShort, awayTeamShort } = data;
   const {
     homeTeamLogo,
@@ -173,7 +173,7 @@ export default function CardLarge({
   }, [isLive, pulseAnim]);
 
   let timeText = '';
-  if ( status === GameStatus.FINISHED) {
+  if (status === GameStatus.FINISHED) {
     timeText = translateWord('ended');
   } else if (status === GameStatus.FINAL) {
     timeText = translateWord('final');

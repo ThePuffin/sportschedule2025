@@ -8,9 +8,9 @@ import { fetchLeagues, getCache, saveCache } from '@/utils/fetchData';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Dimensions, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-const maxFavorites = 5;
+const maxFavorites = 9;
 
 const FavModal = ({
   isOpen,
@@ -87,7 +87,7 @@ const FavModal = ({
   }));
 
   const handleSave = () => {
-    onSave(localFavorites.filter((team) => team !== ''));
+    onSave(localFavorites.filter((team) => team !== '' && localLeagues.includes(team.split('-')[0])));
     saveCache('leaguesSelected', localLeagues);
     saveCache('showScores', showScores);
     if (globalThis.window !== undefined) {
@@ -107,10 +107,10 @@ const FavModal = ({
     <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => hasFavorites && onClose()}>
       <Pressable style={styles.centeredView} onPress={() => hasFavorites && onClose()}>
         <Pressable
-          style={[styles.modalView, { backgroundColor }, isSmallDevice && { width: '90%', maxHeight: '90%' }]}
+          style={[styles.modalView, { backgroundColor }, isSmallDevice && { width: '90%' }]}
           onPress={(e) => e.stopPropagation()}
         >
-          <View style={{ flex: 1 }}>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
             <Text style={[styles.modalText, { color: textColor }]}>{translateWord('leagueSurveilled')}:</Text>
 
             <View style={{ marginBottom: 15, zIndex: 20, flexDirection: 'row', alignItems: 'center' }}>
@@ -153,13 +153,21 @@ const FavModal = ({
                     allowedLeagues={localLeagues}
                   />
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginTop: 15,
+                    marginBottom: 20,
+                  }}
+                >
                   <Text style={{ marginRight: 10, color: textColor }}>{translateWord('scoreView')} :</Text>
                   <ScoreToggle value={showScores} onValueChange={setShowScores} />
                 </View>
               </>
             )}
-          </View>
+          </ScrollView>
 
           <View style={styles.buttonsContainer}>
             {hasFavorites && (
@@ -202,6 +210,7 @@ const styles = StyleSheet.create({
       web: { boxShadow: '0px 2px 4px rgba(0,0,0,0.25)' },
     }),
     width: '50%',
+    maxHeight: '90%',
     minHeight: 300,
     justifyContent: 'space-between',
   },

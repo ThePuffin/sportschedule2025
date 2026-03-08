@@ -7,7 +7,7 @@
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "prestart:frontend": "node updateLeagues.js",
     "start:frontend": "npx react-native start",
-    "start:backend": "nest start"
+    "start:backend": "NODE_OPTIONS='--max-old-space-size=460' nest start"
   },
   "dependencies": {
     "@expo/ngrok": "^4.1.3",

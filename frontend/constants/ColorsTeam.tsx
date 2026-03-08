@@ -495,6 +495,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#522398',
   },
+  'NCAAB-GMU': {
+    color: '#ecb010',
+    backgroundColor: '#016600',
+  },
   'NCAAB-GONZ': {
     color: '#c8102e',
     backgroundColor: '#041e42',
@@ -578,6 +582,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-LSU': {
     color: '#fdd023',
     backgroundColor: '#461d76',
+  },
+  'NCAAB-LUC': {
+    color: '#9d1244',
+    backgroundColor: '#000000',
   },
   'NCAAB-M-OH': {
     color: '#ffffff',
@@ -778,6 +786,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-TEX': {
     color: '#ffffff',
     backgroundColor: '#af5c37',
+  },
+  'NCAAB-TOL': {
+    color: '#ffcd00',
+    backgroundColor: '#0b2240',
   },
   'NCAAB-TTU': {
     color: '#da291c',
@@ -2027,7 +2039,6 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#000000',
   },
-
   'NCAAWH-AU': {
     color: '#ffffff',
     backgroundColor: '#000000',
@@ -2216,7 +2227,15 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#000000',
   },
+  'NCCABB-129704': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
   'NCCABB-129755': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
+  'NCCABB-129761': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
@@ -4616,6 +4635,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#00539b',
   },
+  'WNCAAB-FAIR': {
+    color: '#ebebeb',
+    backgroundColor: '#000000',
+  },
   'WNCAAB-FAMU': {
     color: '#F89728',
     backgroundColor: '#00843d',
@@ -4728,6 +4751,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#f1b82d',
     backgroundColor: '#000000',
   },
+  'WNCAAB-MRMK': {
+    color: '#e8c535',
+    backgroundColor: '#2f4f93',
+  },
   'WNCAAB-MSST': {
     color: '#c1c6c8',
     backgroundColor: '#5d1725',
@@ -4839,6 +4866,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'WNCAAB-STET': {
     color: '#56854e',
     backgroundColor: '#0a5640',
+  },
+  'WNCAAB-SYR': {
+    color: '#ff431b',
+    backgroundColor: '#000e54',
   },
   'WNCAAB-TA&M': {
     color: '#ffffff',

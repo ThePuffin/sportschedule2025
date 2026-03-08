@@ -4,11 +4,14 @@ import {
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
   ParseIntPipe,
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 import { CreateGameDto } from './dto/create-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { GameService } from './games.service';
@@ -22,8 +25,12 @@ export class GamesController {
     return this.GameService.findAll();
   }
   @Get('/team/:teamSelectedId')
-  findByTeam(@Param('teamSelectedId') teamSelectedId: string) {
-    return this.GameService.findByTeam(teamSelectedId);
+  findByTeam(
+    @Param('teamSelectedId') teamSelectedId: string,
+    @Query('startDate') startDate?: string,
+    @Query('clean', new ParseBoolPipe({ optional: true })) clean?: boolean,
+  ) {
+    return this.GameService.findByTeam(teamSelectedId, startDate, clean);
   }
 
   @Get('/filter')
@@ -50,8 +57,11 @@ export class GamesController {
   }
 
   @Get('/hour/:gameDate')
-  findByDateHour(@Param('gameDate') gameDate: string) {
-    return this.GameService.findByDateHour(gameDate);
+  findByDateHour(
+    @Param('gameDate') gameDate: string,
+    @Query('leagues') leagues?: string,
+  ) {
+    return this.GameService.findByDateHour(gameDate, leagues);
   }
 
   @Get('/league/:league')
@@ -59,8 +69,19 @@ export class GamesController {
     @Param('league') league: string,
     @Query('maxResults', new ParseIntPipe({ optional: true }))
     maxResults?: number,
+    @Query('skip', new ParseIntPipe({ optional: true }))
+    skip?: number,
+    @Query('startDate') startDate?: string,
+    @Query('isHome', new ParseBoolPipe({ optional: true }))
+    isHome?: boolean,
   ) {
-    return this.GameService.findByLeague(league, maxResults);
+    return this.GameService.findByLeague(
+      league,
+      maxResults,
+      skip,
+      startDate,
+      isHome,
+    );
   }
 
   @Get(':uniqueId')
@@ -68,6 +89,7 @@ export class GamesController {
     return this.GameService.findOne(uniqueId);
   }
 
+  @UseGuards(ApiKeyGuard)
   @Post()
   async create(@Body() createGameDto: CreateGameDto) {
     this.GameService.create(createGameDto);
@@ -88,6 +110,7 @@ export class GamesController {
     return this.GameService.fetchGamesScores();
   }
 
+  @UseGuards(ApiKeyGuard)
   @Patch(':uniqueId')
   update(
     @Param('uniqueId') uniqueId: string,
@@ -96,21 +119,25 @@ export class GamesController {
     return this.GameService.update(uniqueId, updateGameDto);
   }
 
+  @UseGuards(ApiKeyGuard)
   @Delete('/league/:league')
   removeLeague(@Param('league') league: string) {
     return this.GameService.removeLeague(league);
   }
 
+  @UseGuards(ApiKeyGuard)
   @Delete('all')
   removeAll() {
     return this.GameService.removeAll();
   }
 
+  @UseGuards(ApiKeyGuard)
   @Delete('duplicate')
   removeDuplicate() {
     return this.GameService.removeDuplicatesAndOlds();
   }
 
+  @UseGuards(ApiKeyGuard)
   @Delete(':uniqueId')
   remove(@Param('uniqueId') uniqueId: string) {
     return this.GameService.remove(uniqueId);
