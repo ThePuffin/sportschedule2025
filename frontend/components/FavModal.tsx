@@ -10,7 +10,7 @@ import { translateWord } from '@/utils/utils';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-const maxFavorites = 9;
+import { maxFavoritesNumber } from '../constants/Constants';
 
 const FavModal = ({
   isOpen,
@@ -56,7 +56,7 @@ const FavModal = ({
         setAllLeagues(filtered);
         saveCache('allLeagues', filtered);
         const cachedLeagues = getCache<string[]>('leaguesSelected');
-        // Si pas de cache, on sélectionne tout par défaut
+        // If no cache, select all by default
         setLocalLeagues(cachedLeagues && cachedLeagues.length > 0 ? cachedLeagues : filtered);
       });
     }
@@ -148,7 +148,7 @@ const FavModal = ({
                   <TeamReorderSelector
                     teams={localFavorites}
                     allTeams={teamsForFavorites}
-                    maxTeams={maxFavorites}
+                    maxTeams={maxFavoritesNumber}
                     onChange={setLocalFavorites}
                     allowedLeagues={localLeagues}
                   />

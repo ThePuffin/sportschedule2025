@@ -18,9 +18,16 @@ import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import LoadingView from '../../components/LoadingView';
 import { GameStatus, League } from '../../constants/enum';
 import { fetchDateRangeLimits, getDateRangeLimits } from '../../utils/dateRange';
-import { fetchGamesByHour, fetchLeagues, getCache, saveCache } from '../../utils/fetchData';
+import { fetchGamesByHour, fetchLeagues, fetchLiveScores, getCache, saveCache } from '../../utils/fetchData';
 import { GameFormatted } from '../../utils/types';
 import { randomNumber, translateWord } from '../../utils/utils';
+
+const formatDateLocal = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const groupGamesByHour = (games: GameFormatted[]) => {
   const grouped: { [key: string]: GameFormatted[] } = {};
@@ -39,13 +46,13 @@ const groupGamesByHour = (games: GameFormatted[]) => {
 
 const getNextGamesFromApi = async (date: Date): Promise<{ [key: string]: GameFormatted[] }> => {
   const today = new Date(date);
-  const todayYYYYMMDD = today.toISOString().split('T')[0];
+  const todayYYYYMMDD = formatDateLocal(today);
   const newFetch: { [key: string]: GameFormatted[] } = {};
   for (let i = 0; i <= 5; i++) {
     const nextDate = new Date(todayYYYYMMDD);
     nextDate.setDate(nextDate.getDate() + i);
-    const nextYYYYMMDD = nextDate.toISOString().split('T')[0];
-    const gamesByHour = await fetchGamesByHour(nextYYYYMMDD);
+    const nextYYYYMMDD = formatDateLocal(nextDate);
+    const gamesByHour = await fetchGamesByHour(nextYYYYMMDD, 1000);
     newFetch[nextYYYYMMDD] = Object.values(gamesByHour).flat();
   }
   // Return fetched days to caller so caller (component) can merge into its cache and persist
@@ -55,7 +62,7 @@ const getNextGamesFromApi = async (date: Date): Promise<{ [key: string]: GameFor
 const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
   const limitDate = new Date();
   limitDate.setDate(limitDate.getDate() - 1);
-  const limitDateStr = limitDate.toISOString().split('T')[0];
+  const limitDateStr = formatDateLocal(limitDate);
   const prunedEntries = Object.entries(cache).filter(([date]) => date >= limitDateStr);
   return Object.fromEntries(prunedEntries);
 };
@@ -105,6 +112,11 @@ const GameofTheDayContent = () => {
   const gamesDayCache = useRef<{ [key: string]: GameFormatted[] }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
+  const gamesRef = useRef<GameFormatted[]>([]);
+
+  useEffect(() => {
+    gamesRef.current = games;
+  }, [games]);
 
   const selectDateRef = useRef(selectDate);
   const isScrollingHorizontallyRef = useRef(isScrollingHorizontally);
@@ -113,6 +125,71 @@ const GameofTheDayContent = () => {
   useEffect(() => {
     selectDateRef.current = selectDate;
   }, [selectDate]);
+
+  const fetchAndMergeLiveScores = useCallback(async (currentGames: GameFormatted[]) => {
+    const now = new Date();
+    const gamesToUpdate = currentGames.filter((g) => {
+      const startTime = new Date(g.startTimeUTC);
+      const hoursDiff = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+      return (
+        hoursDiff > -0.25 && g.gameStatus !== 'FINAL' && g.gameStatus !== 'FINISHED' && g.gameStatus !== 'POSTPONED'
+      );
+    });
+
+    if (gamesToUpdate.length === 0) return null;
+
+    const ids = gamesToUpdate.map((g) => g.uniqueId);
+    const chunkSize = 6;
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      chunks.push(ids.slice(i, i + chunkSize));
+    }
+
+    try {
+      const results = await Promise.all(chunks.map((chunk) => fetchLiveScores(chunk).catch(() => null)));
+      const liveData = results.reduce<GameFormatted[]>((acc, res) => {
+        if (Array.isArray(res)) {
+          return acc.concat(res);
+        }
+        return acc;
+      }, []);
+
+      const newGames = currentGames.map((g) => {
+        const liveGame = liveData.find((l) => l.uniqueId === g.uniqueId);
+        return liveGame ? { ...g, ...liveGame } : g;
+      });
+      return newGames;
+    } catch (error) {
+      console.error('Error fetching live scores:', error);
+    }
+    return null;
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let intervalId: NodeJS.Timeout;
+
+      const updateLiveScores = async () => {
+        const currentGames = gamesRef.current;
+        if (currentGames.length === 0) return;
+
+        const updatedGames = await fetchAndMergeLiveScores(currentGames);
+        if (updatedGames) {
+          setGames(updatedGames);
+          const todayStr = formatDateLocal(new Date());
+          const viewedDateStr = formatDateLocal(selectDateRef.current);
+          if (todayStr === viewedDateStr && gamesDayCache.current[todayStr]) {
+            gamesDayCache.current[todayStr] = updatedGames;
+          }
+        }
+      };
+
+      updateLiveScores();
+      intervalId = setInterval(updateLiveScores, 30000);
+
+      return () => clearInterval(intervalId);
+    }, [fetchAndMergeLiveScores]),
+  );
 
   useEffect(() => {
     isScrollingHorizontallyRef.current = isScrollingHorizontally;
@@ -188,6 +265,8 @@ const GameofTheDayContent = () => {
         return 0;
       });
     };
+
+    // TODO: fix the terminé quand le match est en cours
     const relevantGames = games
       .filter(
         (game) =>
@@ -208,13 +287,29 @@ const GameofTheDayContent = () => {
 
     relevantGames.forEach((game) => {
       const status = getGamesStatus(game);
-      if (status === GameStatus.IN_PROGRESS && (!game.homeTeamScore || game.homeTeamScore === null)) {
+      const hasScore = game.homeTeamScore != null && game.awayTeamScore != null;
+      const startTime = new Date(game.startTimeUTC);
+      const isBeforeStart = new Date() < startTime;
+      const isLive =
+        status === GameStatus.IN_PROGRESS ||
+        (game.gameStatus &&
+          ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
+            game.gameStatus!.includes(s),
+          ) &&
+          !game.gameStatus.toUpperCase().includes('FINAL') &&
+          !game.gameStatus.toUpperCase().includes('ENDED')) ||
+        (hasScore && status !== GameStatus.FINAL && status !== GameStatus.FINISHED);
+
+      if (isLive && (game.gameClock || game.gamePeriod)) {
         inProgress.push(game);
-      } else if (status === GameStatus.FINAL) {
+      } else if (status === GameStatus.FINAL || game.gameStatus?.toUpperCase().includes('FINAL')) {
         final.push(game);
-      } else if (status === GameStatus.FINISHED || game.homeTeamScore != null) {
+      } else if (status === GameStatus.FINISHED || game.gameStatus?.toUpperCase().includes('ENDED')) {
+        finished.push(game);
+      } else if (hasScore && !isBeforeStart) {
         finished.push(game);
       } else {
+        // Game is actually scheduled
         scheduled.push(game);
       }
     });
@@ -248,88 +343,106 @@ const GameofTheDayContent = () => {
     return groups;
   }, [games, selectLeagues, teamSelectedId, activeFilter, favoriteTeams]);
 
-  const getGamesFromApi = useCallback(async (dateToFetch: Date) => {
-    const YYYYMMDD = new Date(dateToFetch).toISOString().split('T')[0];
-    const today = new Date().toISOString().split('T')[0];
+  const getGamesFromApi = useCallback(
+    async (dateToFetch: Date) => {
+      const YYYYMMDD = formatDateLocal(dateToFetch);
+      const today = formatDateLocal(new Date());
 
-    if (YYYYMMDD < today) {
-      if (gamesDayCache.current[YYYYMMDD]) {
-        delete gamesDayCache.current[YYYYMMDD];
-        saveCache('gamesDay', gamesDayCache.current);
+      if (YYYYMMDD < today) {
+        if (gamesDayCache.current[YYYYMMDD]) {
+          delete gamesDayCache.current[YYYYMMDD];
+          saveCache('gamesDay', gamesDayCache.current);
+        }
+        try {
+          const gamesByHourData = await fetchGamesByHour(YYYYMMDD, 1000);
+          const gamesOfTheDay = Object.values(gamesByHourData).flat();
+          setGames(gamesOfTheDay);
+        } catch (error) {
+          console.error(error);
+          setGames([]);
+        }
+        return;
       }
+
+      // Check cache first
+      const cachedGames = gamesDayCache.current[YYYYMMDD];
+      if (cachedGames) {
+        let gamesToDisplay = cachedGames;
+
+        if (YYYYMMDD === today) {
+          const yesterday = new Date(dateToFetch);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayYYYYMMDD = yesterday.toISOString().split('T')[0];
+          const cachedYesterday = gamesDayCache.current[yesterdayYYYYMMDD];
+
+          if (cachedYesterday) {
+            const nowMinusThreeHour = new Date(Date.now() - 3 * 60 * 60 * 1000);
+            const recentYesterdayGames = cachedYesterday.filter(
+              ({ startTimeUTC = '', homeTeamScore, awayTeamScore }) =>
+                new Date(startTimeUTC) >= nowMinusThreeHour && homeTeamScore === null && awayTeamScore === null,
+            );
+            const combined = [...recentYesterdayGames, ...cachedGames];
+            gamesToDisplay = combined.filter(
+              (game, index, self) => index === self.findIndex((t) => t._id === game._id),
+            );
+          }
+          setGames(gamesToDisplay);
+
+          // Try to update live scores immediately for cached content
+          fetchAndMergeLiveScores(gamesToDisplay).then((updated) => {
+            if (updated) {
+              setGames(updated);
+              gamesDayCache.current[YYYYMMDD] = updated;
+            }
+          });
+        } else {
+          setGames(gamesToDisplay);
+        }
+      }
+
+      // Fetch from API if not in cache
       try {
-        const gamesByHourData = await fetchGamesByHour(YYYYMMDD);
-        const gamesOfTheDay = Object.values(gamesByHourData).flat();
-        setGames(gamesOfTheDay);
+        const gamesByHourData = await fetchGamesByHour(YYYYMMDD, 1000);
+        let allGames = Object.values(gamesByHourData).flat();
+
+        // Try to update live scores immediately for new content
+        if (YYYYMMDD === today) {
+          const updated = await fetchAndMergeLiveScores(allGames);
+          if (updated) {
+            allGames = updated;
+          }
+        }
+
+        setGames(allGames);
+        gamesDayCache.current[YYYYMMDD] = allGames;
+
+        if (YYYYMMDD === today) {
+          getNextGamesFromApi(dateToFetch).then((nextFetchedGames) => {
+            gamesDayCache.current = pruneOldGamesCache({ ...gamesDayCache.current, ...nextFetchedGames });
+            saveCache('gamesDay', gamesDayCache.current);
+          });
+        } else {
+          // Pour les autres jours, on sauvegarde le cache qui a été mis à jour dans le if/else
+          saveCache('gamesDay', gamesDayCache.current);
+        }
       } catch (error) {
         console.error(error);
-        setGames([]);
-      }
-      return;
-    }
-
-    // Check cache first
-    const cachedGames = gamesDayCache.current[YYYYMMDD];
-    if (cachedGames) {
-      let gamesToDisplay = cachedGames;
-
-      if (YYYYMMDD === today) {
-        const yesterday = new Date(dateToFetch);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayYYYYMMDD = yesterday.toISOString().split('T')[0];
-        const cachedYesterday = gamesDayCache.current[yesterdayYYYYMMDD];
-
-        if (cachedYesterday) {
-          const nowMinusThreeHour = new Date(Date.now() - 3 * 60 * 60 * 1000);
-          const recentYesterdayGames = cachedYesterday.filter(
-            ({ startTimeUTC = '', homeTeamScore, awayTeamScore }) =>
-              new Date(startTimeUTC) >= nowMinusThreeHour && homeTeamScore === null && awayTeamScore === null,
-          );
-          const combined = [...recentYesterdayGames, ...cachedGames];
-          gamesToDisplay = combined.filter((game, index, self) => index === self.findIndex((t) => t._id === game._id));
+        if (!cachedGames) {
+          gamesDayCache.current[YYYYMMDD] = [];
+          const prunedEmpty = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
+          gamesDayCache.current = prunedEmpty;
+          saveCache('gamesDay', prunedEmpty);
+          setGames([]);
         }
-        setGames(gamesToDisplay);
-      } else {
-        setGames(gamesToDisplay);
       }
-    }
-
-    // Fetch from API if not in cache
-    try {
-      const gamesByHourData = await fetchGamesByHour(YYYYMMDD);
-      const gamesOfTheDay = Object.values(gamesByHourData).flat();
-      gamesDayCache.current[YYYYMMDD] = gamesOfTheDay;
-      setGames(gamesOfTheDay);
-
-      if (YYYYMMDD === today) {
-        getNextGamesFromApi(dateToFetch).then((nextFetchedGames) => {
-          Object.entries(nextFetchedGames).forEach(([date, games]) => {
-            gamesDayCache.current[date] = games;
-          });
-          const pruned = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
-          gamesDayCache.current = pruned;
-          saveCache('gamesDay', pruned);
-        });
-      }
-      const pruned = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
-      gamesDayCache.current = pruned;
-      saveCache('gamesDay', pruned);
-    } catch (error) {
-      console.error(error);
-      if (!cachedGames) {
-        gamesDayCache.current[YYYYMMDD] = [];
-        const prunedEmpty = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
-        gamesDayCache.current = prunedEmpty;
-        saveCache('gamesDay', prunedEmpty);
-        setGames([]);
-      }
-    }
-  }, []);
+    },
+    [fetchAndMergeLiveScores],
+  );
 
   const handleDateChange = useCallback(
     (startDate: Date, endDate: Date) => {
-      const dateStr = startDate.toISOString().split('T')[0];
-      const currentStr = selectDateRef.current.toISOString().split('T')[0];
+      const dateStr = formatDateLocal(startDate);
+      const currentStr = formatDateLocal(selectDateRef.current);
 
       router.setParams({ date: dateStr });
 
@@ -524,14 +637,20 @@ const GameofTheDayContent = () => {
   useEffect(() => {
     const updateLeagues = () => {
       const stored = getCache<League[]>('leaguesSelected');
-      if (stored) setSelectLeagues(stored);
-      if (stored) setUserLeagues(stored);
+      if (stored) {
+        setSelectLeagues(stored);
+        setUserLeagues(stored);
+        gamesDayCache.current = {};
+        saveCache('gamesDay', {});
+        setIsLoading(true);
+        getGamesFromApi(selectDateRef.current).finally(() => setIsLoading(false));
+      }
     };
     if (globalThis.window !== undefined) {
       globalThis.window.addEventListener('leaguesUpdated', updateLeagues);
       return () => globalThis.window.removeEventListener('leaguesUpdated', updateLeagues);
     }
-  }, []);
+  }, [getGamesFromApi]);
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -555,7 +674,7 @@ const GameofTheDayContent = () => {
       }
 
       // Only show loader if there's no cached data for today
-      const YYYYMMDD = new Date(selectDate).toISOString().split('T')[0];
+      const YYYYMMDD = formatDateLocal(new Date(selectDate));
       const hasCachedDataForToday = gamesDayCache.current[YYYYMMDD]?.length > 0;
 
       if (!hasCachedDataForToday) {
@@ -579,10 +698,10 @@ const GameofTheDayContent = () => {
 
     if (param) {
       const parsed = new Date(param);
-      if (isNaN(parsed.getTime())) {
+      if (Number.isNaN(parsed.getTime())) {
         invalidParam = true;
       } else {
-        const parsedStr = parsed.toISOString().split('T')[0];
+        const parsedStr = formatDateLocal(parsed);
         if (/^\d{4}-\d{2}-\d{2}$/.test(param) && param !== parsedStr) {
           invalidParam = true;
         } else {
@@ -602,8 +721,8 @@ const GameofTheDayContent = () => {
       }, 0);
     }
 
-    const dStr = d.toISOString().split('T')[0];
-    const currentStr = selectDate.toISOString().split('T')[0];
+    const dStr = formatDateLocal(d);
+    const currentStr = formatDateLocal(selectDate);
 
     if (dStr === currentStr) {
       isInternalChange.current = false;
@@ -655,7 +774,6 @@ const GameofTheDayContent = () => {
                     <FilterSlider
                       selectedFilter={activeFilter}
                       onFilterChange={handleFilterChange}
-                      hasFavorites={hasFavorites}
                       data={[
                         { label: translateWord('all'), value: 'ALL' },
                         ...userLeagues.filter((l) => l !== 'ALL').map((l) => ({ label: l, value: l })),

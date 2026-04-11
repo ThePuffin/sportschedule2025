@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 
-// Helper pour formater la date en YYYY-MM-DD (heure locale)
+// Helper to format date to YYYY-MM-DD (local time)
 const toDateString = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -15,7 +15,7 @@ const toDateString = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-// Helper pour créer une date locale depuis YYYY-MM-DD
+// Helper to create local date from YYYY-MM-DD
 const parseDateString = (dateStr: string) => {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
@@ -36,7 +36,7 @@ export default function DateRangePicker({
   const textDisabledColor = useThemeColor({ light: '#d9e1e8', dark: '#444444' }, 'text');
   const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
 
-  // État temporaire pour la sélection de plage en cours
+  // Temporary state for current range selection
   const [tempRange, setTempRange] = useState<{ start: string | null; end: string | null }>({
     start: null,
     end: null,
@@ -48,7 +48,7 @@ export default function DateRangePicker({
     }
   }, []);
 
-  // Synchronisation avec les props
+  // Synchronize with props
   useEffect(() => {
     if (!selectDate) {
       setTempRange({
@@ -58,7 +58,7 @@ export default function DateRangePicker({
     }
   }, [dateRange, selectDate]);
 
-  // Fermer le calendrier si on clique en dehors
+  // Close calendar if clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -77,22 +77,22 @@ export default function DateRangePicker({
     const dateStr = day.dateString;
 
     if (selectDate) {
-      // Mode date unique
+      // Single date mode
       const date = parseDateString(dateStr);
       date.setHours(23, 59, 59, 999);
       onDateChange(date, date);
       setIsOpen(false);
     } else {
-      // Mode plage de dates
+      // Date range mode
       if (!tempRange.start || (tempRange.start && tempRange.end)) {
-        // Nouvelle sélection (premier clic)
+        // New selection (first click)
         setTempRange({ start: dateStr, end: null });
       } else {
-        // Fin de sélection (deuxième clic)
+        // End of selection (second click)
         let start = tempRange.start;
         let end = dateStr;
 
-        // Inverser si la fin est avant le début
+        // Invert if end is before start
         if (end < start) {
           [start, end] = [end, start];
         }
@@ -125,7 +125,7 @@ export default function DateRangePicker({
         if (end) {
           marked[end] = { endingDay: true, color, textColor, selected: true };
 
-          // Remplir les dates intermédiaires
+          // Fill intermediate dates
           let curr = parseDateString(start);
           const last = parseDateString(end);
           curr.setDate(curr.getDate() + 1);
@@ -136,7 +136,7 @@ export default function DateRangePicker({
             curr.setDate(curr.getDate() + 1);
           }
         } else {
-          // Si seul le début est sélectionné, on le marque comme début et fin visuellement
+          // If only start is selected, mark as both start and end visually
           marked[start] = { startingDay: true, endingDay: true, color, textColor, selected: true };
         }
       }

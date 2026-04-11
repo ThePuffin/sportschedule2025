@@ -198,31 +198,69 @@ export class HockeyData {
     try {
       let fetchGames;
       if (league === League.NHL) {
-        const fetchedGames = await fetch(
-          `https://api-web.nhle.com/v1/club-schedule-season/${id}/now`,
+        const seasons = this.getSeasonsToFetch();
+        let allGames = [];
+        for (const season of seasons) {
+          const fetchedGames = await fetch(
+            `https://api-web.nhle.com/v1/club-schedule-season/${id}/${season}`,
+          );
+          const tempGames = await fetchedGames.json();
+          const games = tempGames.games || [];
+          allGames = allGames.concat(games);
+        }
+        // Remove duplicates based on game id or date
+        const uniqueGames = allGames.filter(
+          (game, index, self) =>
+            index === self.findIndex((g) => g.id === game.id),
         );
-        const tempGames = await fetchedGames.json();
-
-        fetchGames = await tempGames.games;
+        fetchGames = uniqueGames;
       }
       if (league === League.PWHL) {
-        const fetchedGames = await fetch(
-          `${pwhlAPI}?feed=modulekit&view=schedule&key=446521baf8c38984&client_code=pwhl`,
+        const seasons = ['2024', '2023']; // PWHL seasons
+        let allGames = [];
+        for (const season of seasons) {
+          const fetchedGames = await fetch(
+            `${pwhlAPI}index.php?feed=modulekit&view=schedule&season_id=${season}&key=446521baf8c38984&client_code=pwhl&fmt=json`,
+          );
+          const response = await fetchedGames.json();
+          const games = response?.SiteKit?.Schedule || [];
+          const filteredGames = games.filter(
+            (game) =>
+              game.home_team_code === id || game.visiting_team_code === id,
+          );
+          allGames = allGames.concat(filteredGames);
+        }
+        // Remove duplicates
+        const uniqueGames = allGames.filter(
+          (game, index, self) =>
+            index === self.findIndex((g) => g.id === game.id),
         );
-        const allFetchGames = (await fetchedGames.json()).SiteKit.Schedule;
-        fetchGames = allFetchGames.filter(
-          (game) =>
-            game.home_team_code === id || game.visiting_team_code === id,
-        );
+        fetchGames = uniqueGames;
         console.info('yes', id);
-        return (await fetchGames.games) || fetchGames;
+        return fetchGames;
       }
       console.info('yes', id);
-      return (await fetchGames.games) || fetchGames;
+      return fetchGames;
     } catch (error) {
       console.error('Error fetching games:', id, error);
       throw id;
     }
+  };
+
+  getSeasonsToFetch = () => {
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    let currentSeason: string;
+    let previousSeason: string;
+    if (currentMonth >= 9) {
+      // Saison commence en septembre
+      currentSeason = `${currentYear}${currentYear + 1}`;
+      previousSeason = `${currentYear - 1}${currentYear}`;
+    } else {
+      currentSeason = `${currentYear - 1}${currentYear}`;
+      previousSeason = `${currentYear - 2}${currentYear - 1}`;
+    }
+    return ['now', currentSeason, previousSeason];
   };
 
   getPWHLStandings = async (seasonId?: string) => {
@@ -234,7 +272,14 @@ export class HockeyData {
         const seasonsJson = await seasonsResponse.json();
         const seasons = seasonsJson?.SiteKit?.Seasons;
         if (Array.isArray(seasons) && seasons.length > 0) {
-          seasonId = seasons.at(-1).season_id;
+          const regularSeason = [...seasons]
+            .reverse()
+            .find((s) => s.season_name.includes('Regular Season'));
+          if (regularSeason) {
+            seasonId = regularSeason.season_id;
+          } else {
+            seasonId = seasons.at(-1).season_id;
+          }
         }
       }
 
@@ -252,11 +297,21 @@ export class HockeyData {
       standingsList.forEach((team) => {
         const code = team.team_code;
         if (code) {
-          const wins = Number.parseInt(team.wins, 10) || 0;
+          let wins = Number.parseInt(team.wins, 10) || 0;
           const losses = Number.parseInt(team.losses, 10) || 0;
+          const otWins = Number.parseInt(team.ot_wins, 10) || 0;
+          const shootoutWins = Number.parseInt(team.shootout_wins, 10) || 0;
           const otLosses =
             (Number.parseInt(team.ot_losses, 10) || 0) +
             (Number.parseInt(team.shootout_losses, 10) || 0);
+          const gamesPlayed = Number.parseInt(team.games_played, 10) || 0;
+
+          // The API is inconsistent. For some teams, 'wins' is total wins, for others it's regulation wins.
+          // We check if the sum of wins, losses, and otLosses equals gamesPlayed.
+          // If it doesn't, we assume 'wins' is regulation wins and add OT/SO wins to it.
+          if (gamesPlayed > 0 && wins + losses + otLosses !== gamesPlayed) {
+            wins += otWins + shootoutWins;
+          }
           records[code] = `${wins}-${losses}-${otLosses}`;
         }
       });
@@ -431,22 +486,35 @@ export class HockeyData {
 
       return allGames
         .filter((game) => game.date_played === date)
-        .map((game) => ({
-          homeTeamScore: Number(game.home_goal_count),
-          awayTeamScore: Number(game.visiting_goal_count),
-          homeTeamShort: game.home_team_code,
-          awayTeamShort: game.visiting_team_code,
-          homeTeamId: `${League.PWHL}-${game.home_team_code}`,
-          awayTeamId: `${League.PWHL}-${game.visiting_team_code}`,
-          isFinal: game.final === '1',
-          homeTeamRecord: standings[game.home_team_code] || '',
-          awayTeamRecord: standings[game.visiting_team_code] || '',
-          status: game.game_status,
-          startTimeUTC: new Date(game.GameDateISO8601).toISOString(),
-          uniqueId: game.id,
-          gameDate: date,
-          league: League.PWHL,
-        }));
+        .map((game) => {
+          let gameStatus = game.game_status;
+          if (
+            gameStatus === 'In Progress' &&
+            (game as any).game_clock &&
+            (game as any).period
+          ) {
+            gameStatus = `${(game as any).game_clock} - ${(game as any).period}`;
+          }
+          return {
+            homeTeamScore: Number(game.home_goal_count),
+            awayTeamScore: Number(game.visiting_goal_count),
+            homeTeamShort: game.home_team_code,
+            awayTeamShort: game.visiting_team_code,
+            homeTeamId: `${League.PWHL}-${game.home_team_code}`,
+            awayTeamId: `${League.PWHL}-${game.visiting_team_code}`,
+            isFinal: game.final === '1',
+            homeTeamRecord: standings[game.home_team_code] || '',
+            awayTeamRecord: standings[game.visiting_team_code] || '',
+            status: game.game_status,
+            gameStatus: gameStatus,
+            gameClock: (game as any).game_clock,
+            gamePeriod: (game as any).period,
+            startTimeUTC: new Date(game.GameDateISO8601).toISOString(),
+            uniqueId: game.id,
+            gameDate: date,
+            league: League.PWHL,
+          };
+        });
     } catch (error) {
       console.error('Error fetching PWHL scores:', error);
       return [];

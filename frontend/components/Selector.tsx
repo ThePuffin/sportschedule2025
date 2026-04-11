@@ -350,7 +350,7 @@ export default function Selector({
                 </TouchableOpacity>
               </View>
 
-              {/* Recherche */}
+              {/* Search */}
               {allOptions.length > 10 && (
                 <View style={[styles.searchContainer, { backgroundColor: itemBackgroundColor }]}>
                   <Icon name="search" type="font-awesome" size={14} color="#999" style={{ marginRight: 8 }} />
@@ -366,7 +366,7 @@ export default function Selector({
                 </View>
               )}
 
-              {/* Filtre par ligue */}
+              {/* Filter by league */}
               {uniqueLeagues.length > 1 && uniqueLeagues.length < allOptions.length && (
                 <View style={styles.leagueFilterContainer}>
                   {(() => {
@@ -411,7 +411,7 @@ export default function Selector({
                 </View>
               )}
 
-              {/* Liste des options */}
+              {/* Options list */}
               <FlatList
                 data={listData}
                 keyExtractor={(item) => item.id}
@@ -486,7 +486,7 @@ export default function Selector({
                 }}
               />
 
-              {/* Boutons Valider / Annuler */}
+              {/* Validate / Cancel buttons */}
               <View style={styles.buttonsContainer}>
                 <Pressable
                   style={[

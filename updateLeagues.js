@@ -53,7 +53,7 @@ async function updateData() {
       console.error('❌ Unexpected response format for teams (expected array)');
     } else {
       const teamsObj = {};
-      // Tri alphabétique pour un fichier plus propre
+      // Alphabetical sort for a cleaner file
       teams.sort((a, b) => {
         const nameA = a.name || a.teamCommonName || '';
         const nameB = b.name || b.teamCommonName || '';
@@ -61,7 +61,7 @@ async function updateData() {
       });
 
       teams.forEach((t) => {
-        // On cherche l'ID et le Nom dans les champs probables
+        // Look for ID and Name in likely fields
         const key = t.uniqueId || t.id;
         const value = t.teamCommonName || t.name || t.displayName;
 
@@ -72,7 +72,7 @@ async function updateData() {
 
       const fileContent = [
         'export const TeamsEnum: Record<string, string> = {',
-        // Utilisation de guillemets doubles pour la valeur pour gérer les apostrophes (ex: St. John's)
+        // Use double quotes for the value to handle apostrophes (e.g., St. John's)
         ...Object.keys(teamsObj).map((key) => `  '${key}': "${teamsObj[key].replace(/"/g, '\\"')}",`),
         '};',
         '',

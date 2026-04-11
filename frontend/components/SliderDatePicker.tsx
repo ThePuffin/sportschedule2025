@@ -42,7 +42,7 @@ export default function SliderDatePicker({
   const { width: windowWidth } = useWindowDimensions();
   const today = new Date();
 
-  // Sécurisation des dates limites (conversion string -> Date si nécessaire)
+  // Secure date limits (string -> Date conversion if necessary)
   const safeMinDate = useMemo(() => (minDate ? new Date(minDate) : undefined), [minDate]);
   const safeMaxDate = useMemo(() => (maxDate ? new Date(maxDate) : undefined), [maxDate]);
 

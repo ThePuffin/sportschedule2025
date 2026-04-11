@@ -1,9 +1,11 @@
 import { ThemedText } from '@/components/ThemedText';
-import { leagueLogos } from '@/constants/enum';
+import { GameStatus, League, leagueLogos, leagueMapping } from '@/constants/enum';
+import { getGamesStatus } from '@/utils/date';
+import { fetchLiveScores } from '@/utils/fetchData';
 import { GameFormatted } from '@/utils/types';
-import { generateICSFile, translateWord } from '@/utils/utils';
+import { addFavoriteTeam, generateICSFile, translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
 
 interface GameModalProps {
@@ -11,9 +13,42 @@ interface GameModalProps {
   onClose: () => void;
   data: GameFormatted;
   gradientStyle: any;
+  favoriteTeams: string[];
+  showScores?: boolean;
 }
 
-export default function GameModal({ visible, onClose, data, gradientStyle }: GameModalProps) {
+export default function GameModal({
+  visible,
+  onClose,
+  data,
+  gradientStyle,
+  favoriteTeams,
+  showScores = true,
+}: Readonly<GameModalProps>) {
+  const [liveGame, setLiveGame] = useState<GameFormatted | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      const fetchLiveGameData = async () => {
+        const gameTime = new Date(data.startTimeUTC);
+        const now = new Date();
+        const hoursDiff = (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
+
+        if (hoursDiff > -0.25 && hoursDiff < 5 && data.gameStatus !== 'FINAL' && data.gameStatus !== 'FINISHED') {
+          const liveScores = await fetchLiveScores([data.uniqueId]);
+          if (liveScores && liveScores.length > 0) {
+            setLiveGame(liveScores[0]);
+          }
+        }
+      };
+
+      fetchLiveGameData();
+    } else {
+      setLiveGame(null);
+    }
+  }, [visible, data.uniqueId, data.startTimeUTC, data.gameStatus]);
+
+  const displayData = liveGame || data;
   const {
     startTimeUTC,
     homeTeamLogo,
@@ -22,6 +57,8 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
     awayTeamLogoDark,
     homeTeam,
     awayTeam,
+    homeTeamId,
+    awayTeamId,
     arenaName,
     placeName,
     homeTeamScore,
@@ -29,10 +66,60 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
     homeTeamRecord,
     awayTeamRecord,
     urlLive,
-  } = data;
+    league,
+    gameStatus,
+    gameClock,
+    gamePeriod,
+  } = displayData;
 
   const hasScore = homeTeamScore != null && awayTeamScore != null;
-  const isStarted = startTimeUTC ? new Date(startTimeUTC) < new Date() : false;
+  const status = getGamesStatus(displayData);
+  const isToday = new Date().toDateString() === new Date(startTimeUTC).toDateString();
+  const diffHours = (new Date().getTime() - new Date(startTimeUTC).getTime()) / (1000 * 60 * 60);
+  const isStarted3hAgo = diffHours > 3;
+  const isLive =
+    status === GameStatus.IN_PROGRESS ||
+    (!!gameStatus &&
+      ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
+        gameStatus.includes(s),
+      ) &&
+      !gameStatus.toUpperCase().includes('FINAL') &&
+      !gameStatus.toUpperCase().includes('ENDED')) ||
+    (hasScore && isToday && status !== GameStatus.FINISHED && status !== GameStatus.FINAL);
+  const isGameFinishedByStatus =
+    gameStatus?.toUpperCase().includes('FINAL') ||
+    gameStatus?.toUpperCase().includes('ENDED') ||
+    status === GameStatus.FINAL ||
+    status === GameStatus.FINISHED;
+  const gameStatusAlreadyIncludesClock = (status?: string, clock?: string) => {
+    if (!status || !clock) return false;
+    const normalizedStatus = status.toLowerCase();
+    const normalizedClock = clock.toLowerCase();
+    const variants = [normalizedClock];
+    if (normalizedClock.startsWith('00:')) {
+      variants.push(normalizedClock.replace(/^00:/, ''));
+    }
+    if (normalizedClock.startsWith('0:')) {
+      variants.push(normalizedClock.replace(/^0:/, ''));
+    }
+    return variants.some((variant) => normalizedStatus.includes(variant));
+  };
+
+  const livePeriodText = gameStatus || (typeof gamePeriod === 'number' ? `P${gamePeriod}` : '');
+  const liveTimeText =
+    gameClock && livePeriodText
+      ? gameStatusAlreadyIncludesClock(livePeriodText, gameClock)
+        ? livePeriodText
+        : `${gameClock} - ${livePeriodText}`
+      : gameClock || livePeriodText || translateWord('inProgress');
+  const showLiveScoreNumbers = hasScore;
+  const serviceReportsNotTerminated =
+    isLive ||
+    (!!gameStatus &&
+      !gameStatus.toUpperCase().includes('FINAL') &&
+      gameStatus.toUpperCase() !== 'FINISHED' &&
+      gameStatus.toUpperCase() !== 'ENDED');
+  const showFinalization = !hasScore && serviceReportsNotTerminated && isStarted3hAgo;
 
   const dateOptions: Intl.DateTimeFormatOptions = {
     weekday: 'long',
@@ -54,6 +141,55 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
   const displayAwayLogo =
     isDark && awayTeamLogoDark ? awayTeamLogoDark || leagueLogos.DEFAULT : awayTeamLogo || leagueLogos.DEFAULT;
 
+  const getEspnStandingsUrl = (leagueKey: string) => {
+    const baseUrl = 'https://www.espn.com';
+
+    const path = leagueMapping[leagueKey.toUpperCase() as keyof typeof leagueMapping];
+
+    if (!path) return null;
+
+    return `${baseUrl}/${path}`;
+  };
+
+  const standingUrl = league === League.PWHL ? 'https://pwhl.ca/standings' : getEspnStandingsUrl(league);
+
+  const renderStatusText = () => {
+    if (isLive) {
+      if ((!gameClock || gameClock === '00:00') && gameStatus && gameStatus !== 'IN_PROGRESS') {
+        return (
+          <ThemedText style={[styles.dateText, { color: '#ef4444', fontWeight: 'bold' }]}>{gameStatus}</ThemedText>
+        );
+      }
+
+      return (
+        <ThemedText style={[styles.dateText, { color: '#ef4444', fontWeight: 'bold' }]}>{liveTimeText}</ThemedText>
+      );
+    }
+
+    if (showFinalization) {
+      return (
+        <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+          {translateWord('final')}
+        </ThemedText>
+      );
+    }
+
+    if (hasScore) {
+      const statusText = status === GameStatus.FINAL ? translateWord('final') : translateWord('ended');
+      return (
+        <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+          {statusText}
+        </ThemedText>
+      );
+    }
+
+    return (
+      <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+        {startTimeUTC ? new Date(startTimeUTC).toLocaleDateString(undefined, dateOptions) : ''}
+      </ThemedText>
+    );
+  };
+
   return (
     <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.centeredView} onPress={onClose}>
@@ -70,6 +206,14 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                 )}
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {awayTeam ? awayTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
+                  <Icon
+                    onPress={() => addFavoriteTeam(favoriteTeams, awayTeamId)}
+                    name={favoriteTeams.includes(awayTeamId) ? 'star' : 'star-o'}
+                    type="font-awesome"
+                    size={14}
+                    color={favoriteTeams.includes(awayTeamId) ? '#FFD700' : '#94a3b8'}
+                    style={{ marginLeft: 5 }}
+                  />
                 </ThemedText>
                 {awayTeamRecord && (
                   <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>
@@ -78,7 +222,7 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                 )}
               </View>
 
-              {hasScore ? (
+              {showLiveScoreNumbers ? (
                 <View style={styles.scoreContainer}>
                   <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.scoreText}>
                     {awayTeamScore}
@@ -102,6 +246,14 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                 )}
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {homeTeam ? homeTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
+                  <Icon
+                    onPress={() => addFavoriteTeam(favoriteTeams, homeTeamId)}
+                    name={favoriteTeams.includes(homeTeamId) ? 'star' : 'star-o'}
+                    type="font-awesome"
+                    size={14}
+                    color={favoriteTeams.includes(homeTeamId) ? '#FFD700' : '#94a3b8'}
+                    style={{ marginLeft: 5 }}
+                  />
                 </ThemedText>
                 {homeTeamRecord && (
                   <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>
@@ -110,14 +262,66 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                 )}
               </View>
             </View>
-            {!hasScore && !isStarted ? (
-              <>
-                <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
-                  {startTimeUTC ? new Date(startTimeUTC).toLocaleDateString(undefined, dateOptions) : ''}
-                </ThemedText>
+            {renderStatusText()}
 
-                <View style={styles.actionsRow}>
-                  {/* Premier bouton (ICS) */}
+            <View style={styles.actionsRow}>
+              {isLive || hasScore ? (
+                <>
+                  <a
+                    href={urlLive}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      textDecoration: 'none',
+                      display: 'flex',
+                      flex: 1,
+                      justifyContent: 'center',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, width: '100%' }]}>
+                      <Icon
+                        name="list-alt"
+                        type="font-awesome"
+                        size={20}
+                        color={iconColor}
+                        style={{ marginRight: 10 }}
+                      />
+                      <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.actionButtonText}>
+                        {translateWord('gameDetails')}
+                      </ThemedText>
+                    </View>
+                  </a>
+                  {standingUrl && (
+                    <a
+                      href={standingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        textDecoration: 'none',
+                        display: 'flex',
+                        flex: 1,
+                        justifyContent: 'center',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, width: '100%' }]}>
+                        <Icon
+                          name="list-ol"
+                          type="font-awesome"
+                          size={20}
+                          color={iconColor}
+                          style={{ marginRight: 10 }}
+                        />
+                        <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.actionButtonText}>
+                          {translateWord('standings')}
+                        </ThemedText>
+                      </View>
+                    </a>
+                  )}
+                </>
+              ) : (
+                <>
                   <View style={styles.buttonWrapper}>
                     <TouchableOpacity
                       style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
@@ -137,7 +341,6 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                     </TouchableOpacity>
                   </View>
 
-                  {/* Deuxième bouton (Arena) */}
                   {arenaName && (
                     <View style={styles.buttonWrapper}>
                       <a
@@ -160,40 +363,9 @@ export default function GameModal({ visible, onClose, data, gradientStyle }: Gam
                       </a>
                     </View>
                   )}
-                </View>
-              </>
-            ) : (
-              urlLive && (
-                <View style={styles.actionsRow}>
-                  <a
-                    href={urlLive}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      textDecoration: 'none',
-                      display: 'flex',
-                      width: '100%',
-                      maxWidth: 250,
-                      justifyContent: 'center',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor, width: '100%' }]}>
-                      <Icon
-                        name="info-circle"
-                        type="font-awesome"
-                        size={20}
-                        color={iconColor}
-                        style={{ marginRight: 10 }}
-                      />
-                      <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.actionButtonText}>
-                        {translateWord('gameDetails')}
-                      </ThemedText>
-                    </View>
-                  </a>
-                </View>
-              )
-            )}
+                </>
+              )}
+            </View>
           </View>
         </Pressable>
       </Pressable>
@@ -283,18 +455,18 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 12,
     marginTop: 10,
-    justifyContent: 'center', // Centrage si un seul bouton
+    justifyContent: 'center',
     alignItems: 'center',
   },
   buttonWrapper: {
-    flex: 1, // Chaque wrapper prend la même largeur
-    maxWidth: 200, // Empêche les boutons de devenir trop larges sur grand écran
-    minWidth: 120, // Taille minimum pour la lisibilité
+    flex: 1,
+    maxWidth: 200,
+    minWidth: 120,
   },
   actionButton: {
     flexDirection: 'row',
-    height: 54, // Hauteur fixe identique pour tous
-    width: '100%', // Prend toute la place du wrapper (donc largeur identique)
+    height: 54,
+    width: '100%',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -307,7 +479,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 13,
     textAlign: 'center',
-    flexShrink: 1, // Force le texte à passer à la ligne si trop long au lieu de pousser le bouton
+    flexShrink: 1,
   },
   dateText: {
     marginBottom: 20,

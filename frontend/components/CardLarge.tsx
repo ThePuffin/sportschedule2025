@@ -3,13 +3,14 @@ import { GameStatus, leagueLogos } from '@/constants/enum';
 import { getGamesStatus } from '@/utils/date';
 import { getCache } from '@/utils/fetchData';
 import { CardsProps, GameFormatted } from '@/utils/types';
-import { translateWord } from '@/utils/utils';
+import { addFavoriteTeam, translateWord } from '@/utils/utils';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   TouchableOpacity,
@@ -29,7 +30,8 @@ export default function CardLarge({
   animateEntry = false,
   verticalMode = false,
   showTime = false,
-}: Readonly<CardsProps & { showTime?: boolean; showScores?: boolean }>) {
+  delay = 0,
+}: Readonly<CardsProps & { showTime?: boolean; showScores?: boolean; delay?: number }>) {
   let { homeTeamShort, awayTeamShort } = data;
   const {
     homeTeamLogo,
@@ -52,6 +54,9 @@ export default function CardLarge({
     placeName = '',
     league,
     urlLive,
+    gameStatus,
+    gameClock,
+    gamePeriod,
   } = data;
 
   if (league.includes('OLYMPICS')) {
@@ -99,9 +104,12 @@ export default function CardLarge({
   const [scoreRevealed, setScoreRevealed] = useState(false);
   const fadeAnim = useRef(new Animated.Value(animateEntry ? 0 : 1)).current;
   const scaleAnim = useRef(new Animated.Value(animateEntry ? 0.95 : 1)).current;
+  const translateYAnim = useRef(new Animated.Value(animateEntry ? 20 : 0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [cardWidth, setCardWidth] = useState(0);
   const isSmallCard = cardWidth > 0 && cardWidth < 190;
+  const viewRef = useRef<View>(null);
+  const [hasBeenSeen, setHasBeenSeen] = useState(!animateEntry);
 
   useEffect(() => {
     const updateFavorites = () => {
@@ -124,22 +132,40 @@ export default function CardLarge({
   }, []);
 
   useEffect(() => {
+    const isWeb = Platform.OS === 'web';
+    if (!animateEntry || !isWeb || !viewRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setHasBeenSeen(true);
+          // Very important: stop observing once seen to free up resources
+          if (viewRef.current) observer.unobserve(viewRef.current as any);
+        }
+      },
+      { threshold: 0.01, rootMargin: '250px' }, // Anticipate scroll much earlier (250px)
+    );
+
+    observer.observe(viewRef.current as any);
+
+    return () => observer.disconnect();
+  }, [animateEntry]);
+
+  useEffect(() => {
     if (animateEntry) {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 8,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      if (hasBeenSeen) {
+        // Appearance animation
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.parallel([
+            Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+            Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+            Animated.timing(translateYAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+          ]),
+        ]).start();
+      }
     }
-  }, [animateEntry, fadeAnim, scaleAnim]);
+  }, [hasBeenSeen, animateEntry, fadeAnim, scaleAnim, translateYAnim, delay]);
 
   useEffect(() => {
     if (!showScores) {
@@ -149,7 +175,20 @@ export default function CardLarge({
 
   const hasScore = homeTeamScore != null && awayTeamScore != null;
   const status = getGamesStatus(data);
-  const isLive = status === GameStatus.IN_PROGRESS;
+  const now = new Date();
+  const start = new Date(startTimeUTC);
+  const isToday = now.toDateString() === start.toDateString();
+  const diffHours = (now.getTime() - start.getTime()) / (1000 * 60 * 60);
+  const isLive =
+    (status === GameStatus.IN_PROGRESS ||
+      (!!gameStatus &&
+        ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
+          gameStatus.includes(s),
+        ) &&
+        !gameStatus.toUpperCase().includes('FINAL') &&
+        !gameStatus.toUpperCase().includes('ENDED')) ||
+      (hasScore && isToday && status !== GameStatus.FINAL && status !== GameStatus.FINISHED)) &&
+    diffHours < 5;
 
   useEffect(() => {
     if (isLive) {
@@ -173,12 +212,86 @@ export default function CardLarge({
   }, [isLive, pulseAnim]);
 
   let timeText = '';
-  if (status === GameStatus.FINISHED) {
-    timeText = translateWord('ended');
-  } else if (status === GameStatus.FINAL) {
+  const isGameStatusFinal = gameStatus?.toUpperCase().includes('FINAL') || gameStatus?.toUpperCase().includes('ENDED');
+  const isGameStatusLive =
+    gameStatus &&
+    ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
+      gameStatus.includes(s),
+    ) &&
+    !isGameStatusFinal;
+
+  const hasPeriodInGameStatus = (status?: string) => {
+    if (!status) return false;
+    return /\b(1st|2nd|3rd|4th|OT|SO|HT|Half|Top|Bot|Mid|End|P\d+)\b/i.test(status);
+  };
+
+  const gameStatusAlreadyIncludesClock = (status?: string, clock?: string) => {
+    if (!status || !clock) return false;
+    const normalizedStatus = status.toLowerCase();
+    const normalizedClock = clock.toLowerCase();
+    const variants = [normalizedClock];
+    if (normalizedClock.startsWith('00:')) {
+      variants.push(normalizedClock.replace(/^00:/, ''));
+    }
+    if (normalizedClock.startsWith('0:')) {
+      variants.push(normalizedClock.replace(/^0:/, ''));
+    }
+    return variants.some((variant) => normalizedStatus.includes(variant));
+  };
+
+  const livePeriodText = gameStatus || (typeof gamePeriod === 'number' ? `P${gamePeriod}` : '');
+  const isStarted3hAgo = diffHours > 3;
+  const serviceReportsNotTerminated =
+    isGameStatusLive ||
+    (!!gameStatus &&
+      !isGameStatusFinal &&
+      gameStatus !== 'FINAL' &&
+      gameStatus !== 'FINISHED' &&
+      gameStatus !== 'ENDED');
+  const showFinalization = !hasScore && serviceReportsNotTerminated && isStarted3hAgo;
+
+  if (showFinalization) {
     timeText = translateWord('final');
-  } else if (status === GameStatus.IN_PROGRESS) {
-    timeText = translateWord('followLive');
+  } else if ((isStarted3hAgo && !serviceReportsNotTerminated) || status === GameStatus.FINISHED) {
+    // If we have gameStatus or gamePeriod info, display it instead of generic "ended"
+    if (gameStatus && typeof gamePeriod === 'number') {
+      timeText = hasPeriodInGameStatus(gameStatus) ? gameStatus : `${gameStatus} - P${gamePeriod}`;
+    } else if (gameStatus) {
+      timeText = gameStatus;
+    } else if (typeof gamePeriod === 'number') {
+      timeText = `P${gamePeriod}`;
+    } else {
+      timeText = translateWord('ended');
+    }
+  } else if (isGameStatusLive || isLive) {
+    if (gameClock && livePeriodText) {
+      if (gameStatusAlreadyIncludesClock(livePeriodText, gameClock)) {
+        timeText = livePeriodText;
+      } else {
+        timeText = `${gameClock} - ${livePeriodText}`;
+      }
+    } else if (gameClock) {
+      timeText = `${gameClock}`;
+    } else if (livePeriodText) {
+      timeText = livePeriodText;
+    } else {
+      timeText = translateWord('inProgress');
+    }
+  } else if (hasScore) {
+    if (isToday) {
+      // Display gameStatus and gamePeriod if available, otherwise show inProgress
+      if (gameStatus && typeof gamePeriod === 'number') {
+        timeText = hasPeriodInGameStatus(gameStatus) ? gameStatus : `${gameStatus} - P${gamePeriod}`;
+      } else if (gameStatus) {
+        timeText = gameStatus;
+      } else if (typeof gamePeriod === 'number') {
+        timeText = `P${gamePeriod}`;
+      } else {
+        timeText = translateWord('inProgress');
+      }
+    } else {
+      timeText = translateWord('final');
+    }
   } else if (startTimeUTC) {
     timeText = showDate
       ? showTime
@@ -247,6 +360,11 @@ export default function CardLarge({
 
   const awayColorHex = getAdaptiveColor(awayTeamColor, awayTeamBackgroundColor);
   const homeColorHex = getAdaptiveColor(homeTeamColor, homeTeamBackgroundColor);
+  const backGroundColor = favoriteTeams.includes(homeTeamId)
+    ? homeColorHex
+    : favoriteTeams.includes(awayTeamId)
+      ? awayColorHex
+      : 'transparent';
 
   let gradientStyle = {
     backgroundColor: baseColor,
@@ -270,11 +388,13 @@ export default function CardLarge({
 
   const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
 
+  const showScoreContent = showScores && hasScore;
+
   const centerContent = (
     <>
       <View style={{ minHeight: 40, justifyContent: 'center', alignItems: 'center' }}>
-        {hasScore ? (
-          (isFavorite || !showScores) && !scoreRevealed ? (
+        {showScoreContent ? (
+          isFavorite && !isLive && !scoreRevealed ? (
             <TouchableOpacity
               style={styles.revealButton}
               onPress={(e) => {
@@ -356,8 +476,8 @@ export default function CardLarge({
           </a>
         ) : (
           <ThemedText
-            lightColor={!isLive ? '#475569' : undefined}
-            darkColor={!isLive ? '#94a3b8' : undefined}
+            lightColor={isLive ? undefined : '#475569'}
+            darkColor={isLive ? undefined : '#94a3b8'}
             style={[isLive ? styles.liveTimeText : styles.timeText, isSmallCard && { fontSize: 10 }]}
           >
             {timeText}
@@ -397,11 +517,31 @@ export default function CardLarge({
 
   return (
     <Animated.View
-      style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}
+      ref={viewRef}
+      style={
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }, { translateY: translateYAnim }],
+          willChange: animateEntry ? 'opacity, transform' : 'auto', // GPU optimization
+        } as any
+      }
       onLayout={(event) => setCardWidth(event.nativeEvent.layout.width)}
     >
       <Card
-        containerStyle={[styles.cardContainer, { padding: 0, backgroundColor: 'transparent' }]}
+        containerStyle={[
+          styles.cardContainer,
+          {
+            padding: 0,
+            backgroundColor: 'transparent',
+            borderWidth: 0,
+            shadowColor: backGroundColor,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 1,
+            shadowRadius: 10,
+            elevation: 5,
+            boxShadow: backGroundColor === 'transparent' ? 'none' : `0px 0px 5px ${backGroundColor}`,
+          },
+        ]}
         wrapperStyle={{ padding: 0 }}
       >
         <Pressable
@@ -520,9 +660,17 @@ export default function CardLarge({
                       >
                         {awayTeamShort || '\u00A0'}
                       </ThemedText>
-                      {favoriteTeams.includes(awayTeamId) && (
-                        <Icon name="star" type="font-awesome" size={14} color="#FFD700" style={{ marginLeft: 5 }} />
-                      )}
+                      <Icon
+                        onPress={(e) => {
+                          e?.stopPropagation();
+                          addFavoriteTeam(favoriteTeams, awayTeamId);
+                        }}
+                        name={favoriteTeams.includes(awayTeamId) ? 'star' : 'star-o'}
+                        type="font-awesome"
+                        size={14}
+                        color={favoriteTeams.includes(awayTeamId) ? '#FFD700' : '#94a3b8'}
+                        style={{ marginLeft: 5 }}
+                      />
                     </View>
                   )}
                   {!isSmallCard && (
@@ -587,9 +735,17 @@ export default function CardLarge({
                       >
                         {homeTeamShort || '\u00A0'}
                       </ThemedText>
-                      {favoriteTeams.includes(homeTeamId) && (
-                        <Icon name="star" type="font-awesome" size={14} color="#FFD700" style={{ marginLeft: 5 }} />
-                      )}
+                      <Icon
+                        onPress={(e) => {
+                          e?.stopPropagation();
+                          addFavoriteTeam(favoriteTeams, homeTeamId);
+                        }}
+                        name={favoriteTeams.includes(homeTeamId) ? 'star' : 'star-o'}
+                        type="font-awesome"
+                        size={14}
+                        color={favoriteTeams.includes(homeTeamId) ? '#FFD700' : '#94a3b8'}
+                        style={{ marginLeft: 5 }}
+                      />
                     </View>
                   )}
                   {!isSmallCard && (
@@ -654,6 +810,8 @@ export default function CardLarge({
         onClose={() => setModalVisible(false)}
         data={data}
         gradientStyle={gradientStyle}
+        favoriteTeams={favoriteTeams}
+        showScores={showScores}
       />
     </Animated.View>
   );
@@ -661,7 +819,7 @@ export default function CardLarge({
 
 const styles = StyleSheet.create({
   cardContainer: {
-    backgroundColor: '#0f172a', // Bleu très foncé
+    backgroundColor: '#0f172a', // Very dark blue
     borderRadius: 20,
     borderWidth: 0,
     marginHorizontal: 10,

@@ -91,11 +91,8 @@ export default function TeamFilter({
           <FilterSlider
             selectedFilter={selectedFilter}
             onFilterChange={onFilterChange}
-            hasFavorites={false}
-            showFavorites={false}
             data={filterData}
             favoriteValues={favoriteValues}
-            showAll={false}
           />
         </View>
       </div>

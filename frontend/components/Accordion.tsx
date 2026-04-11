@@ -57,6 +57,8 @@ export default function Accordion({
             onSelection={onSelection}
             isSelected={isSelected}
             showTime={showTime}
+            animateEntry={true}
+            delay={index * 15}
           />
         </div>
       );
@@ -117,7 +119,7 @@ export default function Accordion({
         containerStyle={{
           backgroundColor: 'transparent',
           borderBottomWidth: 0,
-          paddingTop: 20, // Espace au dessus de la ligne
+          paddingTop: 20, // Space above the line
         }}
         underlayColor="transparent"
       >

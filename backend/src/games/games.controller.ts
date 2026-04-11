@@ -60,8 +60,12 @@ export class GamesController {
   findByDateHour(
     @Param('gameDate') gameDate: string,
     @Query('leagues') leagues?: string,
+    @Query('maxResults', new ParseIntPipe({ optional: true }))
+    maxResults?: number,
+    @Query('skip', new ParseIntPipe({ optional: true }))
+    skip?: number,
   ) {
-    return this.GameService.findByDateHour(gameDate, leagues);
+    return this.GameService.findByDateHour(gameDate, leagues, maxResults, skip);
   }
 
   @Get('/league/:league')
@@ -97,7 +101,7 @@ export class GamesController {
 
   @Post('refresh/all')
   async refresh() {
-    return this.GameService.getAllGames();
+    return this.GameService.getAllGames(true);
   }
 
   @Post('/refresh/:league')
@@ -108,6 +112,11 @@ export class GamesController {
   @Post('/scores')
   async fetchScores() {
     return this.GameService.fetchGamesScores();
+  }
+
+  @Post('/live')
+  async fetchLiveScores(@Body('gameIds') gameIds: string[]) {
+    return this.GameService.fetchLiveScores(gameIds);
   }
 
   @UseGuards(ApiKeyGuard)

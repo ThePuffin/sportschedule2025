@@ -35,6 +35,9 @@ export interface GameFormatted {
   awayTeamBackgroundColor: string;
   homeTeamColor: string;
   homeTeamBackgroundColor: string;
+  gameStatus?: string;
+  gameClock?: string;
+  gamePeriod?: number;
 }
 
 export interface League {
@@ -83,6 +86,7 @@ export type AccordionProps = {
   readonly showDate?: boolean;
   readonly gamesSelected?: readonly GameFormatted[];
   readonly showTime?: boolean;
+  readonly onSelection?: (game: GameFormatted) => void;
 };
 
 export interface ButtonsProps {

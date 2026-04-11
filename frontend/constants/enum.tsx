@@ -102,3 +102,19 @@ export enum GameStatus {
   FINISHED = 'FINISHED',
   FINAL = 'FINAL',
 }
+
+export const leagueMapping = {
+  MLB: 'mlb/standings',
+  MLS: 'soccer/table/_/league/usa.1/standings',
+  NBA: 'nba/standings',
+  NCAAB: 'mens-college-basketball/standings',
+  NCAAF: 'college-football/standings',
+  NCAAMH: 'college-sports/rankings',
+  NCAAWH: 'college-sports/rankings',
+  NCCABB: 'college-sports/rankings',
+  NFL: 'nfl/standings',
+  NHL: 'nhl/standings',
+  NWSL: 'soccer/league/_/name/usa.nwsl/standings',
+  WNBA: 'wnba/standings',
+  WNCAAB: 'womens-college-basketball/standings',
+};

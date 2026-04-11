@@ -1,8 +1,7 @@
 import { FilterGames, GameFormatted, Team } from '@/utils/types';
 import * as fflate from 'fflate';
 
-const EXPO_PUBLIC_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
+const EXPO_PUBLIC_API_BASE_URL =  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 type TeamGamesCacheEntry = {
   data: FilterGames;
@@ -156,16 +155,33 @@ const fetchWithCacheStrategy = async <T>(
   }
 };
 
-export const fetchGamesByHour = async (date: string): Promise<{ [key: string]: GameFormatted[] }> => {
+export const fetchGamesByHour = async (
+  date: string,
+  limit?: number,
+  skip?: number,
+): Promise<{ [key: string]: GameFormatted[] }> => {
   const leaguesSelected = getCache<string[]>('leaguesSelected') || [];
   let cacheKey = `games_hour_${date}`;
   let url = `${EXPO_PUBLIC_API_BASE_URL}/games/hour/${date}`;
 
+  const params = new URLSearchParams();
+
   if (leaguesSelected?.length > 0) {
     const leaguesParam = leaguesSelected.join('+');
+    params.append('leagues', leaguesParam);
     cacheKey += `_${leaguesParam}`;
-    url += `?leagues=${leaguesParam}`;
   }
+
+  if (limit) {
+    params.append('maxResults', limit.toString());
+    cacheKey += `_limit_${limit}`;
+  }
+  if (skip) {
+    params.append('skip', skip.toString());
+    cacheKey += `_skip_${skip}`;
+  }
+
+  if (params.toString()) url += `?${params.toString()}`;
 
   if (isCacheValid(cacheKey, 2 / 60, sessionStorage)) {
     const cached = getCache<{ [key: string]: GameFormatted[] }>(cacheKey, sessionStorage);
@@ -335,6 +351,28 @@ export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
     undefined,
     10000,
   );
+};
+
+export const fetchLiveScores = async (gameIds: string[]): Promise<GameFormatted[]> => {
+  if (gameIds.length === 0) return [];
+
+  try {
+    const res = await fetchWithTimeout(`${EXPO_PUBLIC_API_BASE_URL}/games/live`, 15000, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ gameIds }),
+    });
+
+    if (res.ok) {
+      return (await res.json()) as GameFormatted[];
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching live scores:', error);
+    return [];
+  }
 };
 
 export const fetchDateRangeFromApi = async () => {

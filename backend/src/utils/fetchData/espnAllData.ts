@@ -1,9 +1,7 @@
 import { readableDate } from '../../utils/date';
 import { CollegeLeague, League } from '../../utils/enum';
-import type { MLSGameAPI } from '../../utils/interface/gameMLS';
 import { Colors } from '../Colors';
 import type { ESPNTeam, TeamESPN, TeamType } from '../interface/team';
-import { TeamDetailed } from '../interface/teamDetails';
 import { UniversityLogos } from '../UniversityLogos';
 import { capitalize, getLuminance } from '../utils';
 
@@ -440,23 +438,42 @@ const getEachTeamSchedule = async ({
       }
     } else {
       try {
-        const link = leaguesData[leagueName].fetchGames.replace('${id}', id);
-        const fetchedGames = await fetch(link);
-        const fetchGames: MLSGameAPI = await fetchedGames.json();
-        const { events } = fetchGames;
-
-        games = events?.[0] ? events : [];
-
-        const now = new Date();
-        const gamesFilter = games.filter(({ date }) => new Date(date) >= now);
-        if (gamesFilter.length === 0) {
-          const link = leaguesData[leagueName].fetchTeam + '/' + id;
-          const fetchedTeams = await fetch(link);
-          const fetchTeams: TeamDetailed = await fetchedTeams.json();
-          games = fetchTeams?.team?.nextEvent || [];
+        // For other leagues, use scoreboard to get games from current and previous year
+        const currentYear = new Date().getFullYear();
+        const years = [currentYear, currentYear - 1];
+        for (const year of years) {
+          try {
+            if (leagueConfigs[leagueName]) {
+              const { sport, league } = leagueConfigs[leagueName];
+              let page = 1;
+              let hasMore = true;
+              while (hasMore) {
+                const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${year}&limit=1000&page=${page}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const events = data.events || [];
+                const eventsFiltered = events.filter((ev) =>
+                  ev.competitions?.[0]?.competitors?.some(
+                    (c) => c.team?.id === id,
+                  ),
+                );
+                games.push(...eventsFiltered);
+                if (events.length < 1000) {
+                  hasMore = false;
+                } else {
+                  page++;
+                }
+              }
+            }
+          } catch (error) {
+            console.info(
+              'Error fetching games for year ' + year + ' ' + leagueName,
+              value,
+              error,
+            );
+          }
         }
-
-        console.info('yes', value);
+        console.info('yes', value, 'total games found', games.length);
       } catch (error) {
         console.info('no', value, error);
         games = [];
@@ -678,6 +695,10 @@ export const getESPNScores = async (leagueKey: string, date: string) => {
                   homeTeamRecord,
                   awayTeamRecord,
                   status: statusDetail?.name || displayClockDetail || '',
+                  gameClock: displayClockDetail,
+                  gamePeriod: comp.status?.period,
+                  gameStatus:
+                    statusDetail?.shortDetail || statusDetail?.description,
                 };
               } catch (e) {
                 console.error(`Error fetching summary for event ${ev.id}:`, e);
@@ -794,7 +815,7 @@ export const getESPNGameScore = async (leagueKey: string, gameId: string) => {
     if (homeScore === null && awayScore === null) return null;
 
     const status = competition.status?.type || competition.status;
-    const displayClock = competition.status?.displayClock || '';
+    const displayClock = competition.status?.displayClock;
 
     const isFinal =
       status?.completed === true ||
@@ -802,7 +823,21 @@ export const getESPNGameScore = async (leagueKey: string, gameId: string) => {
       (typeof status?.name === 'string' &&
         /final|completed|post/i.test(status.name)) ||
       (typeof displayClock === 'string' &&
+        displayClock !== '' &&
         /final|completed/i.test(displayClock));
+
+    let gameStatus =
+      status?.shortDetail || status?.detail || status?.description;
+
+    if (
+      (!gameStatus || gameStatus === 'In Progress') &&
+      status?.state === 'in' &&
+      !isFinal
+    ) {
+      if (displayClock) {
+        gameStatus = `${displayClock}${competition.status?.period ? ' - ' + competition.status.period : ''}`;
+      }
+    }
 
     return {
       uniqueId: gameId,
@@ -810,7 +845,10 @@ export const getESPNGameScore = async (leagueKey: string, gameId: string) => {
       homeTeamScore: homeScore,
       awayTeamScore: awayScore,
       isFinal,
-      status: status?.name || displayClock || '',
+      status: status,
+      gameStatus: gameStatus || status?.name,
+      gameClock: displayClock || '',
+      gamePeriod: competition.status?.period,
       startTimeUTC: competition.date,
     };
   } catch (error) {

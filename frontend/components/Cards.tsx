@@ -35,6 +35,7 @@ export default function Cards({
     awayTeamScore,
     homeTeamId,
     awayTeamId,
+    gameStatus,
   } = data;
 
   const league = teamSelectedId.split('-')[0] || 'DEFAULT';
@@ -162,7 +163,7 @@ export default function Cards({
   let favoriteCardStyle =
     isFavorite || isCardSelected
       ? {
-          border: 'double' + colorTeam?.color,
+          borderColor: colorTeam?.color,
           borderWidth: 3,
           borderStyle: 'solid',
           boxShadow: `0px 0px 9px #FFD700`,
@@ -176,11 +177,24 @@ export default function Cards({
 
     let displayDate = gameDate;
 
-    if (data.startTimeUTC) {
+    if (
+      gameStatus &&
+      ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
+        gameStatus.includes(s),
+      ) &&
+      !gameStatus.toUpperCase().includes('FINAL') &&
+      !gameStatus.toUpperCase().includes('ENDED')
+    ) {
+      displayDate = gameStatus;
+    } else if (data.startTimeUTC) {
       const startTime = new Date(data.startTimeUTC);
 
       if (now >= startTime) {
-        displayDate = now > todayEnd ? translateWord('ended') : translateWord('inProgress');
+        if (hasScore && !data.gameStatus?.toUpperCase().includes('FINAL')) {
+          displayDate = translateWord('inProgress');
+        } else {
+          displayDate = now > todayEnd ? translateWord('ended') : translateWord('inProgress');
+        }
       }
     }
 

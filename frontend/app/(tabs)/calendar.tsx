@@ -2,6 +2,7 @@ import AppLogo from '@/components/AppLogo';
 import DateRangePicker from '@/components/DatePicker';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
+import { maxTeamsNumber } from '@/constants/Constants';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -41,13 +42,14 @@ export default function Calendar() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
-  const maxTeamsNumber = 9;
+
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [allowedLeagues, setAllowedLeagues] = useState<string[]>([]);
   const [reorderModalVisible, setReorderModalVisible] = useState(false);
   const [tempTeams, setTempTeams] = useState<string[]>([]);
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
+  const [gamesModalVisible, setGamesModalVisible] = useState(false);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -72,6 +74,16 @@ export default function Calendar() {
   useEffect(() => {
     setHiddenTeams((prev) => prev.filter((id) => filteredTeamsSelected.includes(id)));
   }, [filteredTeamsSelected]);
+
+  const filteredGamesSelected = useMemo(() => {
+    if (allowedLeagues.length === 0) return gamesSelected;
+    return gamesSelected.filter((game) => allowedLeagues.includes(game.league));
+  }, [gamesSelected, allowedLeagues]);
+
+  const teamsAvailableForReorder = useMemo(() => {
+    if (allowedLeagues.length === 0) return teams;
+    return teams.filter((t) => allowedLeagues.includes(t.league));
+  }, [teams, allowedLeagues]);
 
   const beginDate = new Date();
   beginDate.setHours(0, 0, 0, 0);
@@ -247,7 +259,9 @@ export default function Calendar() {
   };
 
   const handleOpenReorder = () => {
-    setTempTeams(teamsSelected);
+    const availableIds = new Set(teamsAvailableForReorder.map((t) => t.uniqueId));
+    const validTeams = teamsSelected.filter((id) => availableIds.has(id));
+    setTempTeams(validTeams);
     setReorderModalVisible(true);
   };
 
@@ -261,6 +275,12 @@ export default function Calendar() {
     saveCache('gameSelected', []);
   };
 
+  useEffect(() => {
+    if (gamesModalVisible && filteredGamesSelected.length === 0) {
+      setGamesModalVisible(false);
+    }
+  }, [filteredGamesSelected, gamesModalVisible]);
+
   const displayAccordions = () => {
     if (!games || Object.keys(games).length === 0) return null;
 
@@ -269,7 +289,7 @@ export default function Calendar() {
     return sortedDates.map((date, index) => {
       const [year, month, day] = date.split('-').map(Number);
       const gameDate = new Date(year, month - 1, day);
-      if (isNaN(gameDate.getTime())) return null;
+      if (Number.isNaN(gameDate.getTime())) return null;
       const startDate = new Date(dateRange.startDate);
       startDate.setHours(0, 0, 0, 0);
       const endDate = new Date(dateRange.endDate);
@@ -351,13 +371,6 @@ export default function Calendar() {
         onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
         scrollEventThrottle={16}
       >
-        {!!gamesSelected.length && (
-          <GamesSelected
-            onAction={handleGamesSelection}
-            data={gamesSelected.filter((g) => filteredTeamsSelected.includes(g.teamSelectedId))}
-            teamNumber={maxTeamsNumber > filteredTeamsSelected?.length ? filteredTeamsSelected.length : maxTeamsNumber}
-          />
-        )}
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView>
             <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
@@ -384,8 +397,10 @@ export default function Calendar() {
                       justifyContent: 'center',
                       marginRight: 10,
                       backgroundColor,
-                      border: `1px solid ${iconColor}`,
-                      borderRadius: '50%',
+                      borderWidth: 1,
+                      borderColor: iconColor,
+                      borderStyle: 'solid',
+                      borderRadius: 20,
                       flexShrink: 0,
                     }}
                   >
@@ -410,7 +425,7 @@ export default function Calendar() {
                         ...filteredTeamsSelected
                           .map((id) => teams.find((t) => t.uniqueId === id))
                           .filter((t): t is Team => !!t)
-                          .map((t) => ({ label: t.teamCommonName, value: t.uniqueId })),
+                          .map((t) => ({ label: t.label, value: t.uniqueId })),
                       ]}
                       selectedFilters={
                         hiddenTeams.length === 0
@@ -426,8 +441,9 @@ export default function Calendar() {
                       }}
                     />
                   </View>
+
                   <TouchableOpacity
-                    onPress={handleClearGamesSelection}
+                    onPress={() => filteredGamesSelected.length > 0 && setGamesModalVisible(true)}
                     style={{
                       position: 'relative',
                       width: 40,
@@ -437,12 +453,18 @@ export default function Calendar() {
                       justifyContent: 'center',
                       marginLeft: 10,
                       backgroundColor,
-                      border: `1px solid ${iconColor}`,
-                      borderRadius: '50%',
+                      borderWidth: 1,
+                      borderColor: iconColor,
+                      borderStyle: 'solid',
+                      borderRadius: 20,
                       flexShrink: 0,
                     }}
                   >
-                    <Ionicons name="bookmarks-outline" size={20} color={iconColor} />
+                    <Ionicons
+                      name={filteredGamesSelected.length > 0 ? 'bookmarks' : 'bookmarks-outline'}
+                      size={20}
+                      color={iconColor}
+                    />
                   </TouchableOpacity>
                 </div>
               </ThemedElements>
@@ -470,7 +492,7 @@ export default function Calendar() {
             <ScrollView style={{ width: '100%', maxHeight: 400 }}>
               <TeamReorderSelector
                 teams={tempTeams}
-                allTeams={teams}
+                allTeams={teamsAvailableForReorder}
                 maxTeams={9}
                 onChange={setTempTeams}
                 allowedLeagues={allowedLeagues}
@@ -490,6 +512,76 @@ export default function Calendar() {
           </View>
         </View>
       </Modal>
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={gamesModalVisible}
+        onRequestClose={() => setGamesModalVisible(false)}
+      >
+        <Pressable style={styles.centeredView} onPress={() => setGamesModalVisible(false)}>
+          <Pressable
+            style={[
+              styles.modalView,
+              { backgroundColor: modalBackgroundColor, maxHeight: '80%', width: '95%', maxWidth: 600 },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                width: '100%',
+                marginBottom: 10,
+                alignItems: 'center',
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  handleClearGamesSelection();
+                  setGamesModalVisible(false);
+                }}
+                style={{
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  borderRadius: 15,
+                  borderWidth: 1,
+                  borderColor: iconColor,
+                  width: 30,
+                  height: 30,
+                  backgroundColor: 'transparent',
+                }}
+              >
+                <Ionicons name="trash" size={16} color={iconColor} />
+              </TouchableOpacity>
+              <Text style={[styles.modalText, { color: textColor, marginBottom: 0 }]}>
+                {translateWord('favorites')}
+              </Text>
+              <TouchableOpacity onPress={() => setGamesModalVisible(false)}>
+                <Ionicons name="close" size={24} color={iconColor} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ width: '100%' }}>
+              {isSmallDevice && filteredGamesSelected.length === 1 ? (
+                <Accordion
+                  gamesFiltred={filteredGamesSelected}
+                  open={true}
+                  showDate={true}
+                  gamesSelected={filteredGamesSelected}
+                  onSelection={handleGamesSelection}
+                  disableToggle={true}
+                />
+              ) : (
+                <GamesSelected
+                  onAction={handleGamesSelection}
+                  data={filteredGamesSelected}
+                  teamNumber={filteredGamesSelected.length}
+                />
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <ActionButton ref={ActionButtonRef} scrollViewRef={scrollViewRef} />
     </ThemedView>
   );
@@ -547,5 +639,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  floatingButton: {
+    position: 'absolute',
+    bottom: 90,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    zIndex: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
 });
