@@ -252,7 +252,11 @@ export default function CardLarge({
 
   if (showFinalization) {
     timeText = translateWord('final');
-  } else if ((isStarted3hAgo && !serviceReportsNotTerminated) || status === GameStatus.FINISHED) {
+  } else if ((status === GameStatus.FINISHED || status === GameStatus.FINAL) && !hasScore) {
+    timeText = translateWord('final');
+  } else if ((status === GameStatus.FINISHED || status === GameStatus.FINAL) && hasScore) {
+    timeText = translateWord('gameDetails');
+  } else if (isStarted3hAgo && !serviceReportsNotTerminated) {
     // If we have gameStatus or gamePeriod info, display it instead of generic "ended"
     if (gameStatus && typeof gamePeriod === 'number') {
       timeText = hasPeriodInGameStatus(gameStatus) ? gameStatus : `${gameStatus} - P${gamePeriod}`;
@@ -388,55 +392,48 @@ export default function CardLarge({
 
   const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
 
-  const showScoreContent = showScores && hasScore;
+  const shouldShowReveal = hasScore && (!showScores || (showScores && isFavorite && !isLive)) && !scoreRevealed;
 
   const centerContent = (
     <>
       <View style={{ minHeight: 40, justifyContent: 'center', alignItems: 'center' }}>
-        {showScoreContent ? (
-          isFavorite && !isLive && !scoreRevealed ? (
-            <TouchableOpacity
-              style={styles.revealButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                setScoreRevealed(true);
-              }}
+        {shouldShowReveal ? (
+          <TouchableOpacity
+            style={styles.revealButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              setScoreRevealed(true);
+            }}
+          >
+            <Icon name="eye" type="font-awesome" size={verticalMode ? 20 : 30} color={isDark ? '#94a3b8' : '#475569'} />
+            <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.revealText}>
+              {translateWord('score')}
+            </ThemedText>
+          </TouchableOpacity>
+        ) : hasScore ? (
+          <View style={styles.scoreRow}>
+            <ThemedText
+              lightColor="#0f172a"
+              darkColor="#ffffff"
+              style={[styles.scoreNumber, (isMedium || verticalMode) && { fontSize: 28 }]}
             >
-              <Icon
-                name="eye"
-                type="font-awesome"
-                size={verticalMode ? 20 : 30}
-                color={isDark ? '#94a3b8' : '#475569'}
-              />
-              <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.revealText}>
-                {translateWord('score')}
-              </ThemedText>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.scoreRow}>
-              <ThemedText
-                lightColor="#0f172a"
-                darkColor="#ffffff"
-                style={[styles.scoreNumber, (isMedium || verticalMode) && { fontSize: 28 }]}
-              >
-                {awayTeamScore}
-              </ThemedText>
-              <ThemedText
-                lightColor="#475569"
-                darkColor="#CBD5E1"
-                style={[styles.scoreDivider, (isMedium || verticalMode) && { fontSize: 18, marginHorizontal: 5 }]}
-              >
-                -
-              </ThemedText>
-              <ThemedText
-                lightColor="#0f172a"
-                darkColor="#ffffff"
-                style={[styles.scoreNumber, (isMedium || verticalMode) && { fontSize: 28 }]}
-              >
-                {homeTeamScore}
-              </ThemedText>
-            </View>
-          )
+              {awayTeamScore}
+            </ThemedText>
+            <ThemedText
+              lightColor="#475569"
+              darkColor="#CBD5E1"
+              style={[styles.scoreDivider, (isMedium || verticalMode) && { fontSize: 18, marginHorizontal: 5 }]}
+            >
+              -
+            </ThemedText>
+            <ThemedText
+              lightColor="#0f172a"
+              darkColor="#ffffff"
+              style={[styles.scoreNumber, (isMedium || verticalMode) && { fontSize: 28 }]}
+            >
+              {homeTeamScore}
+            </ThemedText>
+          </View>
         ) : (
           <ThemedText
             lightColor="#475569"

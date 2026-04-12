@@ -698,18 +698,14 @@ export class GameService {
   }
 
   async fetchGamesWithoutScores(): Promise<Game[]> {
-    const oneHourAgo = new Date();
-    oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+    const twoHoursAgo = new Date();
+    twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
 
-    // match started at least 1 hour ago and score is null or status not finished
+    // match started at least 2 hours ago and score is null or missing
     const gamesWithoutScores = await this.gameModel
       .find({
-        startTimeUTC: { $lte: oneHourAgo.toISOString() },
-        $or: [
-          { homeTeamScore: null },
-          { awayTeamScore: null },
-          { status: { $ne: 'FINISHED' } },
-        ],
+        startTimeUTC: { $lte: twoHoursAgo.toISOString() },
+        $or: [{ homeTeamScore: null }, { awayTeamScore: null }],
       })
       .exec();
     return gamesWithoutScores;

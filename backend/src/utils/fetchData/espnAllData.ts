@@ -1,7 +1,9 @@
 import { readableDate } from '../../utils/date';
 import { CollegeLeague, League } from '../../utils/enum';
+import type { MLSGameAPI } from '../../utils/interface/gameMLS';
 import { Colors } from '../Colors';
 import type { ESPNTeam, TeamESPN, TeamType } from '../interface/team';
+import { TeamDetailed } from '../interface/teamDetails';
 import { UniversityLogos } from '../UniversityLogos';
 import { capitalize, getLuminance } from '../utils';
 
@@ -438,42 +440,23 @@ const getEachTeamSchedule = async ({
       }
     } else {
       try {
-        // For other leagues, use scoreboard to get games from current and previous year
-        const currentYear = new Date().getFullYear();
-        const years = [currentYear, currentYear - 1];
-        for (const year of years) {
-          try {
-            if (leagueConfigs[leagueName]) {
-              const { sport, league } = leagueConfigs[leagueName];
-              let page = 1;
-              let hasMore = true;
-              while (hasMore) {
-                const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${year}&limit=1000&page=${page}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                const events = data.events || [];
-                const eventsFiltered = events.filter((ev) =>
-                  ev.competitions?.[0]?.competitors?.some(
-                    (c) => c.team?.id === id,
-                  ),
-                );
-                games.push(...eventsFiltered);
-                if (events.length < 1000) {
-                  hasMore = false;
-                } else {
-                  page++;
-                }
-              }
-            }
-          } catch (error) {
-            console.info(
-              'Error fetching games for year ' + year + ' ' + leagueName,
-              value,
-              error,
-            );
-          }
+        const link = leaguesData[leagueName].fetchGames.replace('${id}', id);
+        const fetchedGames = await fetch(link);
+        const fetchGames: MLSGameAPI = await fetchedGames.json();
+        const { events } = fetchGames;
+
+        games = events?.[0] ? events : [];
+
+        const now = new Date();
+        const gamesFilter = games.filter(({ date }) => new Date(date) >= now);
+        if (gamesFilter.length === 0) {
+          const link = leaguesData[leagueName].fetchTeam + '/' + id;
+          const fetchedTeams = await fetch(link);
+          const fetchTeams: TeamDetailed = await fetchedTeams.json();
+          games = fetchTeams?.team?.nextEvent || [];
         }
-        console.info('yes', value, 'total games found', games.length);
+
+        console.info('yes', value);
       } catch (error) {
         console.info('no', value, error);
         games = [];

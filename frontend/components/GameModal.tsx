@@ -175,6 +175,14 @@ export default function GameModal({
     }
 
     if (hasScore) {
+      if (status === GameStatus.FINAL || status === GameStatus.FINISHED) {
+        return (
+          <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+            {translateWord('score')}
+          </ThemedText>
+        );
+      }
+
       const statusText = status === GameStatus.FINAL ? translateWord('final') : translateWord('ended');
       return (
         <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>

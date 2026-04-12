@@ -198,69 +198,31 @@ export class HockeyData {
     try {
       let fetchGames;
       if (league === League.NHL) {
-        const seasons = this.getSeasonsToFetch();
-        let allGames = [];
-        for (const season of seasons) {
-          const fetchedGames = await fetch(
-            `https://api-web.nhle.com/v1/club-schedule-season/${id}/${season}`,
-          );
-          const tempGames = await fetchedGames.json();
-          const games = tempGames.games || [];
-          allGames = allGames.concat(games);
-        }
-        // Remove duplicates based on game id or date
-        const uniqueGames = allGames.filter(
-          (game, index, self) =>
-            index === self.findIndex((g) => g.id === game.id),
+        const fetchedGames = await fetch(
+          `https://api-web.nhle.com/v1/club-schedule-season/${id}/now`,
         );
-        fetchGames = uniqueGames;
+        const tempGames = await fetchedGames.json();
+
+        fetchGames = await tempGames.games;
       }
       if (league === League.PWHL) {
-        const seasons = ['2024', '2023']; // PWHL seasons
-        let allGames = [];
-        for (const season of seasons) {
-          const fetchedGames = await fetch(
-            `${pwhlAPI}index.php?feed=modulekit&view=schedule&season_id=${season}&key=446521baf8c38984&client_code=pwhl&fmt=json`,
-          );
-          const response = await fetchedGames.json();
-          const games = response?.SiteKit?.Schedule || [];
-          const filteredGames = games.filter(
-            (game) =>
-              game.home_team_code === id || game.visiting_team_code === id,
-          );
-          allGames = allGames.concat(filteredGames);
-        }
-        // Remove duplicates
-        const uniqueGames = allGames.filter(
-          (game, index, self) =>
-            index === self.findIndex((g) => g.id === game.id),
+        const fetchedGames = await fetch(
+          `${pwhlAPI}?feed=modulekit&view=schedule&key=446521baf8c38984&client_code=pwhl`,
         );
-        fetchGames = uniqueGames;
+        const allFetchGames = (await fetchedGames.json()).SiteKit.Schedule;
+        fetchGames = allFetchGames.filter(
+          (game) =>
+            game.home_team_code === id || game.visiting_team_code === id,
+        );
         console.info('yes', id);
-        return fetchGames;
+        return (await fetchGames.games) || fetchGames;
       }
       console.info('yes', id);
-      return fetchGames;
+      return (await fetchGames.games) || fetchGames;
     } catch (error) {
       console.error('Error fetching games:', id, error);
       throw id;
     }
-  };
-
-  getSeasonsToFetch = () => {
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1; // 1-12
-    let currentSeason: string;
-    let previousSeason: string;
-    if (currentMonth >= 9) {
-      // Saison commence en septembre
-      currentSeason = `${currentYear}${currentYear + 1}`;
-      previousSeason = `${currentYear - 1}${currentYear}`;
-    } else {
-      currentSeason = `${currentYear - 1}${currentYear}`;
-      previousSeason = `${currentYear - 2}${currentYear - 1}`;
-    }
-    return ['now', currentSeason, previousSeason];
   };
 
   getPWHLStandings = async (seasonId?: string) => {
