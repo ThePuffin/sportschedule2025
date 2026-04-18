@@ -31,7 +31,11 @@ export const getGamesStatus = (game: GameFormatted) => {
   const endTime = new Date(startTime);
   endTime.setHours(endTime.getHours() + duration);
 
-  if (game.gameStatus?.toUpperCase().includes('FINAL') || game.gameStatus?.toUpperCase().includes('ENDED')) {
+  if (
+    game.gameStatus?.toUpperCase().includes('FINAL') ||
+    game.gameStatus?.toUpperCase().includes('FINISHED') ||
+    game.gameStatus?.toUpperCase().includes('ENDED')
+  ) {
     return GameStatus.FINISHED;
   }
 

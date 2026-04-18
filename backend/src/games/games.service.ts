@@ -237,12 +237,14 @@ export class GameService {
           leagueTeams,
           leagueLogos,
           normalizedLeague,
+          forceUpdate,
         );
       } else {
         gamesObj = await getTeamsSchedule(
           leagueTeams,
           normalizedLeague,
           leagueLogos,
+          forceUpdate
         );
       }
 
@@ -714,18 +716,33 @@ export class GameService {
     }
   }
 
-  async fetchGamesWithoutScores(): Promise<Game[]> {
-    const twoHoursAgo = new Date();
-    twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
+  async fetchGamesWithoutScores(hours = 2): Promise<Game[]> {
+    const hoursAgo = new Date();
+    hoursAgo.setHours(hoursAgo.getHours() - hours);
 
     // match started at least 2 hours ago and score is null or missing
     const gamesWithoutScores = await this.gameModel
       .find({
-        startTimeUTC: { $lte: twoHoursAgo.toISOString() },
+        startTimeUTC: { $lte: hoursAgo.toISOString() },
         $or: [{ homeTeamScore: null }, { awayTeamScore: null }],
       })
+      .sort({ startTimeUTC: -1 }) // Most recent first
       .exec();
     return gamesWithoutScores;
+  }
+
+  async fetchGamesNotStartedWithScores(): Promise<Game[]> {
+    const now = new Date();
+
+    return await this.gameModel
+      .find({
+        startTimeUTC: { $gt: now.toISOString() },
+        $and: [
+          { homeTeamScore: { $exists: true, $ne: null } },
+          { awayTeamScore: { $exists: true, $ne: null } },
+        ],
+      })
+      .exec();
   }
 
   async fetchGamesScores(): Promise<any[]> {
@@ -735,23 +752,10 @@ export class GameService {
     }
     this.isFetchingScores = true;
     try {
-      const gamesWithoutScores = await this.fetchGamesWithoutScores();
-
-      const now = new Date();
-      const seventyTwoHoursAgo = new Date(now.getTime() - 72 * 60 * 60 * 1000);
-      const gamesToDelete = gamesWithoutScores.filter(
-        (game) => new Date(game.startTimeUTC) < seventyTwoHoursAgo,
-      );
-      const gamesToProcess = gamesWithoutScores.filter(
-        (game) => new Date(game.startTimeUTC) >= seventyTwoHoursAgo,
-      );
-
-      for (const game of gamesToDelete) {
-        await this.remove(game.uniqueId);
-      }
+      console.info('[fetchGamesScores] Starting score recovery cycle...');
+      const gamesToProcess = await this.fetchGamesWithoutScores(2);
 
       const postponedGamesLeagues = new Set<string>();
-      // number of games without scores is available in `gamesWithoutScores.length`
 
       // Group needed updates by League AND Date
       const tasks = new Map<string, Set<string>>();
@@ -769,14 +773,24 @@ export class GameService {
 
       for (const [league, dates] of tasks) {
         for (const date of dates) {
+          console.info(
+            `[fetchGamesScores] Fetching scores for ${league} on ${date}...`,
+          );
           if (league === League.PWHL) {
             const hockeyData = new HockeyData();
             try {
               const scoresPWHL = await hockeyData.getPWHLScores(date);
               if (Array.isArray(scoresPWHL)) {
+                console.info(
+                  `[fetchGamesScores] PWHL: ${scoresPWHL.length} scores received.`,
+                );
                 results.push(...scoresPWHL);
               }
             } catch (error) {
+              console.error(
+                `[fetchGamesScores] Erreur lors de la récupération PWHL pour ${date}:`,
+                error,
+              );
               // ignore fetch errors for PWHL
             }
           } else {
@@ -785,6 +799,9 @@ export class GameService {
               if (Array.isArray(espnScores) && espnScores.length) {
                 results.push(...espnScores);
               }
+              console.info(
+                `[fetchGamesScores] ${league}: ${espnScores?.length ?? 0} scores received.`,
+              );
             } catch (err) {
               console.error(
                 `Error fetching scores for ${league} on ${date}:`,
@@ -811,6 +828,9 @@ export class GameService {
               possibleId,
             );
             if (individualScore?.isFinal) {
+              console.info(
+                `[fetchGamesScores] Fallback: individual score retrieved for ${game.uniqueId}`,
+              );
               results.push(individualScore);
               fetchedEventIds.add(possibleId);
             }
@@ -825,6 +845,9 @@ export class GameService {
 
       // Now try to update matching games in DB before returning
       const appliedUpdates: any[] = [];
+      console.info(
+        `[fetchGamesScores] Total scores retrieved: ${results.length}. Applying updates to database...`,
+      );
 
       for (const score of results) {
         try {
@@ -971,10 +994,7 @@ export class GameService {
                     updateDate: new Date().toISOString(),
                     gameClock: score.gameClock,
                     gamePeriod: score.gamePeriod,
-                    gameStatus:
-                      score.gameStatus === 'SCHEDULED'
-                        ? 'FINISHED'
-                        : score.gameStatus,
+                    gameStatus: this._resolveStatus(score),
                   },
                   { new: true },
                 )
@@ -1004,6 +1024,9 @@ export class GameService {
         }
       }
 
+      console.info(
+        `[fetchGamesScores] Cycle completed. ${appliedUpdates.length} updates applied.`,
+      );
       const anyManualRefresh = Object.values(this.manualRefreshInProgress).some(
         (v) => v,
       );
@@ -1017,12 +1040,45 @@ export class GameService {
         }
       }
 
+      await this.fixScoreIssue();
+      await this.removeOldGamesWithoutScore();
+
       return appliedUpdates.length ? appliedUpdates : results;
     } catch (error) {
       console.error('Error fetching games scores:', error);
       return [];
     } finally {
       this.isFetchingScores = false;
+    }
+  }
+
+  private async fixScoreIssue() {
+    const wrongScores = await this.fetchGamesNotStartedWithScores();
+    for (const game of wrongScores) {
+      console.info(
+        `[fixScoreIssue] Removing score for game ${game.uniqueId} that has scores but hasn't started yet...`,
+      );
+      await this.gameModel.updateOne(
+        { uniqueId: game.uniqueId },
+        {
+          $set: { homeTeamScore: null, awayTeamScore: null, gameStatus: null },
+        },
+      );
+    }
+  }
+
+  private async removeOldGamesWithoutScore() {
+    let gamesToDelete = await this.fetchGamesWithoutScores(72);
+
+    console.info(
+      `[fetchGamesScores] ${gamesToDelete.length} games without scores found. Processing...`,
+    );
+
+    for (const game of gamesToDelete) {
+      console.info(
+        `[fetchGamesScores] Removing game ${game.uniqueId} without score and started more than 72h ago...`,
+      );
+      await this.remove(game.uniqueId);
     }
   }
 
@@ -1038,7 +1094,6 @@ export class GameService {
 
     for (const game of games) {
       if (game.league === League.PWHL) {
-        pwhlGames.push(game);
       } else {
         espnGames.push(game);
       }
@@ -1113,11 +1168,7 @@ export class GameService {
         game.gameClock = matchedScore.gameClock;
         game.gamePeriod = matchedScore.gamePeriod;
 
-        // Only update gameStatus from API data, don't resolve to FINISHED
-        // FINISHED status is only assigned in fetchGamesScores()
-        if (matchedScore.gameStatus) {
-          game.gameStatus = matchedScore.gameStatus;
-        }
+        game.gameStatus = this._resolveStatus(matchedScore);
 
         updatedGames.push(game);
       } else {

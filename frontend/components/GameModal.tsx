@@ -151,7 +151,7 @@ export default function GameModal({
     return `${baseUrl}/${path}`;
   };
 
-  const standingUrl = league === League.PWHL ? 'https://pwhl.ca/standings' : getEspnStandingsUrl(league);
+  const standingUrl = league === League.PWHL ? 'https://www.thepwhl.com/stats/standings' : getEspnStandingsUrl(league);
 
   const renderStatusText = () => {
     if (isLive) {

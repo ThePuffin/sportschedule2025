@@ -140,6 +140,7 @@ export const translateWord = (word: string) => {
         events: 'Evenements',
         final: 'Finalisation',
         standings: 'Classement',
+        currentScore: 'Score actuel',
       };
       break;
     case 'de':
@@ -180,6 +181,7 @@ export const translateWord = (word: string) => {
         events: 'Ereignisse',
         final: 'Ergebnis',
         standings: 'Standings',
+        currentScore: 'Aktueller Spielstand',
       };
       break;
     case 'es':
@@ -220,6 +222,7 @@ export const translateWord = (word: string) => {
         events: 'Eventos',
         final: 'Final',
         standings: 'Clasificaciones',
+        currentScore: 'Marcador actual',
       };
       break;
 
@@ -261,6 +264,7 @@ export const translateWord = (word: string) => {
         events: 'Eventi',
         final: 'Finale',
         standings: 'Classifica',
+        currentScore: 'Punteggio attuale',
       };
       break;
     case 'ja':
@@ -301,6 +305,7 @@ export const translateWord = (word: string) => {
         events: 'イベント',
         final: '最終',
         standings: 'スタンディング',
+        currentScore: '現在のスコア',
       };
       break;
     case 'ko':
@@ -341,6 +346,7 @@ export const translateWord = (word: string) => {
         events: '이벤트',
         final: '최종',
         standings: '표준',
+        currentScore: '현재 점수',
       };
       break;
     case 'nl':
@@ -381,6 +387,7 @@ export const translateWord = (word: string) => {
         events: 'Evenementen',
         final: 'Eind',
         standings: 'Standings',
+        currentScore: 'Huidige score',
       };
       break;
     case 'pt':
@@ -421,6 +428,7 @@ export const translateWord = (word: string) => {
         events: 'Eventos',
         final: 'Final',
         standings: 'Classificação',
+        currentScore: 'Placar atual',
       };
       break;
     case 'ru':
@@ -461,6 +469,7 @@ export const translateWord = (word: string) => {
         events: 'События',
         final: 'Финал',
         standings: 'Таблица',
+        currentScore: 'Текущий счет',
       };
       break;
     case 'zh':
@@ -501,6 +510,7 @@ export const translateWord = (word: string) => {
         events: '事件',
         final: '最终',
         standings: '排名',
+        currentScore: '当前得分',
       };
       break;
     default:
@@ -541,6 +551,7 @@ export const translateWord = (word: string) => {
         events: 'Events',
         final: 'Final',
         standings: 'Standings',
+        currentScore: 'Current Score',
       };
       break;
   }

@@ -300,11 +300,14 @@ const GameofTheDayContent = () => {
           !game.gameStatus.toUpperCase().includes('ENDED')) ||
         (hasScore && status !== GameStatus.FINAL && status !== GameStatus.FINISHED);
 
-      if (isLive && (game.gameClock || game.gamePeriod)) {
+      const isFinal = status === GameStatus.FINAL || game.gameStatus?.toUpperCase().includes('FINAL');
+      const isFinished = status === GameStatus.FINISHED || game.gameStatus?.toUpperCase().includes('ENDED');
+
+      if ((isLive || !isBeforeStart) && !isFinal && !isFinished) {
         inProgress.push(game);
-      } else if (status === GameStatus.FINAL || game.gameStatus?.toUpperCase().includes('FINAL')) {
+      } else if (isFinal) {
         final.push(game);
-      } else if (status === GameStatus.FINISHED || game.gameStatus?.toUpperCase().includes('ENDED')) {
+      } else if (isFinished) {
         finished.push(game);
       } else if (hasScore && !isBeforeStart) {
         finished.push(game);
