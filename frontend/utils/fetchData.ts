@@ -1,7 +1,8 @@
 import { FilterGames, GameFormatted, Team } from '@/utils/types';
 import * as fflate from 'fflate';
 
-const EXPO_PUBLIC_API_BASE_URL =  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
+const EXPO_PUBLIC_API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 type TeamGamesCacheEntry = {
   data: FilterGames;
@@ -271,6 +272,25 @@ export const fetchRemainingGamesByTeam = async (teamSelected: string, startDate?
     },
     60000,
   );
+};
+
+export const fetchResultsByTeam = async (teamSelected: string, startDate?: string) => {
+  let url = `${EXPO_PUBLIC_API_BASE_URL}/games/team/${teamSelected}/results`;
+  if (startDate) {
+    url += `?startDate=${startDate}`;
+  }
+  return fetchWithCacheStrategy<FilterGames>(url, null, {}, undefined, undefined, 60000);
+};
+
+export const fetchResultsByLeague = async (league: string, startDate?: string, maxResults?: number) => {
+  let url = `${EXPO_PUBLIC_API_BASE_URL}/games/league/${league}/results`;
+  if (startDate) {
+    url += `?startDate=${startDate}`;
+  }
+  if (maxResults) {
+    url += `${url.includes('?') ? '&' : '?'}maxResults=${maxResults}`;
+  }
+  return fetchWithCacheStrategy<FilterGames>(url, null, {}, undefined, undefined, 60000);
 };
 
 export const fetchRemainingGamesByLeague = async (

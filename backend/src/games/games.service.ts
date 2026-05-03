@@ -58,8 +58,9 @@ export class GameService {
     const awayTeam = teamsMap.get(game.awayTeamId);
     return {
       ...game,
-      homeTeamRecord: homeTeam?.record || '',
-      awayTeamRecord: awayTeam?.record || '',
+      homeTeamRecord: game.seriesSummary || homeTeam?.record || '',
+      awayTeamRecord:
+        game.seriesStatus || game.seriesSummary || awayTeam?.record || '',
       homeTeam: homeTeam?.label || game.homeTeam,
       homeTeamShort: homeTeam?.abbrev || game.homeTeamShort,
       homeTeamLogo:
@@ -226,6 +227,16 @@ export class GameService {
         forceUpdate ? 'manual' : 'auto',
       );
 
+      const todayStr = readableDate(now);
+      await this.gameModel.updateMany(
+        {
+          league: normalizedLeague,
+          gameDate: { $gte: todayStr },
+          isActive: true,
+        },
+        { $set: { isActive: false } },
+      );
+
       // Fetch teams and logos for the league
       const leagueTeams = await this.teamService.findAll([normalizedLeague]);
       const leagueLogos = await this.getTeamsLogo(leagueTeams);
@@ -244,7 +255,7 @@ export class GameService {
           leagueTeams,
           normalizedLeague,
           leagueLogos,
-          forceUpdate
+          forceUpdate,
         );
       }
 
@@ -254,6 +265,7 @@ export class GameService {
       if (games && games.length > 0) {
         for (const game of games) {
           game.updateDate = new Date().toISOString();
+          game.isActive = true;
           await this.create(game);
         }
       }
@@ -378,6 +390,77 @@ export class GameService {
         if (refreshedGames[date].length === 0) delete refreshedGames[date];
       }
       return refreshedGames;
+    }
+
+    return games;
+  }
+
+  async findResultsByTeam(teamSelectedId: string, startDate?: string) {
+    if (!startDate) {
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      startDate = readableDate(oneYearAgo);
+    }
+    const today = readableDate(new Date());
+    const games = await this.filterGames({
+      teamSelectedIds: teamSelectedId,
+      startDate,
+      endDate: today,
+      clean: true,
+    });
+
+    for (const date in games) {
+      games[date] = games[date].filter((game) => {
+        return (
+          game.homeTeamScore !== null &&
+          game.homeTeamScore !== undefined &&
+          game.awayTeamScore !== null &&
+          game.awayTeamScore !== undefined
+        );
+      });
+      if (games[date].length === 0) {
+        delete games[date];
+      }
+    }
+
+    return games;
+  }
+
+  async findResultsByLeague(
+    league: string,
+    startDate?: string,
+    maxResults?: number,
+  ) {
+    if (!startDate) {
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      startDate = readableDate(oneYearAgo);
+    }
+    maxResults = maxResults || 5000;
+
+    const today = readableDate(new Date());
+
+    const games = await this.filterGames({
+      league,
+      startDate,
+      endDate: today,
+      clean: true,
+      selectedTeam: true,
+      maxResults,
+    });
+
+    for (const date in games) {
+      games[date] = games[date].filter((game) => {
+        return (
+          game.homeTeamScore !== null &&
+          game.homeTeamScore !== undefined &&
+          game.awayTeamScore !== null &&
+          game.awayTeamScore !== undefined
+        );
+      });
+      if (games[date].length === 0) {
+        delete games[date];
+      }
     }
 
     return games;
@@ -612,16 +695,27 @@ export class GameService {
       const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
 
       // avoid dupplicate games
-      const filteredGames = games.filter(({ homeTeamId, teamSelectedId }) => {
-        return homeTeamId === teamSelectedId;
-      });
+      const filteredGames = games
+        .filter(({ gameStatus, startTimeUTC }) => {
+          const now = new Date();
+          const isStartedForMoreThan12Hours =
+            new Date(startTimeUTC) <
+            new Date(now.getTime() - 12 * 60 * 60 * 1000);
+          return (
+            (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
+            gameStatus === 'FINISHED'
+          );
+        })
+        .filter(({ homeTeamId, teamSelectedId }) => {
+          return homeTeamId === teamSelectedId;
+        });
       return filteredGames.map((game: any) =>
         this._enrichGameWithTeamData(game, teamsMap),
       );
     }
   }
 
-  async update(uniqueId: string, updateGameDto: UpdateGameDto) {
+  async update(uniqueId: string, updateGameDto: Partial<UpdateGameDto>) {
     const filter = { uniqueId: uniqueId };
     return this.gameModel.updateOne(filter, updateGameDto);
   }
@@ -894,7 +988,11 @@ export class GameService {
           }
 
           // fallback: match by home/away ids + gameDate (allow using team shorts when ids missing)
-          if (!game && (score.startTimeUTC || score.gameDate)) {
+          const dateOfGame = score.startTimeUTC || score?.gameDate;
+
+          if (!game && dateOfGame) {
+            // if score.startTimeUTC is after now update game in DB with this new startTimeUTC to be able to match better next time
+
             const gameDate =
               score.gameDate || readableDate(new Date(score.startTimeUTC));
             const candidateHomeId =
@@ -973,50 +1071,24 @@ export class GameService {
           }
 
           if (game) {
-            if (isPostponed) {
-              await this.remove(game.uniqueId);
-              continue;
-            }
-
             const needsUpdate =
               game.homeTeamScore === null ||
               game.homeTeamScore === undefined ||
               game.awayTeamScore === null ||
               game.awayTeamScore === undefined;
-            if (needsUpdate) {
-              const updated = await this.gameModel
-                .findOneAndUpdate(
-                  { _id: game._id },
-                  {
-                    homeTeamScore: score.homeTeamScore,
-                    awayTeamScore: score.awayTeamScore,
-                    isActive: true,
-                    updateDate: new Date().toISOString(),
-                    gameClock: score.gameClock,
-                    gamePeriod: score.gamePeriod,
-                    gameStatus: this._resolveStatus(score),
-                  },
-                  { new: true },
-                )
-                .lean()
-                .exec();
-              if (updated) {
-                if (score.homeTeamRecord && game.homeTeamId) {
-                  await this.teamService.updateRecord(
-                    game.homeTeamId,
-                    score.homeTeamRecord,
-                  );
-                }
-                if (score.awayTeamRecord && game.awayTeamId) {
-                  await this.teamService.updateRecord(
-                    game.awayTeamId,
-                    score.awayTeamRecord,
-                  );
-                }
-                updated.homeTeamRecord = score.homeTeamRecord;
-                updated.awayTeamRecord = score.awayTeamRecord;
-                appliedUpdates.push(updated);
-              }
+
+            await this.syncGameWithScore(score, game);
+
+            if (isPostponed) {
+              await this.remove(game.uniqueId);
+              continue;
+            }
+
+            if (needsUpdate && score.isFinal) {
+              // On attache les records pour le retour API si nécessaire pour l'UI
+              (game as any).homeTeamRecord = score.homeTeamRecord;
+              (game as any).awayTeamRecord = score.awayTeamRecord;
+              appliedUpdates.push(game);
             }
           }
         } catch (err) {
@@ -1094,26 +1166,21 @@ export class GameService {
 
     for (const game of games) {
       if (game.league === League.PWHL) {
+        pwhlGames.push(game);
       } else {
         espnGames.push(game);
       }
     }
 
     if (pwhlGames.length > 0) {
-      const dates = new Set<string>();
-      pwhlGames.forEach((g) => {
-        if (g.gameDate) dates.add(g.gameDate);
-      });
       const hockeyData = new HockeyData();
-      for (const date of dates) {
-        try {
-          const scores = await hockeyData.getPWHLScores(date);
-          if (Array.isArray(scores)) {
-            allScores.push(...scores);
-          }
-        } catch (error) {
-          console.error(`Error fetching PWHL scores for ${date}:`, error);
+      try {
+        const scores = await hockeyData.getPWHLRealTimeData();
+        if (Array.isArray(scores)) {
+          allScores.push(...scores);
         }
+      } catch (error) {
+        console.error(`Error fetching PWHL live scores:`, error);
       }
     }
 
@@ -1156,20 +1223,7 @@ export class GameService {
       }
 
       if (matchedScore) {
-        game.homeTeamScore = matchedScore.homeTeamScore;
-        game.awayTeamScore = matchedScore.awayTeamScore;
-        game.isActive =
-          matchedScore.isActive === undefined
-            ? game.isActive
-            : matchedScore.isActive;
-
-        game.updateDate = new Date().toISOString();
-
-        game.gameClock = matchedScore.gameClock;
-        game.gamePeriod = matchedScore.gamePeriod;
-
-        game.gameStatus = this._resolveStatus(matchedScore);
-
+        await this.syncGameWithScore(matchedScore, game);
         updatedGames.push(game);
       } else {
         updatedGames.push(game);
@@ -1177,6 +1231,83 @@ export class GameService {
     }
 
     return updatedGames;
+  }
+
+  private async syncGameWithScore(
+    matchedScore: any,
+    game: mongoose.Document<unknown, {}, Game> &
+      Game &
+      Required<{ _id: unknown }> & { __v: number },
+  ) {
+    const resolvedStatus = this._resolveStatus(matchedScore);
+
+    // On ne met à jour les scores et les informations de temps de jeu que si le match est en cours ou terminé.
+    // Cela évite de remplir la base de données avec des scores temporaires (ex: 0-0) pour des matchs encore "programmés".
+    if (
+      resolvedStatus !== 'SCHEDULED' &&
+      resolvedStatus !== 'POSTPONED' &&
+      resolvedStatus !== 'CANCELLED'
+    ) {
+      game.homeTeamScore = matchedScore.homeTeamScore;
+      game.awayTeamScore = matchedScore.awayTeamScore;
+      game.gameClock = matchedScore.gameClock;
+      game.gamePeriod = matchedScore.gamePeriod;
+    }
+
+    game.updateDate = new Date().toISOString();
+    game.gameStatus = resolvedStatus;
+    game.seriesSummary = matchedScore.seriesSummary;
+    game.seriesStatus = matchedScore.seriesStatus;
+
+    // Mise à jour des fiches d'équipes (Records)
+    if (matchedScore.homeTeamRecord && game.homeTeamId) {
+      await this.teamService.updateRecord(
+        game.homeTeamId,
+        matchedScore.homeTeamRecord,
+      );
+    }
+    if (matchedScore.awayTeamRecord && game.awayTeamId) {
+      await this.teamService.updateRecord(
+        game.awayTeamId,
+        matchedScore.awayTeamRecord,
+      );
+    }
+
+    // Update isActive based on resolved status
+    if (resolvedStatus === 'POSTPONED' || resolvedStatus === 'CANCELLED') {
+      game.isActive = false;
+    } else {
+      // If the matchedScore explicitly provides isActive, use it, otherwise keep current
+      game.isActive =
+        matchedScore.isActive === undefined
+          ? game.isActive
+          : matchedScore.isActive;
+    }
+
+    // Update startTimeUTC and gameDate if they have changed (using same logic as fetchGamesScores)
+    if (matchedScore.startTimeUTC) {
+      const startTime = new Date(matchedScore.startTimeUTC);
+      const now = new Date();
+      const currentDateAdjusted = new Date(
+        new Date(matchedScore.startTimeUTC).toLocaleString('en-US', {
+          timeZone: 'America/Los_Angeles',
+        }),
+      );
+
+      const newStartTimeISO = startTime.toISOString();
+      const newGameDate = readableDate(currentDateAdjusted);
+
+      if (
+        startTime > now &&
+        (game.startTimeUTC !== newStartTimeISO || game.gameDate !== newGameDate)
+      ) {
+        game.startTimeUTC = newStartTimeISO;
+        game.gameDate = newGameDate;
+      }
+    }
+
+    await game.save();
+    return resolvedStatus;
   }
 
   async findByDateHour(
@@ -1277,9 +1408,20 @@ export class GameService {
       const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
 
       // avoid dupplicate games
-      const filteredGames = games.filter(({ homeTeamId, teamSelectedId }) => {
-        return homeTeamId === teamSelectedId;
-      });
+      const filteredGames = games
+        .filter(({ gameStatus, startTimeUTC }) => {
+          const now = new Date();
+          const isStartedForMoreThan12Hours =
+            new Date(startTimeUTC) <
+            new Date(now.getTime() - 12 * 60 * 60 * 1000);
+          return (
+            (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
+            gameStatus === 'FINISHED'
+          );
+        })
+        .filter(({ homeTeamId, teamSelectedId }) => {
+          return homeTeamId === teamSelectedId;
+        });
 
       const gamesByTimeSlot: { [key: string]: any[] } = {};
       filteredGames.forEach((game: any) => {
@@ -1304,6 +1446,25 @@ export class GameService {
     // Priority 1: Check if game is truly finished
     if (score.isFinal) {
       return 'FINISHED';
+    }
+
+    // Priority 2: Check for explicit cancellation
+    if (score.status && typeof score.status === 'object') {
+      const statusName = score.status.name?.toUpperCase();
+      const statusDetail = score.status.detail?.toUpperCase();
+      const statusShortDetail = score.status.shortDetail?.toUpperCase();
+
+      if (
+        statusName?.includes('CANCELLED') ||
+        statusDetail?.includes('CANCELLED') ||
+        statusShortDetail?.includes('CANCELLED')
+      ) {
+        return 'CANCELLED';
+      }
+    } else if (typeof score.status === 'string') {
+      if (score.status.toUpperCase().includes('CANCELLED')) {
+        return 'CANCELLED';
+      }
     }
 
     // Priority 2: If API provides explicit game status (like "1st", "Top", "Bot", etc.), use it

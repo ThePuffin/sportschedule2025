@@ -1,18 +1,23 @@
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleProp, Switch, View, ViewStyle } from 'react-native';
 
-interface ScoreToggleProps {
+interface PreviousScoreToggleProps {
   value: boolean;
   onValueChange: (value: boolean) => void;
   style?: StyleProp<ViewStyle>;
 }
 
-export default function ScoreToggle({ value, onValueChange, style }: ScoreToggleProps) {
+export default function PreviousScoreToggle({ value, onValueChange, style }: PreviousScoreToggleProps) {
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
-      <View style={{ opacity: value ? 0.3 : 1 }}>
-        <Ionicons name="eye-off-outline" size={20} color="gray" />
+      <View
+        style={{
+          opacity: value ? 0.3 : 1,
+          transform: [{ scaleX: -1 }],
+        }}
+      >
+        <MaterialIcons name="update-disabled" size={24} color="gray" />
       </View>
       <Switch
         value={value}
@@ -22,7 +27,7 @@ export default function ScoreToggle({ value, onValueChange, style }: ScoreToggle
         style={{ marginHorizontal: 10 }}
       />
       <View style={{ opacity: value ? 1 : 0.3 }}>
-        <Ionicons name="eye-outline" size={20} color="gray" />
+        <MaterialIcons name="restore" size={24} color="#81b0ff" />
       </View>
     </View>
   );

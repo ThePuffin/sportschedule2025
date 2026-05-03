@@ -101,6 +101,12 @@ export class Game extends Document {
 
   @Prop()
   gamePeriod: number;
+
+  @Prop()
+  seriesSummary: string;
+
+  @Prop()
+  seriesStatus: string;
 }
 
 export const GameSchema = SchemaFactory.createForClass(Game);

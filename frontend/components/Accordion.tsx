@@ -21,8 +21,14 @@ export default function Accordion({
   gamesSelected,
   onSelection,
   showTime = false,
+  forceShowScores = false,
 }: Readonly<
-  AccordionProps & { onRetry?: () => void; showScores?: boolean; onSelection?: (game: GameFormatted) => void }
+  AccordionProps & {
+    onRetry?: () => void;
+    showScores?: boolean;
+    onSelection?: (game: GameFormatted) => void;
+    forceShowScores?: boolean;
+  }
 >) {
   const [expanded, setExpanded] = useState(disableToggle ? true : (open ?? i === 0));
   const { width } = useWindowDimensions();
@@ -43,10 +49,17 @@ export default function Accordion({
 
     return gamesFiltred.map((game, index) => {
       const isSelected = gamesSelected?.some((g) => g._id === game._id || (g.uniqueId && g.uniqueId === game.uniqueId));
+      // Offset for the sticky header in schedule.tsx to prevent the card from being hidden
+      const scrollMarginTopValue = isSmallDevice ? 220 : 260;
+
       return (
         <div
+          id={`game-${game.uniqueId}`}
           key={game.uniqueId || game._id || `${game.homeTeamId}-${game.startTimeUTC}-${index}`}
-          style={{ width: isSmallDevice ? '100%' : 'calc((100% - 30px) / 3)' }}
+          style={{
+            width: isSmallDevice ? '100%' : 'calc((100% - 30px) / 3)',
+            scrollMarginTop: `${scrollMarginTopValue}px`,
+          }}
         >
           <CardLarge
             data={game}
@@ -54,6 +67,7 @@ export default function Accordion({
             showDate={showDate}
             showButtons={true}
             showScores={showScores}
+            forceShowScores={forceShowScores}
             onSelection={onSelection}
             isSelected={isSelected}
             showTime={showTime}

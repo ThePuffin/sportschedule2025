@@ -37,7 +37,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="schedule"
         options={{
-          title: translateWord('remainingGames'),
+          title: translateWord('focusTeam'),
           tabBarIcon: ({ color }) => <Icon size={28} name="table" color={color} />,
         }}
       />

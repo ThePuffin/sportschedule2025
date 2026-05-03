@@ -24,6 +24,7 @@ export default function CardLarge({
   data,
   showDate = false,
   showScores: propShowScores,
+  forceShowScores = false,
   onSelection,
   isSelected: propIsSelected,
   animateExit = false,
@@ -408,11 +409,12 @@ export default function CardLarge({
 
   const stadiumSearch = arenaName.replace(/\s+/g, '+') + ',' + placeName.replace(/\s+/g, '+');
 
-  const shouldShowReveal = hasScore && (!showScores || (showScores && isFavorite && !isLive)) && !scoreRevealed;
+  const shouldShowReveal =
+    hasScore && !forceShowScores && (!showScores || (showScores && isFavorite && !isLive)) && !scoreRevealed;
 
   const centerContent = (
     <>
-      <View style={{ minHeight: 40, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ height: 80, justifyContent: 'center', alignItems: 'center' }}>
         {shouldShowReveal ? (
           <TouchableOpacity
             style={styles.revealButton}
@@ -485,7 +487,9 @@ export default function CardLarge({
               setScoreRevealed(true);
             }}
           >
-            <ThemedText style={[styles.liveTimeText, isSmallCard && { fontSize: 10 }]}>{timeText}</ThemedText>
+            <ThemedText style={[styles.liveTimeText, isSmallCard && { fontSize: 10 }]}>
+              {timeText.split(',')[0].trim()}
+            </ThemedText>
           </a>
         ) : (
           <ThemedText
@@ -692,7 +696,8 @@ export default function CardLarge({
                       darkColor="#94a3b8"
                       style={[styles.recordText, verticalMode && { marginLeft: 10, marginTop: 0, height: 'auto' }]}
                     >
-                      {((showScores && !isFavorite) || scoreRevealed ? awayTeamRecord : '\u00A0') || '\u00A0'}
+                      {(forceShowScores || (showScores && !isFavorite) || scoreRevealed ? awayTeamRecord : '\u00A0') ||
+                        '\u00A0'}
                     </ThemedText>
                   )}
                 </View>
@@ -767,7 +772,8 @@ export default function CardLarge({
                       darkColor="#94a3b8"
                       style={[styles.recordText, verticalMode && { marginLeft: 10, marginTop: 0, height: 'auto' }]}
                     >
-                      {((showScores && !isFavorite) || scoreRevealed ? homeTeamRecord : '\u00A0') || '\u00A0'}
+                      {(forceShowScores || (showScores && !isFavorite) || scoreRevealed ? homeTeamRecord : '\u00A0') ||
+                        '\u00A0'}
                     </ThemedText>
                   )}
                 </View>
@@ -862,6 +868,7 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 10,
     fontWeight: 'bold',
+    textOverflow: 'hidden',
   },
   mainRow: {
     flexDirection: 'row',
@@ -892,7 +899,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    minHeight: 80,
   },
   vsText: {
     fontSize: 32,
@@ -923,9 +929,9 @@ const styles = StyleSheet.create({
   timeContainer: {
     backgroundColor: '#1e293b',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 8,
-    marginTop: 8,
+    marginTop: 0,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
@@ -943,6 +949,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 16,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   footer: {
     borderTopWidth: 1,
@@ -973,6 +981,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 140,
     justifyContent: 'flex-start',
+    marginTop: 'auto',
   },
   logoPlaceholder: {
     width: 70,

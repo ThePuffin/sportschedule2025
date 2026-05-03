@@ -92,6 +92,9 @@ const GameofTheDayContent = () => {
   const [showScores, setShowScores] = useState<boolean>(false);
 
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
+  const [noVisibleGames, setNoVisibleGames] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const retryIntervals = useMemo(() => [1000, 10000, 20000, 30000], []);
   const [isLoading, setIsLoading] = useState(true);
   const readonlyRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -154,10 +157,14 @@ const GameofTheDayContent = () => {
         return acc;
       }, []);
 
-      const newGames = currentGames.map((g) => {
-        const liveGame = liveData.find((l) => l.uniqueId === g.uniqueId);
-        return liveGame ? { ...g, ...liveGame } : g;
-      });
+      const newGames = currentGames
+        .map((g) => {
+          const liveGame = liveData.find((l) => l.uniqueId === g.uniqueId);
+          return liveGame ? { ...g, ...liveGame } : g;
+        })
+        .filter((g) => {
+          return g.isActive;
+        });
       return newGames;
     } catch (error) {
       console.error('Error fetching live scores:', error);
@@ -270,6 +277,7 @@ const GameofTheDayContent = () => {
     const relevantGames = games
       .filter(
         (game) =>
+          game.isActive &&
           selectLeagues.includes(game.league as League) &&
           (!teamSelectedId || game.homeTeamId === teamSelectedId || game.awayTeamId === teamSelectedId) &&
           game.awayTeamLogo &&
@@ -494,6 +502,23 @@ const GameofTheDayContent = () => {
     const finalTeamId = Array.isArray(teamId) ? teamId[0] : teamId;
     setTeamSelectedId(finalTeamId);
   }, []);
+
+  // Retry mechanism when no games are found (NoResults is visible)
+  useEffect(() => {
+    if (!isLoading && visibleGamesByHour.length === 0 && retryCount < retryIntervals.length) {
+      const timer = setTimeout(() => {
+        setRetryCount((prev) => prev + 1);
+        getGamesFromApi(selectDate);
+      }, retryIntervals[retryCount]);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, visibleGamesByHour.length, retryCount, getGamesFromApi, selectDate, retryIntervals]);
+
+  // Reset retry count when filter or date changes
+  useEffect(() => {
+    setRetryCount(0);
+  }, [selectDate, selectLeagues, teamSelectedId, activeFilter]);
 
   const hasFavorites = useMemo(() => {
     return games.some((game) => favoriteTeams.includes(game.homeTeamId) || favoriteTeams.includes(game.awayTeamId));

@@ -411,10 +411,11 @@ const styles = StyleSheet.create({
   },
   teamsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     width: '100%',
     marginBottom: 20,
+    paddingHorizontal: 10,
   },
   teamColumn: {
     alignItems: 'center',
@@ -440,19 +441,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 5,
   },
-  modalVsText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
   scoreContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 70,
+  },
+  modalVsText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 70,
   },
   scoreText: {
     fontSize: 32,
     fontWeight: 'bold',
     marginHorizontal: 5,
+    lineHeight: 32,
   },
   scoreDivider: {
     fontSize: 24,

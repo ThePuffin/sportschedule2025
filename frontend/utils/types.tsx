@@ -142,4 +142,5 @@ export interface CardsProps {
   isSelected?: boolean;
   verticalMode?: boolean;
   showTime?: boolean;
+  forceShowScores?: boolean;
 }

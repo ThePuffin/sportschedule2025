@@ -76,8 +76,9 @@ export default function Calendar() {
   }, [filteredTeamsSelected]);
 
   const filteredGamesSelected = useMemo(() => {
-    if (allowedLeagues.length === 0) return gamesSelected;
-    return gamesSelected.filter((game) => allowedLeagues.includes(game.league));
+    return gamesSelected.filter(
+      (game) => game.isActive && (allowedLeagues.length === 0 || allowedLeagues.includes(game.league)),
+    );
   }, [gamesSelected, allowedLeagues]);
 
   const teamsAvailableForReorder = useMemo(() => {
@@ -298,7 +299,10 @@ export default function Calendar() {
       if (gameDate < startDate || gameDate > endDate) return null;
 
       const gamesForDate = games[date].filter(
-        (g) => filteredTeamsSelected.includes(g.teamSelectedId) && !hiddenTeams.includes(g.teamSelectedId),
+        (g) =>
+          g.isActive !== false &&
+          filteredTeamsSelected.includes(g.teamSelectedId) &&
+          !hiddenTeams.includes(g.teamSelectedId),
       );
 
       if (gamesForDate.length === 0) return null;
@@ -520,10 +524,7 @@ export default function Calendar() {
       >
         <Pressable style={styles.centeredView} onPress={() => setGamesModalVisible(false)}>
           <Pressable
-            style={[
-              styles.modalView,
-              { backgroundColor: modalBackgroundColor, maxHeight: '80%', width: '95%', maxWidth: 600 },
-            ]}
+            style={[styles.modalView, { backgroundColor: modalBackgroundColor, maxHeight: '80%', minWidth: '75%' }]}
             onPress={(e) => e.stopPropagation()}
           >
             <View
