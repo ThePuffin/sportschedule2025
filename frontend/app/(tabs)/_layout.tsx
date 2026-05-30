@@ -48,6 +48,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Icon size={28} name="calendar" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="connection"
+        options={{
+          title: translateWord('connection'),
+          tabBarIcon: ({ color }) => <Icon size={28} name="user" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

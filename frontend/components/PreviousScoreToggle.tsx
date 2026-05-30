@@ -1,6 +1,7 @@
+import { translateWord } from '@/utils/utils';
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleProp, Switch, View, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, Switch, View, ViewStyle } from 'react-native';
 
 interface PreviousScoreToggleProps {
   value: boolean;
@@ -9,8 +10,18 @@ interface PreviousScoreToggleProps {
 }
 
 export default function PreviousScoreToggle({ value, onValueChange, style }: PreviousScoreToggleProps) {
+  const helperText = translateWord('showHidePreviousScores');
+
   return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        ...StyleSheet.flatten(style),
+      }}
+      title={helperText}
+    >
       <View
         style={{
           opacity: value ? 0.3 : 1,
@@ -29,6 +40,6 @@ export default function PreviousScoreToggle({ value, onValueChange, style }: Pre
       <View style={{ opacity: value ? 1 : 0.3 }}>
         <MaterialIcons name="restore" size={24} color="#81b0ff" />
       </View>
-    </View>
+    </div>
   );
 }

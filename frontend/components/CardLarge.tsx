@@ -275,6 +275,8 @@ export default function CardLarge({
 
   if (showFinalization) {
     timeText = translateWord('final');
+  } else if (gameStatus === GameStatus.POSTPONED) {
+    timeText = translateWord('postponedGame');
   } else if ((status === GameStatus.FINISHED || status === GameStatus.FINAL) && hasScore) {
     timeText = translateWord('gameDetails');
   } else if (isStarted4hAgo && !serviceReportsNotTerminated) {

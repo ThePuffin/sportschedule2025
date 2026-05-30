@@ -101,6 +101,7 @@ export enum GameStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   FINISHED = 'FINISHED',
   FINAL = 'FINAL',
+  POSTPONED = 'POSTPONED',
 }
 
 export const leagueMapping = {

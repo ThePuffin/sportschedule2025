@@ -220,7 +220,7 @@ export default function Schedule() {
       }
       fetchGames();
     }
-  }, [teamSelected, teams, showPreviousScores]);
+  }, [teamSelected, leagueOfSelectedTeam, teams, showPreviousScores]);
 
   const getSelectedTeams = (allTeams: Team[], forcedLeague?: string, forcedTeam?: string) => {
     let selection = forcedTeam || localStorage.getItem('teamSelected') || '';
@@ -405,11 +405,13 @@ export default function Schedule() {
     });
 
     const months = filteredGamesDates.reduce((acc: { [key: string]: string[] }, day: string) => {
+      const year = new Date(day).getFullYear();
       const month = new Date(day).toLocaleString('default', { month: 'long' });
-      if (!acc[month]) {
-        acc[month] = [];
+      const monthKey = `${month} ${year}`;
+      if (!acc[monthKey]) {
+        acc[monthKey] = [];
       }
-      acc[month].push(day);
+      acc[monthKey].push(day);
       return acc;
     }, {});
 
@@ -753,15 +755,19 @@ export default function Schedule() {
         const scheduleDataStored = getCache<FilterGames>('scheduleData') || {};
         const scheduleKeys = Object.keys(scheduleDataStored);
         let thisLeagueTeams = structuredClone(leagueTeams);
-        if (scheduleKeys) {
+        if (scheduleKeys.length > 0) {
           const scheduleTeam = scheduleDataStored[scheduleKeys[0]]?.[0]?.teamSelectedId;
           const scheduleLeague = scheduleDataStored[scheduleKeys[0]]?.[0]?.league;
-          const teamSelected = localStorage.getItem('teamSelected') || '';
-          if (scheduleTeam === teamSelected || (teamSelected === 'all' && scheduleLeague === leagueOfSelectedTeam)) {
+
+          if (
+            scheduleTeam === teamSelected ||
+            (teamSelected === 'all' && scheduleLeague?.toUpperCase() === leagueOfSelectedTeam?.toUpperCase())
+          ) {
             setGames(removeOldGames(scheduleDataStored));
             setGamesTeamId(teamSelected);
+          } else {
+            setGames({});
           }
-          setLeagueTeams([]);
         }
         if (teamSelected === 'all') {
           const storedLeague = localStorage.getItem('leagueSelected');
