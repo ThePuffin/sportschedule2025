@@ -1,5 +1,7 @@
 import { maxFavoritesNumber } from '@/constants/Constants';
 import { saveCache } from '@/utils/fetchData';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { auth, db } from './firebaseConfig';
 import { Team } from './types';
 
 export const randomNumber = (max) => {
@@ -23,17 +25,36 @@ export const removeLastTeamId = (selection: string[]) => {
   return selection;
 };
 
-export const addFavoriteTeam = (favoriteTeams: string[], teamId: string) => {
+export const addFavoriteTeam = async (favoriteTeams: string[], teamId: string) => {
   const isIncluded = favoriteTeams.includes(teamId);
+  let updatedFavorites = [...favoriteTeams];
 
   if (isIncluded && favoriteTeams.length > 1) {
     // Only remove team if at least one remains after
-    const updatedFavorites = favoriteTeams.filter((id) => id !== teamId);
+    updatedFavorites = favoriteTeams.filter((id) => id !== teamId);
     saveCache('favoriteTeams', updatedFavorites);
   } else if (!isIncluded && favoriteTeams.length < maxFavoritesNumber) {
-    const updatedFavorites = [...favoriteTeams, teamId];
+    updatedFavorites = [...favoriteTeams, teamId];
     saveCache('favoriteTeams', updatedFavorites);
   }
+
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    try {
+      const userRef = doc(db, 'users', currentUser.uid);
+      await setDoc(
+        userRef,
+        {
+          favoriteTeams: updatedFavorites,
+          lastUpdate: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (e: unknown) {
+      console.error('Error syncing favorite team to Firestore:', e);
+    }
+  }
+
   if (globalThis.window !== undefined) {
     globalThis.window.dispatchEvent(new Event('favoritesUpdated'));
   }
@@ -92,7 +113,7 @@ export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, p
     link.click();
 
     setTimeout(() => URL.revokeObjectURL(url), 100);
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('Error generating or downloading ICS file:', e);
     return;
   }
@@ -148,9 +169,38 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Se connecter avec Google',
         signOut: 'Se déconnecter',
         authentication: 'Identifiez vous',
-        continueWithEmail: 'Continuer avec un e-mail',
+        continueWithEmail: 'Inscrivez-vous / Connectez-vous',
         forgotPassword: 'Mot de passe oublié ?',
         loggedInAs: 'Vous êtes connecté avec :',
+        passwordResetSent: 'Un lien de réinitialisation de mot de passe a été envoyé à votre adresse e-mail !',
+        incorrectPassword: 'Mot de passe incorrect pour ce compte. Veuillez réessayer.',
+        authError: "Erreur d'authentification : ",
+        loginError: 'Erreur de connexion : ',
+        enterEmailFirst: 'Veuillez d’abord saisir votre adresse e-mail.',
+        resetError: 'Erreur de réinitialisation : ',
+        connectionError: 'Erreur de connexion : ',
+        noUserLoggedIn: 'Aucun utilisateur connecté.',
+        confirmDeleteAccount:
+          'Êtes-vous sûr de vouloir supprimer définitivement votre compte ? Cette action est irréversible.',
+        accountDeleted: 'Votre compte a été supprimé avec succès.',
+        recentLoginRequired:
+          'Pour des raisons de sécurité, veuillez vous déconnecter puis vous reconnecter avant de supprimer votre compte.',
+        deletionError: 'Erreur de suppression : ',
+        deleteAccount: 'Supprimer le compte',
+        emailPlaceholder: 'Adresse e-mail',
+        passwordPlaceholder: 'Mot de passe',
+        signIn: 'Connectez-vous',
+        signUp: "S'inscrire",
+        noAccount: 'Pas encore de compte ?',
+        alreadyHaveAccount: 'Déjà un compte ?',
+        passwordConfirmPlaceholder: 'Confirmez le mot de passe',
+        passwordsDoNotMatch: 'Les mots de passe ne correspondent pas.',
+        userNotFound: 'Aucun compte trouvé pour cet e-mail.',
+        emailAlreadyInUse: 'Cet e-mail est déjà utilisé par un autre compte.',
+        invalidCredentials: 'E-mail ou mot de passe incorrect.',
+        or: 'ou',
+        profile: 'Mon Profil',
+        changePreferences: 'Changer mes préférences',
       };
       break;
     case 'de':
@@ -199,9 +249,38 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Mit Google anmelden',
         signOut: 'Abmelden',
         authentication: 'Identifizieren Sie sich',
-        continueWithEmail: 'Mit E-Mail fortfahren',
+        continueWithEmail: 'Registrieren / Anmelden',
         forgotPassword: 'Passwort vergessen?',
         loggedInAs: 'Angemeldet als:',
+        passwordResetSent: 'Ein Link zum Zurücksetzen des Passworts wurde an Ihren Posteingang gesendet!',
+        incorrectPassword: 'Falsches Passwort für dieses Konto. Bitte versuchen Sie es erneut.',
+        authError: 'Authentifizierungsfehler: ',
+        loginError: 'Anmeldefehler: ',
+        enterEmailFirst: 'Bitte geben Sie zuerst Ihre E-Mail-Adresse ein.',
+        resetError: 'Fehler beim Zurücksetzen: ',
+        connectionError: 'Verbindungsfehler: ',
+        noUserLoggedIn: 'Kein Benutzer angemeldet.',
+        confirmDeleteAccount:
+          'Sind Sie sicher, dass Sie Ihr Konto dauerhaft löschen möchten? Dies kann nicht rückgängig gemacht werden.',
+        accountDeleted: 'Ihr Konto wurde erfolgreich gelöscht.',
+        recentLoginRequired:
+          'Aus Sicherheitsgründen melden Sie sich bitte ab und wieder an, bevor Sie Ihr Konto löschen.',
+        deletionError: 'Fehler beim Löschen: ',
+        deleteAccount: 'Konto löschen',
+        emailPlaceholder: 'E-Mail-Adresse',
+        passwordPlaceholder: 'Passwort',
+        signIn: 'Anmelden',
+        signUp: 'Registrieren',
+        noAccount: 'Noch kein Konto?',
+        alreadyHaveAccount: 'Bereits ein Konto?',
+        passwordConfirmPlaceholder: 'Passwort bestätigen',
+        passwordsDoNotMatch: 'Passwörter stimmen nicht überein.',
+        userNotFound: 'Kein Konto für diese E-Mail gefunden.',
+        emailAlreadyInUse: 'Diese E-Mail wird bereits verwendet.',
+        invalidCredentials: 'E-Mail oder Passwort falsch.',
+        or: 'oder',
+        profile: 'Mein Profil',
+        changePreferences: 'Präferenzen ändern',
       };
       break;
     case 'es':
@@ -250,9 +329,38 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Iniciar sesión con Google',
         signOut: 'Cerrar sesión',
         authentication: 'Identificarse',
-        continueWithEmail: 'Continuar con el correo electrónico',
+        continueWithEmail: 'Registrarse / Iniciar sesión',
         forgotPassword: '¿Has olvidado tu contraseña?',
         loggedInAs: 'Conectado como:',
+        passwordResetSent: '¡Se ha enviado un enlace de restablecimiento de contraseña a tu bandeja de entrada!',
+        incorrectPassword: 'Contraseña incorrecta para esta cuenta. Por favor, inténtalo de nuevo.',
+        authError: 'Error de autenticación: ',
+        loginError: 'Error de inicio de sesión: ',
+        enterEmailFirst: 'Por favor, introduce primero tu correo electrónico.',
+        resetError: 'Error de restablecimiento: ',
+        connectionError: 'Error de conexión: ',
+        noUserLoggedIn: 'No hay ningún usuario conectado.',
+        confirmDeleteAccount:
+          '¿Estás seguro de que quieres eliminar permanentemente tu cuenta? Esta acción no se puede deshacer.',
+        accountDeleted: 'Tu cuenta ha sido eliminada con éxito.',
+        recentLoginRequired:
+          'Por razones de seguridad, cierra la sesión y vuelve a iniciarla antes de eliminar tu cuenta.',
+        deletionError: 'Error de eliminación: ',
+        deleteAccount: 'Eliminar cuenta',
+        emailPlaceholder: 'Correo electrónico',
+        passwordPlaceholder: 'Contraseña',
+        signIn: 'Iniciar sesión',
+        signUp: 'Registrarse',
+        noAccount: '¿No tienes cuenta?',
+        alreadyHaveAccount: '¿Ya tienes cuenta?',
+        passwordConfirmPlaceholder: 'Confirmar contraseña',
+        passwordsDoNotMatch: 'Las contraseñas no coinciden.',
+        userNotFound: 'No se encontró ninguna cuenta para este correo.',
+        emailAlreadyInUse: 'Este correo ya está en uso.',
+        invalidCredentials: 'Correo o contraseña incorrectos.',
+        or: 'o',
+        profile: 'Mi Perfil',
+        changePreferences: 'Cambiar mis preferencias',
       };
       break;
 
@@ -302,9 +410,36 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Accedi con Google',
         signOut: 'Esci',
         authentication: 'Identificarsi',
-        continueWithEmail: "Continua con l'e-mail",
+        continueWithEmail: 'Iscriviti / Accedi',
         forgotPassword: 'Password dimenticata?',
         loggedInAs: 'Connesso come:',
+        passwordResetSent: 'Un link per il recupero della password è stato inviato alla tua email!',
+        incorrectPassword: 'Password errata per questo account. Riprova.',
+        authError: 'Errore di autenticazione: ',
+        loginError: 'Errore di accesso: ',
+        enterEmailFirst: 'Inserisci prima il tuo indirizzo email.',
+        resetError: 'Errore di ripristino: ',
+        connectionError: 'Errore di connessione: ',
+        noUserLoggedIn: 'Nessun utente loggato.',
+        confirmDeleteAccount: 'Sei sicuro di voler eliminare definitivamente il tuo account? L’azione è irreversibile.',
+        accountDeleted: 'Il tuo account è stato eliminato con successo.',
+        recentLoginRequired: 'Per motivi di sicurezza, esci e accedi di nuovo prima di eliminare il tuo account.',
+        deletionError: 'Errore di eliminazione: ',
+        deleteAccount: 'Elimina account',
+        emailPlaceholder: 'Indirizzo email',
+        passwordPlaceholder: 'Password',
+        signIn: 'Accedi',
+        signUp: 'Iscriviti',
+        noAccount: 'Non hai un account?',
+        alreadyHaveAccount: 'Hai già un account?',
+        passwordConfirmPlaceholder: 'Conferma password',
+        passwordsDoNotMatch: 'Le password non corrispondono.',
+        userNotFound: 'Nessun account trovato per questa email.',
+        emailAlreadyInUse: 'Questa email è già in uso.',
+        invalidCredentials: 'Email o password errati.',
+        or: 'o',
+        profile: 'Il mio Profilo',
+        changePreferences: 'Cambia le mie preferenze',
       };
       break;
     case 'ja':
@@ -353,9 +488,37 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Googleでサインイン',
         signOut: 'サインアウト',
         authentication: '本人確認を行ってください',
-        continueWithEmail: 'メールで続ける',
+        continueWithEmail: '新規登録 / ログイン',
         forgotPassword: 'パスワードをお忘れですか？',
         loggedInAs: 'ログイン：',
+        passwordResetSent: 'パスワード再設定用のリンクをメールで送信しました。',
+        incorrectPassword: 'パスワードが正しくありません。もう一度お試しください。',
+        authError: '認証エラー: ',
+        loginError: 'ログインエラー: ',
+        enterEmailFirst: 'まずメールアドレスを入力してください。',
+        resetError: 'リセットエラー: ',
+        connectionError: '接続エラー: ',
+        noUserLoggedIn: 'ユーザーがログインしていません。',
+        confirmDeleteAccount: 'アカウントを完全に削除してもよろしいですか？この操作は取り消せません。',
+        accountDeleted: 'アカウントが正常に削除されました。',
+        recentLoginRequired:
+          'セキュリティのため、アカウントを削除する前に一度ログアウトしてから再度ログインしてください。',
+        deletionError: '削除エラー: ',
+        deleteAccount: 'アカウントを削除する',
+        emailPlaceholder: 'メールアドレス',
+        passwordPlaceholder: 'パスワード',
+        signIn: 'ログイン',
+        signUp: '新規登録',
+        noAccount: 'アカウントをお持ちでない方',
+        alreadyHaveAccount: '既にアカウントをお持ちの方',
+        passwordConfirmPlaceholder: 'パスワードを再入力',
+        passwordsDoNotMatch: 'パスワードが一致しません。',
+        userNotFound: 'アカウントが見つかりません。',
+        emailAlreadyInUse: 'このメールは既に使用されています。',
+        invalidCredentials: 'メールアドレスまたはパスワードが正しくありません。',
+        or: 'または',
+        profile: 'マイプロフィール',
+        changePreferences: '設定を変更する',
       };
       break;
     case 'ko':
@@ -404,9 +567,36 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Google로 로그인',
         signOut: '로그아웃',
         authentication: '본인 확인',
-        continueWithEmail: '이메일로 계속하기',
+        continueWithEmail: '가입하기 / 로그인',
         forgotPassword: '비밀번호를 잊으셨나요?',
         loggedInAs: '로그인 계정:',
+        passwordResetSent: '비밀번호 재설정 링크가 이메일로 전송되었습니다!',
+        incorrectPassword: '이 계정의 비밀번호가 올바르지 않습니다. 다시 시도해 주세요.',
+        authError: '인증 오류: ',
+        loginError: '로그인 오류: ',
+        enterEmailFirst: '먼저 이메일 주소를 입력해 주세요.',
+        resetError: '초기화 오류: ',
+        connectionError: '연결 오류: ',
+        noUserLoggedIn: '로그인된 사용자가 없습니다.',
+        confirmDeleteAccount: '계정을 영구적으로 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.',
+        accountDeleted: '계정이 성공적으로 삭제되었습니다.',
+        recentLoginRequired: '보안을 위해 계정을 삭제하기 전에 로그아웃 후 다시 로그인해 주세요.',
+        deletionError: '삭제 오류: ',
+        deleteAccount: '계정 삭제',
+        emailPlaceholder: '이메일 주소',
+        passwordPlaceholder: '비밀번호',
+        signIn: '로그인',
+        signUp: '가입하기',
+        noAccount: '계정이 없으신가요?',
+        alreadyHaveAccount: '이미 계정이 있으신가요?',
+        passwordConfirmPlaceholder: '비밀번호 확인',
+        passwordsDoNotMatch: '비밀번호가 일치하지 않습니다.',
+        userNotFound: '계정을 찾을 수 없습니다.',
+        emailAlreadyInUse: '이미 사용 중인 이메일입니다.',
+        invalidCredentials: '이메일 또는 비밀번호가 올바르지 않습니다.',
+        or: '또는',
+        profile: '내 프로필',
+        changePreferences: '기본 설정 변경',
       };
       break;
     case 'nl':
@@ -455,9 +645,37 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Iniciar sesión con Google',
         signOut: 'Uitloggen',
         authentication: 'Identificeer uzelf',
-        continueWithEmail: 'Doorgaan met e-mail',
+        continueWithEmail: 'Registreren / Inloggen',
         forgotPassword: 'Wachtwoord vergeten?',
         loggedInAs: 'Ingelogd als:',
+        passwordResetSent: 'Er is een link voor het opnieuw instellen van je wachtwoord naar je e-mail verzonden!',
+        incorrectPassword: 'Onjuist wachtwoord voor dit account. Probeer het opnieuw.',
+        authError: 'Authentificatiefout: ',
+        loginError: 'Inlogfout: ',
+        enterEmailFirst: 'Voer eerst je e-mailadres in.',
+        resetError: 'Resetfout: ',
+        connectionError: 'Verbindingsfout: ',
+        noUserLoggedIn: 'Geen gebruiker ingelogd.',
+        confirmDeleteAccount:
+          'Weet je zeker dat je je account permanent wilt verwijderen? Dit kan niet ongedaan worden gemaakt.',
+        accountDeleted: 'Je account is succesvol verwijderd.',
+        recentLoginRequired: 'Meld je uit veiligheidsoverwegingen af en opnieuw aan voordat je je account verwijdert.',
+        deletionError: 'Verwijderfout: ',
+        deleteAccount: 'Account verwijderen',
+        emailPlaceholder: 'E-mailadres',
+        passwordPlaceholder: 'Wachtwoord',
+        signIn: 'Inloggen',
+        signUp: 'Registreren',
+        noAccount: 'Nog geen account?',
+        alreadyHaveAccount: 'Heb je al een account?',
+        passwordConfirmPlaceholder: 'Wachtwoord bevestigen',
+        passwordsDoNotMatch: 'Wachtwoorden komen niet overeen.',
+        userNotFound: 'Geen account gevonden voor dit e-mailadres.',
+        emailAlreadyInUse: 'Dit e-mailadres is al in gebruik.',
+        invalidCredentials: 'E-mail of wachtwoord onjuist.',
+        or: 'of',
+        profile: 'Mijn Profiel',
+        changePreferences: 'Voorkeuren wijzigen',
       };
       break;
     case 'pt':
@@ -506,9 +724,37 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Iniciar sesión con Google',
         signOut: 'Sair',
         authentication: 'Identifique-se',
-        continueWithEmail: 'Continuar com e-mail',
+        continueWithEmail: 'Inscreva-se / Entrar',
         forgotPassword: 'Esqueceu a senha?',
         loggedInAs: 'Conectado como:',
+        passwordResetSent: 'Um link de redefinição de senha foi enviado para o seu e-mail!',
+        incorrectPassword: 'Senha incorrecta para esta conta. Por favor, tente novamente.',
+        authError: 'Erro de autenticação: ',
+        loginError: 'Erro de login: ',
+        enterEmailFirst: 'Por favor, insira seu e-mail primeiro.',
+        resetError: 'Erro de redefinição: ',
+        connectionError: 'Erro de conexão: ',
+        noUserLoggedIn: 'Nenhum usuário conectado.',
+        confirmDeleteAccount:
+          'Tem certeza de que deseja excluir permanentemente sua conta? Esta ação não pode ser desfeita.',
+        accountDeleted: 'Sua conta foi excluída com sucesso.',
+        recentLoginRequired: 'Por motivos de segurança, saia e entre novamente antes de excluir sua conta.',
+        deletionError: 'Erro de exclusão: ',
+        deleteAccount: 'Excluir conta',
+        emailPlaceholder: 'E-mail',
+        passwordPlaceholder: 'Senha',
+        signIn: 'Entrar',
+        signUp: 'Inscreva-se',
+        noAccount: 'Não tem uma conta?',
+        alreadyHaveAccount: 'Já tem uma conta?',
+        passwordConfirmPlaceholder: 'Confirmar senha',
+        passwordsDoNotMatch: 'As senhas não coincidem.',
+        userNotFound: 'Conta não encontrada.',
+        emailAlreadyInUse: 'Este e-mail já está em uso.',
+        invalidCredentials: 'E-mail ou senha incorretos.',
+        or: 'ou',
+        profile: 'Meu Perfil',
+        changePreferences: 'Alterar preferências',
       };
       break;
     case 'ru':
@@ -557,9 +803,37 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Войти с помощью Google',
         signOut: 'Выйти',
         authentication: 'Идентифицируйте себя',
-        continueWithEmail: 'Продолжить через электронную почту',
+        continueWithEmail: 'Зарегистрироваться / Войти',
         forgotPassword: 'Забыли пароль?',
         loggedInAs: 'Вы вошли как:',
+        passwordResetSent: 'Ссылка для сброса пароля была отправлена на вашу электронную почту!',
+        incorrectPassword: 'Неверный пароль для этой учетной записи. Пожалуйста, попробуйте еще раз.',
+        authError: 'Ошибка аутентификации: ',
+        loginError: 'Ошибка входа: ',
+        enterEmailFirst: 'Пожалуйста, сначала введите свой адрес электронной почты.',
+        resetError: 'Ошибка сброса: ',
+        connectionError: 'Ошибка подключения: ',
+        noUserLoggedIn: 'Нет вошедших пользователей.',
+        confirmDeleteAccount: 'Вы уверены, что хотите навсегда удалить свой аккаунт? Это действие нельзя отменить.',
+        accountDeleted: 'Ваш аккаунт был успешно удален.',
+        recentLoginRequired:
+          'В целях безопасности, пожалуйста, выйдите из системы и войдите снова перед удалением аккаунта.',
+        deletionError: 'Ошибка удаления: ',
+        deleteAccount: 'Удалить аккаунт',
+        emailPlaceholder: 'Электронная почта',
+        passwordPlaceholder: 'Пароль',
+        signIn: 'Войти',
+        signUp: 'Зарегистрироваться',
+        noAccount: 'Нет аккаунта?',
+        alreadyHaveAccount: 'Уже есть аккаунт?',
+        passwordConfirmPlaceholder: 'Подтвердите пароль',
+        passwordsDoNotMatch: 'Пароли не совпадают.',
+        userNotFound: 'Аккаунт не найден.',
+        emailAlreadyInUse: 'Этот email уже используется.',
+        invalidCredentials: 'Неверный email или пароль.',
+        or: 'или',
+        profile: 'Мой профиль',
+        changePreferences: 'Изменить настройки',
       };
       break;
     case 'zh':
@@ -608,9 +882,36 @@ export const translateWord = (word: string) => {
         signInWithGoogle: '使用Google登录',
         signOut: '退出登录',
         authentication: '身份验证',
-        continueWithEmail: '使用电子邮件继续',
+        continueWithEmail: '注册 / 登录',
         forgotPassword: '忘记密码？',
         loggedInAs: '登录身份：',
+        passwordResetSent: '重置密码链接已发送到您的邮箱！',
+        incorrectPassword: '此帐户的密码不正确。请重试。',
+        authError: '身份验证错误：',
+        loginError: '登录错误：',
+        enterEmailFirst: '请先输入您的电子邮件地址。',
+        resetError: '重置错误：',
+        connectionError: '连接错误：',
+        noUserLoggedIn: '当前没有用户登录。',
+        confirmDeleteAccount: '您确定要永久删除您的帐户吗？此操作无法撤销。',
+        accountDeleted: '您的帐户已成功删除。',
+        recentLoginRequired: '为了安全起见，请在删除帐户之前先退出并重新登录。',
+        deletionError: '删除错误：',
+        deleteAccount: '删除帐户',
+        emailPlaceholder: '电子邮件地址',
+        passwordPlaceholder: '密码',
+        signIn: '登录',
+        signUp: '注册',
+        noAccount: '还没有账号？',
+        alreadyHaveAccount: '已经有账号？',
+        passwordConfirmPlaceholder: '确认密码',
+        passwordsDoNotMatch: '密码不匹配。',
+        userNotFound: '找不到帐户。',
+        emailAlreadyInUse: '此电子邮件已被使用。',
+        invalidCredentials: '电子邮件或密码错误。',
+        or: '或',
+        profile: '我的资料',
+        changePreferences: '更改偏好',
       };
       break;
     default:
@@ -659,9 +960,36 @@ export const translateWord = (word: string) => {
         signInWithGoogle: 'Sign in with Google',
         signOut: 'Sign out',
         authentication: 'Please sign in',
-        continueWithEmail: 'Continue with Email',
+        continueWithEmail: 'Sign up / Sign in',
         forgotPassword: 'Forgot Password?',
         loggedInAs: 'Logged in as:',
+        passwordResetSent: 'A password reset link has been sent to your email inbox!',
+        incorrectPassword: 'Incorrect password for this account. Please try again.',
+        authError: 'Authentication error: ',
+        loginError: 'Login error: ',
+        enterEmailFirst: 'Please enter your email address first.',
+        resetError: 'Reset error: ',
+        connectionError: 'Connection error: ',
+        noUserLoggedIn: 'No user currently logged in.',
+        confirmDeleteAccount: 'Are you sure you want to delete your account? This cannot be undone.',
+        accountDeleted: 'Account successfully deleted.',
+        recentLoginRequired: 'Please log out and back in before deleting your account.',
+        deletionError: 'Deletion error: ',
+        deleteAccount: 'Delete Account',
+        emailPlaceholder: 'Email Address',
+        passwordPlaceholder: 'Password',
+        signIn: 'Sign In',
+        signUp: 'Sign Up',
+        noAccount: 'No account yet?',
+        alreadyHaveAccount: 'Already have an account?',
+        passwordConfirmPlaceholder: 'Confirm Password',
+        passwordsDoNotMatch: 'Passwords do not match.',
+        userNotFound: 'No account found for this email.',
+        emailAlreadyInUse: 'This email is already in use.',
+        invalidCredentials: 'Incorrect email or password.',
+        or: 'or',
+        profile: 'My Profile',
+        changePreferences: 'Change my preferences',
       };
       break;
   }

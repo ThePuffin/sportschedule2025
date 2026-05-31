@@ -507,7 +507,7 @@ export default function CardLarge({
   );
 
   const bookmarkElement =
-    status === GameStatus.SCHEDULED && (isSelected || onSelection) ? (
+    status === GameStatus.SCHEDULED && (isSelected || (onSelection && gamesSelected.length < 10)) ? (
       <View
         style={{
           justifyContent: 'center',

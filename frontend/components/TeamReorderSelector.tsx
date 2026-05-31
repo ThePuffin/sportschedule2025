@@ -12,6 +12,8 @@ interface TeamReorderSelectorProps {
   maxTeams?: number;
   onChange: (teams: string[]) => void;
   allowedLeagues?: string[];
+  forceOpenFirstSelector?: boolean;
+  onFirstSelectorClose?: () => void;
 }
 
 export default function TeamReorderSelector({
@@ -20,11 +22,11 @@ export default function TeamReorderSelector({
   maxTeams = 5,
   onChange,
   allowedLeagues = [],
+  forceOpenFirstSelector = false,
+  onFirstSelectorClose,
 }: Readonly<TeamReorderSelectorProps>) {
   const [isSmallDevice, setIsSmallDevice] = useState(Dimensions.get('window').width < 768);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [openFirstTeamSelector, setOpenFirstTeamSelector] = useState(false);
-
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
   const borderColor = useThemeColor({}, 'text');
@@ -37,14 +39,7 @@ export default function TeamReorderSelector({
     return () => subscription?.remove();
   }, []);
 
-  useEffect(() => {
-    if (allowedLeagues.length > 0 && !teams.some((t) => !!t)) {
-      setOpenFirstTeamSelector(true);
-    }
-  }, [allowedLeagues]);
-
   const handleSelection = (position: number, teamId: string | string[]) => {
-    setOpenFirstTeamSelector(false);
     const id = Array.isArray(teamId) ? teamId[0] : teamId;
     const updatedTeams = [...teams];
 
@@ -160,10 +155,11 @@ export default function TeamReorderSelector({
                   allowMultipleSelection={false}
                   isClearable={true}
                   placeholder={translateWord('findTeam')}
-                  startOpen={index === 0 && openFirstTeamSelector}
+                  startOpen={index === 0 && forceOpenFirstSelector}
                   style={{ backgroundColor, borderColor }}
                   textStyle={{ color: textColor, fontWeight: 'normal' }}
                   iconColor={effectiveIconColor}
+                  onClose={index === 0 ? onFirstSelectorClose : undefined}
                 />
               </View>
             </View>

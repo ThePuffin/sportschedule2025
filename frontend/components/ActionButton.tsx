@@ -11,6 +11,7 @@ interface ActionButtonProps {
 
 export interface ActionButtonRef {
   handleScroll: (event: any) => void;
+  openFavModal: () => void;
 }
 
 const ActionButtonWithRef: React.ForwardRefRenderFunction<ActionButtonRef, ActionButtonProps> = (
@@ -55,6 +56,7 @@ const ActionButtonWithRef: React.ForwardRefRenderFunction<ActionButtonRef, Actio
 
   useImperativeHandle(ref, () => ({
     handleScroll,
+    openFavModal: () => setIsOpenModal(true),
   }));
 
   const scrollToTop = () => {

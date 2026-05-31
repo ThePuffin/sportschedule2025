@@ -4,10 +4,13 @@ import NoResults from '@/components/NoResults';
 import TeamFilter from '@/components/TeamFilter';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
+import { useAuth } from '@/context/AuthContext';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
+import { db } from '@/utils/firebaseConfig';
 import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
 import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
@@ -47,6 +50,7 @@ const mergeGames = (initial: FilterGames, remaining: FilterGames): FilterGames =
 };
 
 export default function Schedule() {
+  const { user } = useAuth();
   const router = useRouter();
   const { league: leagueParam, team: teamParam } = useLocalSearchParams<{ league: string; team: string }>();
   const [games, setGames] = useState<FilterGames>({});
@@ -70,13 +74,25 @@ export default function Schedule() {
   );
 
   const isInternalChange = useRef(false);
-  const handlePreviousScoreToggle = useCallback((value: boolean) => {
-    setShowPreviousScores(value);
-    saveCache('showPreviousScores', value);
-    if (!value) {
-      setResults({});
-    }
-  }, []);
+  const handlePreviousScoreToggle = useCallback(
+    async (value: boolean) => {
+      setShowPreviousScores(value);
+      saveCache('showPreviousScores', value);
+      if (!value) {
+        setResults({});
+      }
+
+      if (user) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await setDoc(userRef, { showPreviousScores: value, lastUpdate: serverTimestamp() }, { merge: true });
+        } catch (error: unknown) {
+          console.error('Error syncing showPreviousScores to Firestore:', error);
+        }
+      }
+    },
+    [user],
+  );
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [focusCount, setFocusCount] = useState(0);

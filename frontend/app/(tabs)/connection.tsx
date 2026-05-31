@@ -1,16 +1,19 @@
 import AppLogo from '@/components/AppLogo';
+import FavModal from '@/components/FavModal';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { getCache, saveCache } from '@/utils/fetchData';
+import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
-import React, { useEffect, useState } from 'react'; // ADDED: useEffect hook
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 // Firebase Auth tools import
 import {
   createUserWithEmailAndPassword,
   deleteUser,
-  GoogleAuthProvider, // ADDED: Reset password method
+  GoogleAuthProvider,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -19,7 +22,7 @@ import {
 } from 'firebase/auth';
 
 // Firestore database tools import
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 // Import both auth AND db from your config file
 import { auth, db } from '../../utils/firebaseConfig';
@@ -27,14 +30,67 @@ import { auth, db } from '../../utils/firebaseConfig';
 export default function ConnectionScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  // ADDED: State to store the active user session
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const [isRegistering, setIsRegistering] = useState(false);
   const [user, setUser] = useState(null);
 
-  // ADDED: Listen to auth state changes dynamically when the screen mounts
+  const [isFavModalOpen, setIsFavModalOpen] = useState(false);
+  const [favoriteTeams, setFavoriteTeams] = useState<string[]>([]);
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser); // Sets user object if logged in, or null if logged out
+
+      if (currentUser) {
+        try {
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+
+            // Sync arrays and preferences to local storage
+            // We use default values to ensure guest data is "scratched" even if DB fields are empty
+            saveCache('favoriteTeams', data.favoriteTeams || []);
+            saveCache('leaguesSelected', data.leaguesSelected || []);
+            saveCache('showScores', data.showScores ?? false);
+            saveCache('showPreviousScores', data.showPreviousScores ?? false);
+            saveCache('gameSelected', data.gameSelected || []);
+
+            // Overwrite local dates with DB values to ensure DB is the source of truth
+            if (data.startDate) {
+              localStorage.setItem('startDate', data.startDate);
+            }
+            if (data.endDate) {
+              localStorage.setItem('endDate', data.endDate);
+            }
+
+            // Reconstruct teamsSelected objects from IDs stored in DB
+            const allTeams = getCache<Team[]>('teams') || [];
+            const dbTeamsSelectedIds = Array.isArray(data.teamsSelected) ? data.teamsSelected : [];
+            const fullTeamsSelected = dbTeamsSelectedIds
+              .map((id: string) => allTeams.find((t) => t.uniqueId === id))
+              .filter((t): t is Team => !!t);
+
+            saveCache('teamsSelected', fullTeamsSelected);
+
+            // Trigger global events to refresh the UI across all tabs
+            if (globalThis.window !== undefined) {
+              globalThis.window.dispatchEvent(new Event('favoritesUpdated'));
+              globalThis.window.dispatchEvent(new Event('leaguesUpdated'));
+              globalThis.window.dispatchEvent(new Event('scoresUpdated'));
+              globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
+              globalThis.window.dispatchEvent(new Event('dateRangeUpdated'));
+            }
+          }
+        } catch (err: unknown) {
+          console.error('Error syncing user data from Firestore:', err);
+        }
+      }
     });
 
     // Unsubscribe from listener on unmount
@@ -43,86 +99,110 @@ export default function ConnectionScreen() {
 
   //  Single unified function for both login and registration
   const handleEmailAuth = async () => {
-    if (!email || !password) {
-      alert('Please fill in all fields.');
-      return;
-    }
-
+    setErrorMessage('');
+    setSuccessMessage('');
     try {
-      console.log('Step 1: Attempting Email login...');
-      // Try to sign in first
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      const userResult = result.user;
-      console.log('User logged in successfully:', userResult.email);
+      if (!isRegistering) {
+        console.log('Step 1: Attempting Email login...');
+        // Try to sign in
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        const userResult = result.user;
+        console.log('User logged in successfully:', userResult.email);
 
-      // Update the user's last login timestamp in Firestore
-      const userRef = doc(db, 'users', userResult.uid);
-      await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
-
-      alert(`Welcome back!`);
-    } catch (loginError) {
-      console.log('Login failed, checking if account creation is needed...', loginError.code);
-
-      // Firebase throws 'auth/invalid-credential' or 'auth/user-not-found' if the account doesn't exist
-      if (loginError.code === 'auth/invalid-credential' || loginError.code === 'auth/user-not-found') {
+        // Update the user's last login timestamp in Firestore
+        const userRef = doc(db, 'users', userResult.uid);
+        await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+      } else {
+        console.log('Step 2: Creating new account...');
+        // Check if passwords match
+        if (password !== confirmPassword) {
+          setErrorMessage(translateWord('passwordsDoNotMatch'));
+          return;
+        }
         try {
-          console.log('Step 2: Account not found or credentials mismatch. Trying to register...');
           const registerResult = await createUserWithEmailAndPassword(auth, email, password);
           const newUser = registerResult.user;
           console.log('Account automatically created:', newUser.email);
 
-          // Create new user document inside Firestore
+          // Fetch local storage data to sync with the new account
+          const favoriteTeams = getCache<string[]>('favoriteTeams') || [];
+          const leaguesSelected = getCache<string[]>('leaguesSelected') || [];
+          const showScores = getCache<boolean>('showScores') ?? false;
+          const showPreviousScores = getCache<boolean>('showPreviousScores') ?? false;
+          const gameSelected = getCache<any[]>('gameSelected') || [];
+          const teamsSelectedRaw = getCache<any[]>('teamsSelected') || [];
+          const startDate = localStorage.getItem('startDate');
+          const endDate = localStorage.getItem('endDate');
+          const teamsSelected = teamsSelectedRaw.map((t) => t.uniqueId).filter(Boolean);
+
           const userRef = doc(db, 'users', newUser.uid);
           await setDoc(
             userRef,
             {
               uid: newUser.uid,
-              name: email.split('@')[0], // Generate default name from email prefix
+              name: email.split('@')[0],
               email: newUser.email,
               photoURL: null,
               lastLogin: serverTimestamp(),
+              favoriteTeams,
+              leaguesSelected,
+              showScores,
+              showPreviousScores,
+              gameSelected,
+              teamsSelected,
+              startDate,
+              endDate,
             },
             { merge: true },
           );
-
-          alert('Account successfully created!');
-        } catch (registerError) {
-          console.error('Registration failed:', registerError.code);
-
-          // If registration fails because the email is already taken,
-          // it means the initial login failed due to a WRONG PASSWORD.
+        } catch (err: unknown) {
+          const registerError = err as { code?: string; message?: string };
           if (registerError.code === 'auth/email-already-in-use') {
-            alert('Incorrect password for this account. Please try again.');
+            setErrorMessage(translateWord('emailAlreadyInUse'));
           } else {
-            alert('Authentication error: ' + registerError.message);
+            setErrorMessage(translateWord('authError') + (registerError.message ?? ''));
           }
         }
+      }
+    } catch (err: unknown) {
+      const loginError = err as { code?: string; message?: string };
+      console.log('Login failed:', loginError.code);
+      // Fine-tuned connection error handling
+      if (loginError.code === 'auth/user-not-found') {
+        setErrorMessage(translateWord('userNotFound'));
+      } else if (loginError.code === 'auth/wrong-password') {
+        setErrorMessage(translateWord('incorrectPassword'));
+      } else if (loginError.code === 'auth/invalid-credential') {
+        // Recommended generic security message (prevents email enumeration)
+        setErrorMessage(translateWord('invalidCredentials'));
       } else {
-        // Handle other standard login errors (e.g., invalid-email)
-        alert('Login error: ' + loginError.message);
+        setErrorMessage(translateWord('loginError') + (loginError.message || ''));
       }
     }
   };
 
-  // ADDED: Function to handle password reset emails
   const handleForgotPassword = async () => {
+    setErrorMessage('');
+    setSuccessMessage('');
     if (!email) {
-      alert('Please enter your email address in the field above first.');
+      setErrorMessage(translateWord('enterEmailFirst'));
       return;
     }
 
     try {
       console.log('Attempting to send password reset email to:', email);
       await sendPasswordResetEmail(auth, email);
-      alert('A password reset link has been sent to your email inbox!');
-    } catch (error) {
+      setSuccessMessage(translateWord('passwordResetSent'));
+    } catch (error: unknown) {
       console.error('Error during password reset request:', error);
-      alert('Reset error: ' + error.message);
+      setErrorMessage(translateWord('resetError'));
     }
   };
 
   // Function to log in with Google
   const handleGoogleLogin = async () => {
+    setErrorMessage('');
+    setSuccessMessage('');
     const provider = new GoogleAuthProvider();
     try {
       console.log('Attempting Google login...');
@@ -130,13 +210,15 @@ export default function ConnectionScreen() {
       const loggedUser = result.user;
       console.log('User logged in successfully:', loggedUser.displayName, loggedUser.email);
 
-      // Store or update user profile in Firestore
+      // Store or update basic user profile info in Firestore
+      // We no longer push local guest preferences here.
+      // The onAuthStateChanged hook will pull existing DB data and overwrite local storage.
       const userRef = doc(db, 'users', loggedUser.uid);
       await setDoc(
         userRef,
         {
           uid: loggedUser.uid,
-          name: loggedUser.displayName,
+          name: loggedUser.displayName || loggedUser.email?.split('@')[0],
           email: loggedUser.email,
           photoURL: loggedUser.photoURL,
           lastLogin: serverTimestamp(),
@@ -145,10 +227,9 @@ export default function ConnectionScreen() {
       );
 
       console.log('User data successfully synced with Firestore');
-      alert(`Welcome ${loggedUser.displayName}!`);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error during Google login:', error);
-      alert('Connection error: ' + error.message);
+      setErrorMessage(translateWord('connectionError'));
     }
   };
 
@@ -157,24 +238,23 @@ export default function ConnectionScreen() {
     try {
       await signOut(auth);
       console.log('User logged out');
-      alert('You have been logged out.');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error during logout:', error);
     }
   };
 
   // Function to permanently delete the user account and data
   const handleDeleteAccount = async () => {
+    setErrorMessage('');
+    setSuccessMessage('');
     const currentUser = auth.currentUser;
 
     if (!currentUser) {
-      alert('No user currently logged in.');
+      setErrorMessage(translateWord('noUserLoggedIn'));
       return;
     }
 
-    const confirmDeletion = window.confirm(
-      'Are you sure you want to permanently delete your account and all associated data? This action cannot be undone.',
-    );
+    const confirmDeletion = window.confirm(translateWord('confirmDeleteAccount'));
 
     if (!confirmDeletion) return;
 
@@ -190,16 +270,34 @@ export default function ConnectionScreen() {
       await deleteUser(currentUser);
       console.log('User authentication account permanently deleted');
 
-      alert('Your account has been successfully deleted.');
-    } catch (error) {
+      setSuccessMessage(translateWord('accountDeleted'));
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string };
       console.error('Error during account deletion:', error);
 
       if (error.code === 'auth/requires-recent-login') {
-        alert('For security reasons, please log out and log back in before deleting your account.');
+        setErrorMessage(translateWord('recentLoginRequired'));
       } else {
-        alert('Deletion error: ' + error.message);
+        setErrorMessage(translateWord('deletionError'));
       }
     }
+  };
+
+  // Function to toggle mode and clear confirm password
+  const toggleAuthMode = () => {
+    const newMode = !isRegistering;
+    setIsRegistering(newMode);
+    setErrorMessage('');
+    setSuccessMessage('');
+    // Clear confirm password if switching back to login
+    if (!newMode) setConfirmPassword('');
+  };
+
+  // Function to open preferences modal
+  const handleOpenFavModal = () => {
+    const cached = getCache<string[]>('favoriteTeams');
+    setFavoriteTeams(cached || []);
+    setIsFavModalOpen(true);
   };
 
   return (
@@ -219,7 +317,7 @@ export default function ConnectionScreen() {
           <h3>{!user ? translateWord('authentication') : translateWord('loggedInAs')}</h3>
         </ThemedText>
 
-        {/* MODIFIED: Conditional Rendering block based on connection status */}
+        {/* Conditional Rendering block based on connection status */}
         {!user ? (
           // IF DISCONNECTED: Show inputs and login options
           <View style={styles.innerContent}>
@@ -227,7 +325,7 @@ export default function ConnectionScreen() {
             <View style={styles.formContainer}>
               <TextInput
                 style={styles.input}
-                placeholder="Email Address"
+                placeholder={translateWord('emailPlaceholder')}
                 placeholderTextColor="#888"
                 value={email}
                 onChangeText={setEmail}
@@ -236,24 +334,70 @@ export default function ConnectionScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Password"
+                placeholder={translateWord('passwordPlaceholder')}
                 placeholderTextColor="#888"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
                 autoCapitalize="none"
               />
+              {isRegistering && (
+                <TextInput
+                  style={styles.input}
+                  placeholder={translateWord('passwordConfirmPlaceholder')}
+                  placeholderTextColor="#888"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              )}
 
-              {/* ADDED: Link to request a password reset */}
-              <TouchableOpacity style={styles.forgotPasswordLink} onPress={handleForgotPassword}>
-                <ThemedText style={styles.forgotPasswordText}>{translateWord('forgotPassword')}</ThemedText>
-              </TouchableOpacity>
+              {/* Link to request a password reset */}
+              {!isRegistering && (
+                <TouchableOpacity style={styles.forgotPasswordLink} onPress={handleForgotPassword}>
+                  <ThemedText style={styles.forgotPasswordText}>{translateWord('forgotPassword')}</ThemedText>
+                </TouchableOpacity>
+              )}
             </View>
 
+            {/* Elegant error display */}
+            {errorMessage ? (
+              <View style={styles.errorContainer}>
+                <Icon name="exclamation-circle" type="font-awesome" size={16} color="#DB4437" />
+                <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
+              </View>
+            ) : null}
+
+            {/* Elegant success display (for password reset) */}
+            {successMessage ? (
+              <View style={styles.successContainer}>
+                <Icon name="check-circle" type="font-awesome" size={16} color="#0F9D58" />
+                <ThemedText style={styles.successText}>{successMessage}</ThemedText>
+              </View>
+            ) : null}
+
             {/* Only one unified email button now */}
-            <TouchableOpacity style={[styles.button, styles.emailButton]} onPress={handleEmailAuth}>
+            <TouchableOpacity
+              style={[
+                styles.button,
+                styles.emailButton,
+                (!email || !password || (isRegistering && !confirmPassword)) && styles.disabledButton,
+              ]}
+              onPress={handleEmailAuth}
+              disabled={!email || !password || (isRegistering && !confirmPassword)}
+            >
               <Icon name="envelope" type="font-awesome" size={20} color="#fff" style={styles.iconStyle} />
-              <ThemedText style={styles.buttonText}>{translateWord('continueWithEmail')}</ThemedText>
+              <ThemedText style={styles.buttonText}>
+                {isRegistering ? translateWord('signUp') : translateWord('signIn')}
+              </ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.toggleContainer} onPress={toggleAuthMode}>
+              <ThemedText style={styles.toggleText}>
+                {isRegistering ? translateWord('alreadyHaveAccount') : translateWord('noAccount')}{' '}
+                <span style={styles.linkText}>{isRegistering ? translateWord('signIn') : translateWord('signUp')}</span>
+              </ThemedText>
             </TouchableOpacity>
 
             <br />
@@ -274,6 +418,30 @@ export default function ConnectionScreen() {
               <span style={styles.emailHighlight}>{user.email}</span>
             </ThemedText>
 
+            {/* Elegant error display */}
+            {errorMessage ? (
+              <View style={styles.errorContainer}>
+                <Icon name="exclamation-circle" type="font-awesome" size={16} color="#DB4437" />
+                <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
+              </View>
+            ) : null}
+
+            {/* Elegant success display */}
+            {successMessage ? (
+              <View style={styles.successContainer}>
+                <Icon name="check-circle" type="font-awesome" size={16} color="#0F9D58" />
+                <ThemedText style={styles.successText}>{successMessage}</ThemedText>
+              </View>
+            ) : null}
+
+            <br />
+
+            {/* Change Preferences Button */}
+            <TouchableOpacity style={[styles.button, styles.prefButton]} onPress={handleOpenFavModal}>
+              <Icon name="cog" type="font-awesome" size={20} color="#fff" style={styles.iconStyle} />
+              <ThemedText style={styles.buttonText}>{translateWord('changePreferences')}</ThemedText>
+            </TouchableOpacity>
+
             <br />
 
             {/* Sign Out Button */}
@@ -287,11 +455,20 @@ export default function ConnectionScreen() {
             {/* Delete Account Button */}
             <TouchableOpacity style={[styles.button, styles.deleteButton]} onPress={handleDeleteAccount}>
               <Icon name="trash" type="font-awesome" size={20} color="#fff" style={styles.iconStyle} />
-              <ThemedText style={styles.buttonText}>Delete Account</ThemedText>
+              <ThemedText style={styles.buttonText}>{translateWord('deleteAccount')}</ThemedText>
             </TouchableOpacity>
           </View>
         )}
       </View>
+
+      <FavModal
+        isOpen={isFavModalOpen}
+        favoriteTeams={favoriteTeams}
+        onClose={() => setIsFavModalOpen(false)}
+        onSave={(teams) => {
+          setFavoriteTeams(teams);
+        }}
+      />
     </ThemedView>
   );
 }
@@ -306,7 +483,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  // ADDED: UI Layout centering alignment container
   innerContent: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -327,7 +503,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  // ADDED: Styling alignment for Forgot password link
   forgotPasswordLink: {
     alignSelf: 'flex-end',
     marginTop: 2,
@@ -351,6 +526,24 @@ const styles = StyleSheet.create({
   emailButton: {
     backgroundColor: '#007AFF', // iOS blue color
   },
+  prefButton: {
+    backgroundColor: '#5856D6', // A purple color for preferences
+  },
+  toggleContainer: {
+    marginTop: 15,
+    padding: 10,
+  },
+  toggleText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  linkText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
   googleButton: {
     backgroundColor: '#4285F4',
   },
@@ -368,7 +561,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // ADDED: Profile session status text styling
   welcomeText: {
     fontSize: 16,
     textAlign: 'center',
@@ -382,5 +574,43 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ccc',
     borderBottomWidth: 1,
     width: 280,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBE9',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    width: 280,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#FFC8C5',
+  },
+  errorText: {
+    color: '#DB4437',
+    fontSize: 14,
+    marginLeft: 8,
+    fontWeight: '500',
+    flex: 1,
+  },
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6F4EA',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    width: 280,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#CEEAD6',
+  },
+  successText: {
+    color: '#0F9D58',
+    fontSize: 14,
+    marginLeft: 8,
+    fontWeight: '500',
+    flex: 1,
   },
 });

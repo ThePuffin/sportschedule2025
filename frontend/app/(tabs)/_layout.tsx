@@ -1,15 +1,18 @@
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { translateWord } from '@/utils/utils';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Image, Platform, StyleSheet, View } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import Icon from 'react-native-vector-icons/FontAwesome';
-export default function TabLayout() {
+
+function TabLayoutContent() {
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
 
   return (
     <Tabs
@@ -51,10 +54,35 @@ export default function TabLayout() {
       <Tabs.Screen
         name="connection"
         options={{
-          title: translateWord('connection'),
-          tabBarIcon: ({ color }) => <Icon size={28} name="user" color={color} />,
+          title: user ? translateWord('profile') : translateWord('connection'),
+          tabBarIcon: ({ color }) =>
+            user?.photoURL ? (
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  borderWidth: 1.5,
+                  borderColor: color,
+                  backgroundColor: 'rgba(128,128,128,0.1)',
+                }}
+              >
+                <Image source={{ uri: user.photoURL }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              </View>
+            ) : (
+              <Icon size={28} name="user" color={color} />
+            ),
         }}
       />
     </Tabs>
+  );
+}
+
+export default function TabLayout() {
+  return (
+    <AuthProvider>
+      <TabLayoutContent />
+    </AuthProvider>
   );
 }

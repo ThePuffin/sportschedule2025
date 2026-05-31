@@ -7,6 +7,7 @@ import SliderDatePicker from '@/components/SliderDatePicker';
 import TeamFilter from '@/components/TeamFilter';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
+import { useAuth } from '@/context/AuthContext';
 import { HorizontalScrollProvider, useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { getGamesStatus } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,6 +69,7 @@ const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
 };
 
 const GameofTheDayContent = () => {
+  const { user } = useAuth();
   const router = useRouter();
   const { date: dateParam } = useLocalSearchParams<{ date: string }>();
   const { isScrollingHorizontally } = useHorizontalScroll();
@@ -539,7 +541,7 @@ const GameofTheDayContent = () => {
   const teamsOfTheDay = useMemo(() => {
     const teamsMap = new Map<string, Team>();
 
-    games.forEach((game) => {
+    games.forEach(async (game) => {
       if (!selectLeagues.includes(game.league as League)) return;
 
       if (!teamsMap.has(game.homeTeamId)) {
@@ -587,11 +589,13 @@ const GameofTheDayContent = () => {
           padding: '5px 15px 5px 15px',
         }}
       >
-        <AppLogo />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <AppLogo />
+        </View>
         <ScoreToggle value={showScores} onValueChange={handleScoreToggle} />
       </div>
     );
-  }, [showScores, handleScoreToggle]);
+  }, [showScores, handleScoreToggle, user]);
 
   const displayFilters = useCallback(() => {
     const handleTeamFilterChange = (val: string) => {
