@@ -2,8 +2,7 @@ import AppLogo from '@/components/AppLogo';
 import FavModal from '@/components/FavModal';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { getCache, saveCache } from '@/utils/fetchData';
-import { Team } from '@/utils/types';
+import { getCache } from '@/utils/fetchData';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
@@ -22,7 +21,7 @@ import {
 } from 'firebase/auth';
 
 // Firestore database tools import
-import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 // Import both auth AND db from your config file
 import { auth, db } from '../../utils/firebaseConfig';
@@ -42,55 +41,8 @@ export default function ConnectionScreen() {
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>([]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser); // Sets user object if logged in, or null if logged out
-
-      if (currentUser) {
-        try {
-          const userRef = doc(db, 'users', currentUser.uid);
-          const userSnap = await getDoc(userRef);
-
-          if (userSnap.exists()) {
-            const data = userSnap.data();
-
-            // Sync arrays and preferences to local storage
-            // We use default values to ensure guest data is "scratched" even if DB fields are empty
-            saveCache('favoriteTeams', data.favoriteTeams || []);
-            saveCache('leaguesSelected', data.leaguesSelected || []);
-            saveCache('showScores', data.showScores ?? false);
-            saveCache('showPreviousScores', data.showPreviousScores ?? false);
-            saveCache('gameSelected', data.gameSelected || []);
-
-            // Overwrite local dates with DB values to ensure DB is the source of truth
-            if (data.startDate) {
-              localStorage.setItem('startDate', data.startDate);
-            }
-            if (data.endDate) {
-              localStorage.setItem('endDate', data.endDate);
-            }
-
-            // Reconstruct teamsSelected objects from IDs stored in DB
-            const allTeams = getCache<Team[]>('teams') || [];
-            const dbTeamsSelectedIds = Array.isArray(data.teamsSelected) ? data.teamsSelected : [];
-            const fullTeamsSelected = dbTeamsSelectedIds
-              .map((id: string) => allTeams.find((t) => t.uniqueId === id))
-              .filter((t): t is Team => !!t);
-
-            saveCache('teamsSelected', fullTeamsSelected);
-
-            // Trigger global events to refresh the UI across all tabs
-            if (globalThis.window !== undefined) {
-              globalThis.window.dispatchEvent(new Event('favoritesUpdated'));
-              globalThis.window.dispatchEvent(new Event('leaguesUpdated'));
-              globalThis.window.dispatchEvent(new Event('scoresUpdated'));
-              globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
-              globalThis.window.dispatchEvent(new Event('dateRangeUpdated'));
-            }
-          }
-        } catch (err: unknown) {
-          console.error('Error syncing user data from Firestore:', err);
-        }
-      }
     });
 
     // Unsubscribe from listener on unmount
@@ -133,6 +85,8 @@ export default function ConnectionScreen() {
           const teamsSelectedRaw = getCache<any[]>('teamsSelected') || [];
           const startDate = localStorage.getItem('startDate');
           const endDate = localStorage.getItem('endDate');
+          const teamSelected = localStorage.getItem('teamSelected');
+          const leagueSelected = localStorage.getItem('leagueSelected');
           const teamsSelected = teamsSelectedRaw.map((t) => t.uniqueId).filter(Boolean);
 
           const userRef = doc(db, 'users', newUser.uid);
@@ -152,6 +106,8 @@ export default function ConnectionScreen() {
               teamsSelected,
               startDate,
               endDate,
+              teamSelected,
+              leagueSelected,
             },
             { merge: true },
           );

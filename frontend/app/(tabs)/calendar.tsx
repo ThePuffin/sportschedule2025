@@ -52,6 +52,7 @@ export default function Calendar() {
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [allowedLeagues, setAllowedLeagues] = useState<string[]>([]);
   const [reorderModalVisible, setReorderModalVisible] = useState(false);
+  const isInternalChange = useRef(false);
   const [tempTeams, setTempTeams] = useState<string[]>([]);
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
   const [gamesModalVisible, setGamesModalVisible] = useState(false);
@@ -65,21 +66,6 @@ export default function Calendar() {
     if (globalThis.window !== undefined) {
       globalThis.window.addEventListener('leaguesUpdated', updateLeagues);
       return () => globalThis.window.removeEventListener('leaguesUpdated', updateLeagues);
-    }
-  }, []);
-
-  useEffect(() => {
-    const updateDateRange = () => {
-      const start = localStorage.getItem('startDate');
-      const end = localStorage.getItem('endDate');
-      if (start && end) {
-        setDateRange({ startDate: new Date(start), endDate: new Date(end) });
-        getGamesFromApi(start, end);
-      }
-    };
-    if (globalThis.window !== undefined) {
-      globalThis.window.addEventListener('dateRangeUpdated', updateDateRange);
-      return () => globalThis.window.removeEventListener('dateRangeUpdated', updateDateRange);
     }
   }, []);
 
@@ -138,6 +124,160 @@ export default function Calendar() {
     endDate: new Date(localStorage.getItem('endDate') ?? endDate),
   });
 
+  const storeTeamsSelected = useCallback(
+    async (teamsSelectedIds: string[], teamsList?: Team[], syncToDB: boolean = true) => {
+      const filteredTeams = teamsSelectedIds.filter((teamId, i) => teamId && i < maxTeamsNumber);
+      setTeamsSelected(filteredTeams);
+      const listToSearch = teamsList && teamsList.length > 0 ? teamsList : teams;
+      const selectedTeams = filteredTeams
+        .map((teamId) => {
+          const team = listToSearch.find((team) => team.uniqueId === teamId);
+          return team;
+        })
+        .filter((team) => team);
+
+      if (selectedTeams.length !== 0) {
+        saveCache('teamsSelected', selectedTeams);
+      }
+
+      const newGamesSelection = gamesSelected.filter(
+        (game) => filteredTeams.includes(game.homeTeamId) || filteredTeams.includes(game.awayTeamId),
+      );
+      const selectionPruned = newGamesSelection.length !== gamesSelected.length;
+
+      if (selectionPruned) {
+        isInternalChange.current = true;
+        setGamesSelected(newGamesSelection);
+        saveCache('gameSelected', newGamesSelection);
+        if (globalThis.window !== undefined) {
+          globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
+        }
+      }
+
+      if (user && syncToDB) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await setDoc(
+            userRef,
+            {
+              teamsSelected: filteredTeams,
+              ...(selectionPruned && { gameSelected: newGamesSelection }),
+              lastUpdate: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        } catch (error: unknown) {
+          console.error('Error syncing teamsSelected to Firestore:', error);
+        }
+      }
+    },
+    [teams, gamesSelected, user],
+  );
+
+  const getSelectedTeams = useCallback(
+    (allTeams: Team[] = [], shouldSyncDB: boolean = true) => {
+      if (!allTeams.length) return;
+      const cached = getCache<Team[]>('teamsSelected');
+      let selection = cached?.length ? cached.map((t) => t.uniqueId) : [];
+
+      if (selection.length === 0) {
+        const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
+        if (favoriteTeams.length) {
+          for (const favTeamId of favoriteTeams) {
+            if (allTeams.some((team) => team.uniqueId === favTeamId)) {
+              selection.push(favTeamId);
+            }
+          }
+        }
+        const availableTeams = allTeams.filter((t) => !allowedLeagues.length || allowedLeagues.includes(t.league));
+        let safety = 0;
+        while (selection.length < 2 && availableTeams.length > 0 && safety < 10) {
+          addNewTeamId(selection, availableTeams);
+          safety++;
+        }
+      }
+      storeTeamsSelected(selection, allTeams, shouldSyncDB);
+    },
+    [allowedLeagues, storeTeamsSelected],
+  );
+
+  const getStoredGames = useCallback(() => {
+    const storedGamesDataRaw = getCache<FilterGames>('gamesData');
+    if (!storedGamesDataRaw || !Object.keys(storedGamesDataRaw).length) return {};
+
+    const begindateStr = beginDate.toISOString().split('T')[0];
+
+    // Keep only games whose date is today or in the future
+    const filteredGamesData = Object.fromEntries(
+      Object.entries(storedGamesDataRaw).filter(([date]) => date >= begindateStr),
+    );
+
+    return filteredGamesData;
+  }, [beginDate]);
+
+  const getStoredTeams = useCallback(() => {
+    // Try to fetch the global teams list from cache if state is empty
+    const allTeams = teams.length > 0 ? teams : getCache<Team[]>('teams') || [];
+
+    if (allTeams.length > 0) {
+      if (teams.length === 0) {
+        setTeams(allTeams);
+      }
+      // Delegate selection logic (DB -> Favorites -> Random) to getSelectedTeams
+      getSelectedTeams(allTeams, false); // false = don't sync to DB on load
+
+      setGames(getStoredGames() as FilterGames);
+
+      const storedGamesSelected = getCache<GameFormatted[]>('gameSelected') ?? [];
+      const today = new Date().toISOString().split('T')[0];
+      const gamesSelectedFromStorage = storedGamesSelected.filter((game) => game.gameDate >= today);
+      setGamesSelected(gamesSelectedFromStorage);
+      saveCache('gameSelected', gamesSelectedFromStorage);
+      if (globalThis.window !== undefined) {
+        globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
+      }
+    }
+  }, [teams, getSelectedTeams, getStoredGames]);
+
+  const getTeamsFromApi = useCallback(async (): Promise<Team[]> => {
+    try {
+      const allTeams = await fetchTeams();
+      saveCache('teams', allTeams);
+      getSelectedTeams(allTeams, false);
+      return allTeams;
+    } catch (error: unknown) {
+      console.error(error);
+      return [];
+    }
+  }, [getSelectedTeams]);
+
+  const getGamesFromApi = useCallback(
+    async (startDate: string | undefined = undefined, endDate: string | undefined = undefined): Promise<void> => {
+      if (teamsSelected && teamsSelected.length !== 0) {
+        let start = readableDate(dateRange.startDate);
+        let end = readableDate(dateRange.endDate);
+        if (startDate && endDate) {
+          start = readableDate(new Date(startDate));
+          end = readableDate(new Date(endDate));
+        }
+
+        try {
+          const response = await fetch(
+            `${EXPO_PUBLIC_API_BASE_URL}/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${teamsSelected.join(
+              ',',
+            )}`,
+          );
+          const gamesData = await response.json();
+          saveCache('gamesData', gamesData);
+          setGames(gamesData);
+        } catch (error: unknown) {
+          console.error(error);
+        }
+      }
+    },
+    [teamsSelected, dateRange],
+  );
+
   const handleDateChange = async (startDate: Date, endDate: Date) => {
     setGames({});
     const start = startDate.toISOString();
@@ -178,183 +318,62 @@ export default function Calendar() {
     }
   };
 
-  const getSelectedTeams = (allTeams: Team[]) => {
-    const selection = getCache<Team[]>('teamsSelected')?.map((team) => team.uniqueId) ?? teamsSelected ?? [];
-    if (!selection.length) {
-      const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
-      if (favoriteTeams.length) {
-        for (const favTeamId of favoriteTeams) {
-          if (allTeams.some((team) => team.uniqueId === favTeamId)) {
-            selection.push(favTeamId);
-          }
+  const handleGamesSelection = useCallback(
+    async (game: GameFormatted) => {
+      let newSelection = [...gamesSelected];
+
+      const isMatch = (g: GameFormatted) => {
+        const sameTeams = g.homeTeamId === game.homeTeamId && g.awayTeamId === game.awayTeamId;
+        if (!sameTeams) return false;
+
+        const d1 = new Date(g.startTimeUTC);
+        const d2 = new Date(game.startTimeUTC);
+        return (
+          d1.getUTCFullYear() === d2.getUTCFullYear() &&
+          d1.getUTCMonth() === d2.getUTCMonth() &&
+          d1.getUTCDate() === d2.getUTCDate() &&
+          d1.getUTCHours() === d2.getUTCHours()
+        );
+      };
+
+      const wasAdded = gamesSelected.some(isMatch);
+
+      if (wasAdded) {
+        newSelection = newSelection.filter((g) => !isMatch(g));
+      } else {
+        if (gamesSelected.length >= 10) {
+          return;
+        }
+        newSelection.push(game);
+        newSelection = newSelection.sort((a: GameFormatted, b: GameFormatted) => {
+          return new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime();
+        });
+      }
+
+      setGamesSelected(newSelection);
+      saveCache('gameSelected', newSelection);
+      if (globalThis.window !== undefined) {
+        globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
+      }
+
+      if (user) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await setDoc(
+            userRef,
+            {
+              gameSelected: newSelection,
+              lastUpdate: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        } catch (error: unknown) {
+          console.error('Error syncing gameSelected to Firestore:', error);
         }
       }
-      const availableTeams = allTeams.filter((t) => allowedLeagues.length === 0 || allowedLeagues.includes(t.league));
-      while (selection.length < 2) {
-        addNewTeamId(selection, availableTeams);
-      }
-    }
-    storeTeamsSelected(selection);
-  };
-
-  const getStoredGames = () => {
-    const storedGamesDataRaw = getCache<FilterGames>('gamesData');
-    if (!storedGamesDataRaw || !Object.keys(storedGamesDataRaw).length) return {};
-
-    const begindateStr = beginDate.toISOString().split('T')[0];
-
-    // Keep only games whose date is today or in the future
-    const filteredGamesData = Object.fromEntries(
-      Object.entries(storedGamesDataRaw).filter(([date]) => date >= begindateStr),
-    );
-
-    return filteredGamesData;
-  };
-
-  const getStoredTeams = () => {
-    const cachedTeams = getCache<Team[]>('teamsSelected');
-    const selection = cachedTeams?.map((team) => team.uniqueId) ?? [];
-    if (selection.length > 0) {
-      storeTeamsSelected(selection);
-
-      setGames(getStoredGames() as FilterGames);
-
-      const storedGamesSelected = getCache<GameFormatted[]>('gameSelected') ?? [];
-      const today = new Date().toISOString().split('T')[0];
-      const gamesSelectedFromStorage = storedGamesSelected.filter((game) => game.gameDate >= today);
-      setGamesSelected(gamesSelectedFromStorage);
-      saveCache('gameSelected', gamesSelectedFromStorage);
-      if (globalThis.window !== undefined) {
-        globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
-      }
-      if (cachedTeams) {
-        setTeams(cachedTeams);
-      }
-    } else {
-      setTeamsSelected(selection);
-    }
-  };
-
-  const getTeamsFromApi = async (): Promise<Team[]> => {
-    try {
-      const allTeams = await fetchTeams();
-      getSelectedTeams(allTeams);
-      return allTeams;
-    } catch (error: unknown) {
-      console.error(error);
-      return [];
-    }
-  };
-
-  const getGamesFromApi = async (
-    startDate: string | undefined = undefined,
-    endDate: string | undefined = undefined,
-  ): Promise<void> => {
-    if (teamsSelected && teamsSelected.length !== 0) {
-      let start = readableDate(dateRange.startDate);
-      let end = readableDate(dateRange.endDate);
-      if (startDate && endDate) {
-        start = readableDate(new Date(startDate));
-        end = readableDate(new Date(endDate));
-      }
-
-      try {
-        const response = await fetch(
-          `${EXPO_PUBLIC_API_BASE_URL}/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${teamsSelected.join(
-            ',',
-          )}`,
-        );
-        const gamesData = await response.json();
-        saveCache('gamesData', gamesData);
-        setGames(gamesData);
-      } catch (error: unknown) {
-        console.error(error);
-      }
-    }
-  };
-
-  const storeTeamsSelected = async (teamsSelectedIds: string[]) => {
-    const filteredTeams = teamsSelectedIds.filter((teamId, i) => teamId && i < maxTeamsNumber);
-    setTeamsSelected(filteredTeams);
-    const selectedTeams = filteredTeams
-      .map((teamId) => {
-        const team = teams.find((team) => team.uniqueId === teamId);
-        return team;
-      })
-      .filter((team) => team);
-
-    if (selectedTeams.length !== 0) {
-      saveCache('teamsSelected', selectedTeams);
-    }
-
-    const newGamesSelection = gamesSelected.filter((game) => filteredTeams.includes(game.teamSelectedId));
-    const selectionPruned = newGamesSelection.length !== gamesSelected.length;
-
-    if (selectionPruned) {
-      setGamesSelected(newGamesSelection);
-      saveCache('gameSelected', newGamesSelection);
-      if (globalThis.window !== undefined) {
-        globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
-      }
-    }
-
-    if (user) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(
-          userRef,
-          {
-            teamsSelected: filteredTeams,
-            ...(selectionPruned && { gameSelected: newGamesSelection }),
-            lastUpdate: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      } catch (error: unknown) {
-        console.error('Error syncing teamsSelected to Firestore:', error);
-      }
-    }
-  };
-
-  const handleGamesSelection = async (game: GameFormatted) => {
-    let newSelection = [...gamesSelected];
-
-    const wasAdded = gamesSelected.some((gameSelect) => game._id === gameSelect._id);
-
-    if (wasAdded) {
-      newSelection = newSelection.filter((gameSelect) => gameSelect._id !== game._id);
-    } else {
-      if (gamesSelected.length >= 10) {
-        return;
-      }
-      newSelection.push(game);
-      newSelection = newSelection.sort((a: GameFormatted, b: GameFormatted) => {
-        return new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime();
-      });
-    }
-
-    setGamesSelected(newSelection);
-    saveCache('gameSelected', newSelection);
-    if (globalThis.window !== undefined) {
-      globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
-    }
-
-    if (user) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(
-          userRef,
-          {
-            gameSelected: newSelection,
-            lastUpdate: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      } catch (error: unknown) {
-        console.error('Error syncing gameSelected to Firestore:', error);
-      }
-    }
-  };
+    },
+    [gamesSelected, user],
+  );
 
   const handleOpenReorder = () => {
     const availableIds = new Set(teamsAvailableForReorder.map((t) => t.uniqueId));
@@ -368,7 +387,7 @@ export default function Calendar() {
     setReorderModalVisible(false);
   };
 
-  const handleClearGamesSelection = async () => {
+  const handleClearGamesSelection = useCallback(async () => {
     setGamesSelected([]);
     saveCache('gameSelected', []);
     if (globalThis.window !== undefined) {
@@ -390,7 +409,42 @@ export default function Calendar() {
         console.error('Error clearing gameSelected in Firestore:', error);
       }
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    const refreshData = () => {
+      if (isInternalChange.current) {
+        isInternalChange.current = false;
+        return;
+      }
+      getStoredTeams();
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('favoritesUpdated', refreshData);
+      globalThis.window.addEventListener('gamesSelectedUpdated', refreshData);
+      globalThis.window.addEventListener('teamsSelectedUpdated', refreshData);
+      return () => {
+        globalThis.window.removeEventListener('favoritesUpdated', refreshData);
+        globalThis.window.removeEventListener('gamesSelectedUpdated', refreshData);
+        globalThis.window.removeEventListener('teamsSelectedUpdated', refreshData);
+      };
+    }
+  }, [getStoredTeams]);
+
+  useEffect(() => {
+    const updateDateRange = () => {
+      const start = localStorage.getItem('startDate');
+      const end = localStorage.getItem('endDate');
+      if (start && end) {
+        setDateRange({ startDate: new Date(start), endDate: new Date(end) });
+        getGamesFromApi(start, end);
+      }
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('dateRangeUpdated', updateDateRange);
+      return () => globalThis.window.removeEventListener('dateRangeUpdated', updateDateRange);
+    }
+  }, [getGamesFromApi]);
 
   useEffect(() => {
     if (gamesModalVisible && filteredGamesSelected.length === 0) {
@@ -538,24 +592,15 @@ export default function Calendar() {
                   >
                     <FilterSlider
                       multipleSelection={true}
-                      data={[
-                        { label: translateWord('all'), value: 'ALL' },
-                        ...filteredTeamsSelected
-                          .map((id) => teams.find((t) => t.uniqueId === id))
-                          .filter((t): t is Team => !!t)
-                          .map((t) => ({ label: t.label, value: t.uniqueId })),
-                      ]}
-                      selectedFilters={
-                        hiddenTeams.length === 0
-                          ? ['ALL', ...filteredTeamsSelected]
-                          : filteredTeamsSelected.filter((id) => !hiddenTeams.includes(id))
-                      }
+                      data={filteredTeamsSelected
+                        .map((id) => teams.find((t) => t.uniqueId === id))
+                        .filter((t): t is Team => !!t)
+                        .map((t) => ({ label: t.label, value: t.uniqueId }))}
+                      selectedFilters={filteredTeamsSelected.filter((id) => !hiddenTeams.includes(id))}
                       onFilterChange={(val) => {
-                        if (val === 'ALL') setHiddenTeams([]);
-                        else
-                          setHiddenTeams((prev) =>
-                            prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val],
-                          );
+                        setHiddenTeams((prev) =>
+                          prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val],
+                        );
                       }}
                     />
                   </View>

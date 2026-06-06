@@ -1,3 +1,3 @@
-export const maxFavoritesNumber = 6;
+export const maxFavoritesNumber = 9;
 
 export const maxTeamsNumber = 9;

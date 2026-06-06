@@ -285,7 +285,7 @@ export default function Schedule() {
     storeTeamSelected(selection, allTeams);
   };
 
-  const getStoredData = () => {
+  const getStoredData = useCallback(() => {
     const leagueSelection = localStorage.getItem('leagueSelected') ?? '';
     setleagueOfSelectedTeam(leagueSelection);
     const teamSelection = localStorage.getItem('teamSelected') ?? '';
@@ -307,7 +307,7 @@ export default function Schedule() {
     } else {
       setTeamSelected(teamSelection);
     }
-  };
+  }, [teams]);
 
   const persistTeamForLeague = (league: string, teamSelectedId: string) => {
     const leaguesTeams = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
@@ -315,57 +315,102 @@ export default function Schedule() {
     saveCache('teamsSelectedLeagues', leaguesTeams);
   };
 
-  const handleTeamSelectionChange = (teamSelectedId: string | string[]) => {
-    setTeamFilter('');
-    setMonthFilter([]);
-    const finalTeamId = Array.isArray(teamSelectedId) ? teamSelectedId[0] : teamSelectedId;
-    isInternalChange.current = true;
-    router.setParams({ team: finalTeamId });
-    if (finalTeamId === 'all') {
-      localStorage.setItem('teamSelected', 'all');
-      setTeamSelected('all');
-    } else {
-      storeTeamSelected(finalTeamId, teams);
-    }
-    persistTeamForLeague(leagueOfSelectedTeam, finalTeamId);
-  };
+  const handleTeamSelectionChange = useCallback(
+    async (teamSelectedId: string | string[]) => {
+      setTeamFilter('');
+      setMonthFilter([]);
+      const finalTeamId = Array.isArray(teamSelectedId) ? teamSelectedId[0] : teamSelectedId;
+      isInternalChange.current = true;
+      router.setParams({ team: finalTeamId });
+      if (finalTeamId === 'all') {
+        localStorage.setItem('teamSelected', 'all');
+        setTeamSelected('all');
+      } else {
+        storeTeamSelected(finalTeamId, teams);
+      }
+      persistTeamForLeague(leagueOfSelectedTeam, finalTeamId);
+
+      if (user) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await setDoc(userRef, { teamSelected: finalTeamId, lastUpdate: serverTimestamp() }, { merge: true });
+        } catch (error: unknown) {
+          console.error('Error syncing teamSelected to Firestore:', error);
+        }
+      }
+    },
+    [teams, leagueOfSelectedTeam, user, router],
+  );
 
   const handleTeamFilterChange = (teamSelectedId: string | string[]) => {
     setTeamFilter(Array.isArray(teamSelectedId) ? teamSelectedId[0] : teamSelectedId);
   };
 
-  const handleLeagueSelectionChange = (leagueSelectedId: string | string[]) => {
-    setTeamFilter('');
-    setMonthFilter([]);
-    const finalLeagueId = Array.isArray(leagueSelectedId) ? leagueSelectedId[0] : leagueSelectedId;
-    isInternalChange.current = true;
-    router.setParams({ league: finalLeagueId });
-    localStorage.setItem('leagueSelected', finalLeagueId);
-    const teamsAvailableInLeague = teams.filter(({ league }) => league === finalLeagueId);
-    allOption.league = finalLeagueId;
-    setLeagueTeams([allOption, ...teamsAvailableInLeague]);
-    setleagueOfSelectedTeam(finalLeagueId);
-    const storedTeamsLeagues = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
-    let team = '';
-    if (storedTeamsLeagues[finalLeagueId]) {
-      team = storedTeamsLeagues[finalLeagueId];
-    }
-
-    if (team.length === 0) {
-      const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
-      const favoriteInLeague = favoriteTeams.find((favId) => teamsAvailableInLeague.some((t) => t.uniqueId === favId));
-      if (favoriteInLeague) {
-        team = favoriteInLeague;
-      } else {
-        team = teamsAvailableInLeague.length
-          ? teamsAvailableInLeague[randomNumber(teamsAvailableInLeague.length - 1)].uniqueId
-          : 'all';
+  const handleLeagueSelectionChange = useCallback(
+    async (leagueSelectedId: string | string[]) => {
+      setTeamFilter('');
+      setMonthFilter([]);
+      const finalLeagueId = Array.isArray(leagueSelectedId) ? leagueSelectedId[0] : leagueSelectedId;
+      isInternalChange.current = true;
+      router.setParams({ league: finalLeagueId });
+      localStorage.setItem('leagueSelected', finalLeagueId);
+      const teamsAvailableInLeague = teams.filter(({ league }) => league === finalLeagueId);
+      allOption.league = finalLeagueId;
+      setLeagueTeams([allOption, ...teamsAvailableInLeague]);
+      setleagueOfSelectedTeam(finalLeagueId);
+      const storedTeamsLeagues = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
+      let team = '';
+      if (storedTeamsLeagues[finalLeagueId]) {
+        team = storedTeamsLeagues[finalLeagueId];
       }
+
+      if (team.length === 0) {
+        const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
+        const favoriteInLeague = favoriteTeams.find((favId) =>
+          teamsAvailableInLeague.some((t) => t.uniqueId === favId),
+        );
+        if (favoriteInLeague) {
+          team = favoriteInLeague;
+        } else {
+          team = teamsAvailableInLeague.length
+            ? teamsAvailableInLeague[randomNumber(teamsAvailableInLeague.length - 1)].uniqueId
+            : 'all';
+        }
+      }
+      localStorage.setItem('teamSelected', team);
+      router.setParams({ league: finalLeagueId, team: team });
+      setTeamSelected(team);
+
+      if (user) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await setDoc(
+            userRef,
+            { leagueSelected: finalLeagueId, teamSelected: team, lastUpdate: serverTimestamp() },
+            { merge: true },
+          );
+        } catch (error: unknown) {
+          console.error('Error syncing leagueSelected to Firestore:', error);
+        }
+      }
+    },
+    [teams, user, router],
+  );
+
+  useEffect(() => {
+    const updateSelection = () => {
+      getStoredData();
+      setShowPreviousScores(getCache<boolean>('showPreviousScores') ?? false);
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('teamSelectedUpdated', updateSelection);
+      globalThis.window.addEventListener('previousScoresUpdated', updateSelection);
+      return () => {
+        globalThis.window.removeEventListener('teamSelectedUpdated', updateSelection);
+        globalThis.window.removeEventListener('previousScoresUpdated', updateSelection);
+      };
     }
-    localStorage.setItem('teamSelected', team);
-    router.setParams({ league: finalLeagueId, team: team });
-    setTeamSelected(team);
-  };
+  }, [getStoredData]);
 
   useEffect(() => {
     if (leaguesAvailable.length > 0 && leagueOfSelectedTeam && !leaguesAvailable.includes(leagueOfSelectedTeam)) {

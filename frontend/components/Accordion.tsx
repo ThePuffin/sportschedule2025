@@ -48,7 +48,19 @@ export default function Accordion({
     if (!gamesFiltred?.length) return <NoResults onRetry={onRetry} />;
 
     return gamesFiltred.map((game, index) => {
-      const isSelected = gamesSelected?.some((g) => g._id === game._id || (g.uniqueId && g.uniqueId === game.uniqueId));
+      const isSelected = gamesSelected?.some((g) => {
+        const sameTeams = g.homeTeamId === game.homeTeamId && g.awayTeamId === game.awayTeamId;
+        if (!sameTeams) return false;
+
+        const d1 = new Date(g.startTimeUTC);
+        const d2 = new Date(game.startTimeUTC);
+        return (
+          d1.getUTCFullYear() === d2.getUTCFullYear() &&
+          d1.getUTCMonth() === d2.getUTCMonth() &&
+          d1.getUTCDate() === d2.getUTCDate() &&
+          d1.getUTCHours() === d2.getUTCHours()
+        );
+      });
       // Offset for the sticky header in schedule.tsx to prevent the card from being hidden
       const scrollMarginTopValue = isSmallDevice ? 220 : 260;
 

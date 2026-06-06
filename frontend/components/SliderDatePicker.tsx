@@ -2,6 +2,7 @@ import { useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
@@ -261,101 +262,164 @@ export default function SliderDatePicker({
     <View
       style={[
         styles.container,
-        { backgroundColor, opacity: disabled ? 0.5 : 1 },
-        Platform.OS === 'web' &&
-          ({
-            maskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
-          } as any),
+        { flexDirection: 'row', alignItems: 'stretch', backgroundColor, opacity: disabled ? 0.5 : 1 },
       ]}
     >
-      <View style={styles.monthContainer}>
+      <TouchableOpacity
+        onPress={() => !disabled && onDateChange(new Date())}
+        disabled={disabled || isSelected(today)}
+        style={[
+          styles.todayButton,
+          {
+            backgroundColor: unselectedBackgroundColor,
+            borderColor: isSelected(today) ? selectedBackgroundColor : 'transparent',
+            borderWidth: 1,
+            borderRadius: 12,
+            marginRight: 15,
+          },
+          Platform.OS === 'web'
+            ? ({ cursor: disabled || isSelected(today) ? 'default' : 'pointer' } as any)
+            : undefined,
+        ]}
+      >
+        <MaterialCommunityIcons
+          name={isSelected(today) ? 'calendar-today' : 'calendar-arrow-left'}
+          size={20}
+          color={theme === 'dark' ? '#ffffff' : '#0f172a'}
+        />
+        <Text style={[styles.todayWeekdayText, { color: theme === 'dark' ? '#ffffff' : '#0f172a' }]}>
+          {new Date().toLocaleDateString(locale, { weekday: 'short' })}
+        </Text>
+        <Text style={[styles.todayDateText, { color: theme === 'dark' ? '#ffffff' : '#0f172a' }]}>
+          {new Date().toLocaleDateString(locale, { day: 'numeric', month: 'short' })}
+        </Text>
+        <Text style={[styles.todayYearText, { color: theme === 'dark' ? '#94a3b8' : '#64748b' }]}>
+          {new Date().getFullYear()}
+        </Text>
+      </TouchableOpacity>
+
+      <View
+        style={[
+          { flex: 1 },
+          Platform.OS === 'web' &&
+            ({
+              maskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
+            } as any),
+        ]}
+      >
+        <View style={styles.monthContainer}>
+          <ScrollView
+            ref={monthScrollViewRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {months.map((date, index) => {
+              const selected = isMonthSelected(date);
+              const isCurrentMonth = date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+              return (
+                <TouchableOpacity
+                  key={date.toLocaleString(locale, { month: 'long', year: 'numeric' })}
+                  disabled={disabled}
+                  style={[
+                    styles.monthItem,
+                    {
+                      width: MONTH_ITEM_WIDTH,
+                      borderWidth: isCurrentMonth ? 1 : 0,
+                      borderColor: isCurrentMonth ? selectedBackgroundColor : 'transparent',
+                      borderRadius: 15,
+                    },
+                    Platform.OS === 'web' ? { cursor: disabled ? 'default' : 'pointer' } : undefined,
+                  ]}
+                  onPress={() => onMonthSelect(date)}
+                >
+                  <Text
+                    style={[
+                      styles.monthText,
+                      {
+                        color:
+                          selected && isCurrentMonth && theme === 'light'
+                            ? selectedBackgroundColor
+                            : selected
+                              ? textColor
+                              : unselectedTextColor,
+                        fontWeight: selected || isCurrentMonth ? 'bold' : 'normal',
+                      },
+                    ]}
+                  >
+                    {date.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
         <ScrollView
-          ref={monthScrollViewRef}
+          ref={scrollViewRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {months.map((date, index) => {
-            const selected = isMonthSelected(date);
-            const isCurrentMonth = date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+          {dates.map((date, index) => {
+            const selected = isSelected(date);
+            const isToday = date.toDateString() === today.toDateString();
             return (
               <TouchableOpacity
-                key={date.toLocaleString(locale, { month: 'long', year: 'numeric' })}
+                key={index}
                 disabled={disabled}
                 style={[
-                  styles.monthItem,
+                  styles.dateItem,
                   {
-                    width: MONTH_ITEM_WIDTH,
-                    borderWidth: isCurrentMonth ? 1 : 0,
-                    borderColor: isCurrentMonth ? selectedBackgroundColor : 'transparent',
-                    borderRadius: 15,
+                    backgroundColor: selected ? selectedBackgroundColor : unselectedBackgroundColor,
+                    width: ITEM_WIDTH,
+                    marginHorizontal: ITEM_SPACING,
+                    borderWidth: isToday ? 1 : 0,
+                    borderColor: isToday ? selectedBackgroundColor : 'transparent',
                   },
+                  Platform.OS === 'web' && ({ cursor: disabled ? 'default' : 'pointer' } as any),
                 ]}
-                onPress={() => onMonthSelect(date)}
+                onPress={() => onDateChange(date)}
               >
-                <Text
-                  style={[
-                    styles.monthText,
-                    {
-                      color:
-                        selected && isCurrentMonth && theme === 'light'
-                          ? selectedBackgroundColor
-                          : selected
-                            ? textColor
-                            : unselectedTextColor,
-                      fontWeight: selected || isCurrentMonth ? 'bold' : 'normal',
-                    },
-                  ]}
-                >
-                  {date.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
+                <Text style={[styles.dayName, { color: selected ? selectedTextColor : unselectedTextColor }]}>
+                  {getDayName(date)}
                 </Text>
+                <Text style={[styles.dayNumber, { color: selected ? selectedTextColor : unselectedTextColor }]}>
+                  {DayNumber(date)}
+                </Text>
+                {selected && <View style={styles.dot} />}
               </TouchableOpacity>
             );
           })}
         </ScrollView>
       </View>
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {dates.map((date, index) => {
-          const selected = isSelected(date);
-          const isToday = date.toDateString() === today.toDateString();
-          return (
-            <TouchableOpacity
-              key={index}
-              disabled={disabled}
-              style={[
-                styles.dateItem,
-                {
-                  backgroundColor: selected ? selectedBackgroundColor : unselectedBackgroundColor,
-                  width: ITEM_WIDTH,
-                  marginHorizontal: ITEM_SPACING,
-                  borderWidth: isToday ? 1 : 0,
-                  borderColor: isToday ? selectedBackgroundColor : 'transparent',
-                },
-              ]}
-              onPress={() => onDateChange(date)}
-            >
-              <Text style={[styles.dayName, { color: selected ? selectedTextColor : unselectedTextColor }]}>
-                {getDayName(date)}
-              </Text>
-              <Text style={[styles.dayNumber, { color: selected ? selectedTextColor : unselectedTextColor }]}>
-                {DayNumber(date)}
-              </Text>
-              {selected && <View style={styles.dot} />}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  todayButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  todayWeekdayText: {
+    fontWeight: 'bold',
+    fontSize: 10,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  todayDateText: {
+    fontWeight: 'bold',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  todayYearText: {
+    fontWeight: 'bold',
+    fontSize: 10,
+    textAlign: 'center',
+  },
   container: {
     paddingVertical: 10,
   },

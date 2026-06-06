@@ -1,4 +1,5 @@
 import { ThemedText } from '@/components/ThemedText';
+import { maxFavoritesNumber } from '@/constants/Constants';
 import { GameStatus, League, leagueLogos, leagueMapping } from '@/constants/enum';
 import { getGamesStatus } from '@/utils/date';
 import { fetchLiveScores } from '@/utils/fetchData';
@@ -214,14 +215,16 @@ export default function GameModal({
                 )}
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {awayTeam ? awayTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
-                  <Icon
-                    onPress={() => addFavoriteTeam(favoriteTeams, awayTeamId)}
-                    name={favoriteTeams.includes(awayTeamId) ? 'star' : 'star-o'}
-                    type="font-awesome"
-                    size={14}
-                    color={favoriteTeams.includes(awayTeamId) ? '#FFD700' : '#94a3b8'}
-                    style={{ marginLeft: 5 }}
-                  />
+                  {(favoriteTeams.includes(awayTeamId) || favoriteTeams.length < maxFavoritesNumber) && (
+                    <Icon
+                      onPress={() => addFavoriteTeam(favoriteTeams, awayTeamId)}
+                      name={favoriteTeams.includes(awayTeamId) ? 'star' : 'star-o'}
+                      type="font-awesome"
+                      size={14}
+                      color={favoriteTeams.includes(awayTeamId) ? '#FFD700' : '#94a3b8'}
+                      style={{ marginLeft: 5 }}
+                    />
+                  )}
                 </ThemedText>
                 {awayTeamRecord && (
                   <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>
@@ -254,14 +257,16 @@ export default function GameModal({
                 )}
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {homeTeam ? homeTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
-                  <Icon
-                    onPress={() => addFavoriteTeam(favoriteTeams, homeTeamId)}
-                    name={favoriteTeams.includes(homeTeamId) ? 'star' : 'star-o'}
-                    type="font-awesome"
-                    size={14}
-                    color={favoriteTeams.includes(homeTeamId) ? '#FFD700' : '#94a3b8'}
-                    style={{ marginLeft: 5 }}
-                  />
+                  {(favoriteTeams.includes(homeTeamId) || favoriteTeams.length < maxFavoritesNumber) && (
+                    <Icon
+                      onPress={() => addFavoriteTeam(favoriteTeams, homeTeamId)}
+                      name={favoriteTeams.includes(homeTeamId) ? 'star' : 'star-o'}
+                      type="font-awesome"
+                      size={14}
+                      color={favoriteTeams.includes(homeTeamId) ? '#FFD700' : '#94a3b8'}
+                      style={{ marginLeft: 5 }}
+                    />
+                  )}
                 </ThemedText>
                 {homeTeamRecord && (
                   <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>

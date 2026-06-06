@@ -3127,6 +3127,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#C61018',
     backgroundColor: '#000000',
   },
+  'NCCABB-JXST': {
+    color: '#C61018',
+    backgroundColor: '#000000',
+  },
   'NCCABB-KC': {
     color: '#004A8B',
     backgroundColor: '#000000',
@@ -4687,6 +4691,18 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#b3e2d8',
     backgroundColor: '#153f36',
   },
+  'PWHL-DET': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
+  'PWHL-HAM': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
+  'PWHL-LV': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
   'PWHL-MIN': {
     color: '#ffffff',
     backgroundColor: '#9e7dc5',
@@ -4707,7 +4723,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#E1DBC9',
     backgroundColor: '#0C5256',
   },
-  'PWHL-TBD': {
+  'PWHL-SJ': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },

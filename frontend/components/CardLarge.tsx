@@ -1,11 +1,15 @@
 import { ThemedText } from '@/components/ThemedText';
+import { maxFavoritesNumber } from '@/constants/Constants';
 import { GameStatus, leagueLogos } from '@/constants/enum';
+import { useAuth } from '@/context/AuthContext';
 import { getGamesStatus } from '@/utils/date';
-import { getCache } from '@/utils/fetchData';
-import { CardsProps, GameFormatted } from '@/utils/types';
+import { getCache, saveCache } from '@/utils/fetchData';
+import { db } from '@/utils/firebaseConfig';
+import { CardsProps, GameFormatted, Team } from '@/utils/types';
 import { addFavoriteTeam, translateWord } from '@/utils/utils';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -33,6 +37,7 @@ export default function CardLarge({
   showTime = false,
   delay = 0,
 }: Readonly<CardsProps & { showTime?: boolean; showScores?: boolean; delay?: number }>) {
+  const { user } = useAuth();
   let { homeTeamShort, awayTeamShort } = data;
   const {
     homeTeamLogo,
@@ -77,6 +82,10 @@ export default function CardLarge({
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>(
     () => getCache<GameFormatted[]>('gameSelected') || [],
   );
+  const [teamsSelectedIds, setTeamsSelectedIds] = useState<string[]>(() => {
+    const cached = getCache<Team[]>('teamsSelected') || [];
+    return cached.map((t) => t.uniqueId);
+  });
   const [showScores, setShowScores] = useState<boolean>(() => {
     if (propShowScores !== undefined) return propShowScores;
     const cached = getCache<boolean>('showScores');
@@ -120,6 +129,17 @@ export default function CardLarge({
     if (globalThis.window !== undefined) {
       globalThis.window.addEventListener('favoritesUpdated', updateFavorites);
       return () => globalThis.window.removeEventListener('favoritesUpdated', updateFavorites);
+    }
+  }, []);
+
+  useEffect(() => {
+    const updateTeamsSelected = () => {
+      const cached = getCache<Team[]>('teamsSelected') || [];
+      setTeamsSelectedIds(cached.map((t) => t.uniqueId));
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('teamsSelectedUpdated', updateTeamsSelected);
+      return () => globalThis.window.removeEventListener('teamsSelectedUpdated', updateTeamsSelected);
     }
   }, []);
 
@@ -170,9 +190,74 @@ export default function CardLarge({
   }, [hasBeenSeen, animateEntry, fadeAnim, scaleAnim, translateYAnim, delay]);
 
   const isFavorite = favoriteTeams.includes(homeTeamId) || favoriteTeams.includes(awayTeamId);
+  const isOneTeamInSelection = teamsSelectedIds.includes(homeTeamId) || teamsSelectedIds.includes(awayTeamId);
+
+  const internalHandleSelection = async () => {
+    const isMatch = (g: GameFormatted) => {
+      const sameTeams = g.homeTeamId === data.homeTeamId && g.awayTeamId === data.awayTeamId;
+      if (!sameTeams) return false;
+
+      const d1 = new Date(g.startTimeUTC);
+      const d2 = new Date(data.startTimeUTC);
+      return (
+        d1.getUTCFullYear() === d2.getUTCFullYear() &&
+        d1.getUTCMonth() === d2.getUTCMonth() &&
+        d1.getUTCDate() === d2.getUTCDate() &&
+        d1.getUTCHours() === d2.getUTCHours()
+      );
+    };
+
+    let newSelection = [...gamesSelected];
+    const wasAdded = gamesSelected.some(isMatch);
+
+    if (wasAdded) {
+      newSelection = newSelection.filter((g) => !isMatch(g));
+    } else {
+      if (gamesSelected.length >= 10) return;
+      newSelection.push(data);
+      newSelection = newSelection.sort((a, b) => {
+        return new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime();
+      });
+    }
+
+    setGamesSelected(newSelection);
+    saveCache('gameSelected', newSelection);
+    if (globalThis.window !== undefined) {
+      globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
+    }
+
+    if (user) {
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(
+          userRef,
+          {
+            gameSelected: newSelection,
+            lastUpdate: serverTimestamp(),
+          },
+          { merge: true },
+        );
+      } catch (error: unknown) {
+        console.error('Error syncing gameSelected to Firestore:', error);
+      }
+    }
+  };
+
   const isSelected =
     propIsSelected ??
-    gamesSelected.some((g) => g.homeTeamId === data.homeTeamId && g.startTimeUTC === data.startTimeUTC);
+    gamesSelected.some((g) => {
+      const sameTeams = g.homeTeamId === data.homeTeamId && g.awayTeamId === data.awayTeamId;
+      if (!sameTeams) return false;
+
+      const d1 = new Date(g.startTimeUTC);
+      const d2 = new Date(data.startTimeUTC);
+      return (
+        d1.getUTCFullYear() === d2.getUTCFullYear() &&
+        d1.getUTCMonth() === d2.getUTCMonth() &&
+        d1.getUTCDate() === d2.getUTCDate() &&
+        d1.getUTCHours() === d2.getUTCHours()
+      );
+    });
 
   const isFirstRender = useRef(true);
   useEffect(() => {
@@ -507,8 +592,13 @@ export default function CardLarge({
   );
 
   const bookmarkElement =
-    status === GameStatus.SCHEDULED && (isSelected || (onSelection && gamesSelected.length < 10)) ? (
-      <View
+    status === GameStatus.SCHEDULED && (isSelected || (isOneTeamInSelection && gamesSelected.length < 10)) ? (
+      <TouchableOpacity
+        onPress={(e) => {
+          e.stopPropagation();
+          if (onSelection) onSelection(data);
+          else internalHandleSelection();
+        }}
         style={{
           justifyContent: 'center',
           alignItems: 'center',
@@ -531,7 +621,7 @@ export default function CardLarge({
               : {}
           }
         />
-      </View>
+      </TouchableOpacity>
     ) : null;
 
   return (
@@ -679,17 +769,19 @@ export default function CardLarge({
                       >
                         {awayTeamShort || '\u00A0'}
                       </ThemedText>
-                      <Icon
-                        onPress={(e) => {
-                          e?.stopPropagation();
-                          addFavoriteTeam(favoriteTeams, awayTeamId);
-                        }}
-                        name={favoriteTeams.includes(awayTeamId) ? 'star' : 'star-o'}
-                        type="font-awesome"
-                        size={14}
-                        color={favoriteTeams.includes(awayTeamId) ? '#FFD700' : '#94a3b8'}
-                        style={{ marginLeft: 5 }}
-                      />
+                      {(favoriteTeams.includes(awayTeamId) || favoriteTeams.length < maxFavoritesNumber) && (
+                        <Icon
+                          onPress={(e) => {
+                            e?.stopPropagation();
+                            addFavoriteTeam(favoriteTeams, awayTeamId);
+                          }}
+                          name={favoriteTeams.includes(awayTeamId) ? 'star' : 'star-o'}
+                          type="font-awesome"
+                          size={14}
+                          color={favoriteTeams.includes(awayTeamId) ? '#FFD700' : '#94a3b8'}
+                          style={{ marginLeft: 5 }}
+                        />
+                      )}
                     </View>
                   )}
                   {!isSmallCard && (
@@ -755,17 +847,19 @@ export default function CardLarge({
                       >
                         {homeTeamShort || '\u00A0'}
                       </ThemedText>
-                      <Icon
-                        onPress={(e) => {
-                          e?.stopPropagation();
-                          addFavoriteTeam(favoriteTeams, homeTeamId);
-                        }}
-                        name={favoriteTeams.includes(homeTeamId) ? 'star' : 'star-o'}
-                        type="font-awesome"
-                        size={14}
-                        color={favoriteTeams.includes(homeTeamId) ? '#FFD700' : '#94a3b8'}
-                        style={{ marginLeft: 5 }}
-                      />
+                      {(favoriteTeams.includes(homeTeamId) || favoriteTeams.length < maxFavoritesNumber) && (
+                        <Icon
+                          onPress={(e) => {
+                            e?.stopPropagation();
+                            addFavoriteTeam(favoriteTeams, homeTeamId);
+                          }}
+                          name={favoriteTeams.includes(homeTeamId) ? 'star' : 'star-o'}
+                          type="font-awesome"
+                          size={14}
+                          color={favoriteTeams.includes(homeTeamId) ? '#FFD700' : '#94a3b8'}
+                          style={{ marginLeft: 5 }}
+                        />
+                      )}
                     </View>
                   )}
                   {!isSmallCard && (

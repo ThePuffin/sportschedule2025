@@ -9,11 +9,13 @@ import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
 import { useAuth } from '@/context/AuthContext';
 import { HorizontalScrollProvider, useHorizontalScroll } from '@/context/HorizontalScrollContext';
+import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { getGamesStatus } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@rneui/themed';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, ScrollView, useWindowDimensions, View } from 'react-native';
+import { PanResponder, ScrollView, useColorScheme, useWindowDimensions, View } from 'react-native';
 import Accordion from '../../components/Accordion';
 import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import LoadingView from '../../components/LoadingView';
@@ -94,7 +96,6 @@ const GameofTheDayContent = () => {
   const [showScores, setShowScores] = useState<boolean>(false);
 
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
-  const [noVisibleGames, setNoVisibleGames] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const retryIntervals = useMemo(() => [1000, 10000, 20000, 30000], []);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +119,18 @@ const GameofTheDayContent = () => {
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const gamesRef = useRef<GameFormatted[]>([]);
+
+  const theme = useColorScheme() ?? 'light';
+  const isDark = theme === 'dark';
+  const { textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
+
+  const isAnyGameSelectedToday = useMemo(() => {
+    const todayStr = formatDateLocal(selectDate);
+    return gamesSelected.some((g) => {
+      const gDate = g.gameDate || (g.startTimeUTC ? formatDateLocal(new Date(g.startTimeUTC)) : '');
+      return gDate === todayStr;
+    });
+  }, [gamesSelected, selectDate]);
 
   useEffect(() => {
     gamesRef.current = games;
@@ -168,7 +181,7 @@ const GameofTheDayContent = () => {
           return g.isActive;
         });
       return newGames;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error fetching live scores:', error);
     }
     return null;
@@ -239,6 +252,16 @@ const GameofTheDayContent = () => {
   }, []);
 
   useEffect(() => {
+    const updateSelected = () => {
+      setGamesSelected(getCache<GameFormatted[]>('gameSelected') || []);
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener('gamesSelectedUpdated', updateSelected);
+      return () => globalThis.window.removeEventListener('gamesSelectedUpdated', updateSelected);
+    }
+  }, []);
+
+  useEffect(() => {
     const updateScores = () => {
       const cached = getCache<boolean>('showScores');
       setShowScores(cached ?? false);
@@ -251,6 +274,11 @@ const GameofTheDayContent = () => {
   }, []);
 
   const { width: windowWidth } = useWindowDimensions();
+
+  const disabledLeagues = useMemo(() => {
+    const activeLeaguesInGames = new Set(games.map((game) => game.league));
+    return userLeagues.filter((league) => !activeLeaguesInGames.has(league));
+  }, [games, userLeagues]);
 
   const visibleGamesByHour = useMemo(() => {
     const sortGamesByFavorites = (gamesToSort: GameFormatted[]) => {
@@ -286,7 +314,9 @@ const GameofTheDayContent = () => {
           game.homeTeamLogo &&
           (activeFilter !== 'FAVORITES' ||
             favoriteTeams.includes(game.homeTeamId) ||
-            favoriteTeams.includes(game.awayTeamId)),
+            favoriteTeams.includes(game.awayTeamId)) &&
+          (activeFilter !== 'BOOKMARKS' ||
+            gamesSelected.some((g) => g.uniqueId === game.uniqueId || g._id === game._id)),
       )
       .sort((a, b) => new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime());
 
@@ -370,7 +400,7 @@ const GameofTheDayContent = () => {
           const gamesByHourData = await fetchGamesByHour(YYYYMMDD, 1000);
           const gamesOfTheDay = Object.values(gamesByHourData).flat();
           setGames(gamesOfTheDay);
-        } catch (error) {
+        } catch (error: unknown) {
           console.error(error);
           setGames([]);
         }
@@ -435,10 +465,10 @@ const GameofTheDayContent = () => {
             saveCache('gamesDay', gamesDayCache.current);
           });
         } else {
-          // Pour les autres jours, on sauvegarde le cache qui a été mis à jour dans le if/else
+          // For other days, save the cache that was updated in the if/else block
           saveCache('gamesDay', gamesDayCache.current);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(error);
         if (!cachedGames) {
           gamesDayCache.current[YYYYMMDD] = [];
@@ -491,6 +521,9 @@ const GameofTheDayContent = () => {
       } else if (filter === 'FAVORITES') {
         setSelectLeagues(allLeaguesList);
         setTeamSelectedId('');
+      } else if (filter === 'BOOKMARKS') {
+        setSelectLeagues(allLeaguesList);
+        setTeamSelectedId('');
       } else {
         // Specific league
         setSelectLeagues([filter as League]);
@@ -541,7 +574,7 @@ const GameofTheDayContent = () => {
   const teamsOfTheDay = useMemo(() => {
     const teamsMap = new Map<string, Team>();
 
-    games.forEach(async (game) => {
+    games.forEach((game) => {
       if (!selectLeagues.includes(game.league as League)) return;
 
       if (!teamsMap.has(game.homeTeamId)) {
@@ -809,19 +842,34 @@ const GameofTheDayContent = () => {
                       data={[
                         { label: translateWord('all'), value: 'ALL' },
                         ...userLeagues.filter((l) => l !== 'ALL').map((l) => ({ label: l, value: l })),
+                        {
+                          label: '',
+                          value: 'BOOKMARKS',
+                          icon: (
+                            <Icon
+                              name={isAnyGameSelectedToday ? 'bookmark' : 'bookmark-o'}
+                              type="font-awesome"
+                              size={18}
+                              color={activeFilter === 'BOOKMARKS' ? selectedTextColor : isDark ? '#ffffff' : '#0f172a'}
+                            />
+                          ),
+                        },
                       ]}
+                      disabledValues={disabledLeagues}
                     />
                   </ThemedElements>
                   <Separator />
                   {displayFilters()}
                   <Separator />
-                  <SliderDatePicker
-                    onDateChange={(date) => handleDateChange(date, date)}
-                    selectDate={selectDate}
-                    disabled={isLoading}
-                    minDate={minDate}
-                    maxDate={maxDate}
-                  />
+                  <div style={{ paddingLeft: 15, paddingRight: 15 }}>
+                    <SliderDatePicker
+                      onDateChange={(date) => handleDateChange(date, date)}
+                      selectDate={selectDate}
+                      disabled={isLoading}
+                      minDate={minDate}
+                      maxDate={maxDate}
+                    />
+                  </div>
                 </div>
               </div>
             </ThemedView>
