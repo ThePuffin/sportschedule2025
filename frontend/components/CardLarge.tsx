@@ -363,7 +363,21 @@ export default function CardLarge({
   } else if (gameStatus === GameStatus.POSTPONED) {
     timeText = translateWord('postponedGame');
   } else if ((status === GameStatus.FINISHED || status === GameStatus.FINAL) && hasScore) {
-    timeText = translateWord('gameDetails');
+    if (showDate && startTimeUTC) {
+      timeText = showTime
+        ? new Date(startTimeUTC).toLocaleString(undefined, {
+            day: 'numeric',
+            month: width > 1008 ? 'short' : 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : new Date(startTimeUTC).toLocaleDateString(undefined, {
+            day: 'numeric',
+            month: width > 1008 ? 'short' : 'numeric',
+          });
+    } else {
+      timeText = translateWord('gameDetails');
+    }
   } else if (isStarted4hAgo && !serviceReportsNotTerminated) {
     // If we have gameStatus or gamePeriod info, display it instead of generic "ended"
     if (gameStatus && typeof gamePeriod === 'number') {

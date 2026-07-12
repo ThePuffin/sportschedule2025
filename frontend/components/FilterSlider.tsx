@@ -154,6 +154,14 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
     return items;
   }, [data, availableLeagues, multipleSelection, selectedFilter, favoriteValues]);
 
+  const sortedValuesKey = useMemo(() => {
+    return sortedItems.map((item) => item.value).join('|');
+  }, [sortedItems]);
+
+  useEffect(() => {
+    scrollViewRef.current?.scrollTo({ x: 0, animated: true });
+  }, [sortedValuesKey]);
+
   return (
     <View style={[styles.container, style]}>
       <ScrollView

@@ -23,7 +23,7 @@ import { GameStatus, League } from '../../constants/enum';
 import { fetchDateRangeLimits, getDateRangeLimits } from '../../utils/dateRange';
 import { fetchGamesByHour, fetchLeagues, fetchLiveScores, getCache, saveCache } from '../../utils/fetchData';
 import { GameFormatted } from '../../utils/types';
-import { randomNumber, translateWord } from '../../utils/utils';
+import { randomNumber, translateFilterLabel, translateWord } from '../../utils/utils';
 
 const formatDateLocal = (date: Date) => {
   const year = date.getFullYear();
@@ -303,15 +303,16 @@ const GameofTheDayContent = () => {
       });
     };
 
-    // TODO: fix the terminé quand le match est en cours
     const relevantGames = games
       .filter(
         (game) =>
           game.isActive &&
           selectLeagues.includes(game.league as League) &&
-          (!teamSelectedId || game.homeTeamId === teamSelectedId || game.awayTeamId === teamSelectedId) &&
-          game.awayTeamLogo &&
-          game.homeTeamLogo &&
+          (!teamSelectedId ||
+            game.homeTeamId === teamSelectedId ||
+            game.awayTeamId === teamSelectedId ||
+            game.homeTeam === teamSelectedId ||
+            game.awayTeam === teamSelectedId) &&
           (activeFilter !== 'FAVORITES' ||
             favoriteTeams.includes(game.homeTeamId) ||
             favoriteTeams.includes(game.awayTeamId)) &&
@@ -577,6 +578,7 @@ const GameofTheDayContent = () => {
     games.forEach((game) => {
       if (!selectLeagues.includes(game.league as League)) return;
 
+      // Use unique ID to distinguish teams with same name in different leagues
       if (!teamsMap.has(game.homeTeamId)) {
         teamsMap.set(game.homeTeamId, {
           uniqueId: game.homeTeamId,
@@ -639,27 +641,51 @@ const GameofTheDayContent = () => {
       }
     };
 
+    const uniqueTeamLabels = Array.from(new Set(teamsOfTheDay.map((t) => t.label)));
+
+    // If teamSelectedId is a uniqueId (from modal), find the label. Otherwise it's already a label (from slider).
+    const selectedLabel = teamsOfTheDay.find((t) => t.uniqueId === teamSelectedId)?.label || teamSelectedId || 'ALL';
+
+    // Ensure the selected element is visible in the list even if no games exist for it today
+    if (selectedLabel !== 'ALL' && !uniqueTeamLabels.includes(selectedLabel)) {
+      uniqueTeamLabels.push(selectedLabel);
+    }
+
+    uniqueTeamLabels.sort((a, b) => a.localeCompare(b));
+
     const teamFilterData = [
       { label: translateWord('all'), value: 'ALL' },
-      ...teamsOfTheDay.map((t) => ({ label: t.label, value: t.uniqueId })),
+      ...uniqueTeamLabels.map((label) => ({ label, value: label })),
     ];
+
+    const modalItems = teamsOfTheDay.map((t) => ({
+      ...t,
+      label: `${t.label} (${t.league})`,
+    }));
+
+    // Only pass the ID to the modal if it actually exists in the current items list.
+    const modalItemSelectedId = teamsOfTheDay.find((t) => t.uniqueId === teamSelectedId) ? teamSelectedId : '';
+
+    const favoriteLabels = Array.from(
+      new Set(teamsOfTheDay.filter((t) => favoriteTeams.includes(t.uniqueId)).map((t) => t.label)),
+    );
 
     return (
       <TeamFilter
         icon={<Ionicons name="search" size={24} color="white" />}
         selectorData={{
           i: randomNumber(999999),
-          items: teamsOfTheDay as any,
-          itemSelectedId: teamSelectedId,
+          items: modalItems as any,
+          itemSelectedId: modalItemSelectedId,
           itemsSelectedIds: [],
         }}
         onSelectorChange={handleTeamSelectionChange}
         selectorPlaceholder={translateWord('filterTeams')}
         isClearable={true}
         filterData={teamFilterData}
-        selectedFilter={teamSelectedId || 'ALL'}
+        selectedFilter={selectedLabel}
         onFilterChange={handleTeamFilterChange}
-        favoriteValues={favoriteTeams}
+        favoriteValues={favoriteLabels}
       />
     );
   }, [leaguesAvailable, selectLeagues, teamsOfTheDay, teamSelectedId, handleTeamSelectionChange, favoriteTeams]);
@@ -836,6 +862,7 @@ const GameofTheDayContent = () => {
                   }
                 >
                   <ThemedElements>
+                    <Separator label={translateFilterLabel('league')} />
                     <FilterSlider
                       selectedFilter={activeFilter}
                       onFilterChange={handleFilterChange}
@@ -858,9 +885,9 @@ const GameofTheDayContent = () => {
                       disabledValues={disabledLeagues}
                     />
                   </ThemedElements>
-                  <Separator />
+                  <Separator label={translateFilterLabel('team')} />
                   {displayFilters()}
-                  <Separator />
+                  <Separator label={translateFilterLabel('date')} />
                   <div style={{ paddingLeft: 15, paddingRight: 15 }}>
                     <SliderDatePicker
                       onDateChange={(date) => handleDateChange(date, date)}
@@ -869,6 +896,9 @@ const GameofTheDayContent = () => {
                       minDate={minDate}
                       maxDate={maxDate}
                     />
+                  </div>
+                  <div style={{ paddingTop: 6, paddingBottom: 6 }}>
+                    <Separator />
                   </div>
                 </div>
               </div>

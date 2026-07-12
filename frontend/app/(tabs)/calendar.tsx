@@ -8,7 +8,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { db } from '@/utils/firebaseConfig';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -30,13 +30,12 @@ import Separator from '../../components/Separator';
 import TeamReorderSelector from '../../components/TeamReorderSelector';
 import { addDays, readableDate } from '../../utils/date';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
-import { addNewTeamId, translateWord } from '../../utils/utils';
+import { translateFilterLabel, translateWord } from '../../utils/utils';
 const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 export default function Calendar() {
   const { user } = useAuth();
-  const router = useRouter();
   const iconColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const modalBackgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
@@ -56,6 +55,7 @@ export default function Calendar() {
   const [tempTeams, setTempTeams] = useState<string[]>([]);
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
   const [gamesModalVisible, setGamesModalVisible] = useState(false);
+  const isRestoringSelectionRef = useRef(false);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -134,7 +134,7 @@ export default function Calendar() {
           const team = listToSearch.find((team) => team.uniqueId === teamId);
           return team;
         })
-        .filter((team) => team);
+        .filter(Boolean);
 
       if (selectedTeams.length !== 0) {
         saveCache('teamsSelected', selectedTeams);
@@ -149,7 +149,7 @@ export default function Calendar() {
         isInternalChange.current = true;
         setGamesSelected(newGamesSelection);
         saveCache('gameSelected', newGamesSelection);
-        if (globalThis.window !== undefined) {
+        if (globalThis.window !== undefined && !isRestoringSelectionRef.current) {
           globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
         }
       }
@@ -177,26 +177,34 @@ export default function Calendar() {
   const getSelectedTeams = useCallback(
     (allTeams: Team[] = [], shouldSyncDB: boolean = true) => {
       if (!allTeams.length) return;
-      const cached = getCache<Team[]>('teamsSelected');
-      let selection = cached?.length ? cached.map((t) => t.uniqueId) : [];
+      isRestoringSelectionRef.current = true;
 
-      if (selection.length === 0) {
-        const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
-        if (favoriteTeams.length) {
-          for (const favTeamId of favoriteTeams) {
-            if (allTeams.some((team) => team.uniqueId === favTeamId)) {
-              selection.push(favTeamId);
+      try {
+        const cached = getCache<Team[]>('teamsSelected');
+        let selection = cached?.length ? cached.map((t) => t.uniqueId) : [];
+
+        if (selection.length === 0) {
+          const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
+          if (favoriteTeams.length) {
+            for (const favTeamId of favoriteTeams) {
+              if (allTeams.some((team) => team.uniqueId === favTeamId)) {
+                selection.push(favTeamId);
+              }
             }
           }
         }
-        const availableTeams = allTeams.filter((t) => !allowedLeagues.length || allowedLeagues.includes(t.league));
-        let safety = 0;
-        while (selection.length < 2 && availableTeams.length > 0 && safety < 10) {
-          addNewTeamId(selection, availableTeams);
-          safety++;
+
+        if (selection.length === 0) {
+          setTempTeams([]);
+          setReorderModalVisible(true);
+          storeTeamsSelected([], allTeams, shouldSyncDB);
+          return;
         }
+
+        storeTeamsSelected(selection, allTeams, shouldSyncDB);
+      } finally {
+        isRestoringSelectionRef.current = false;
       }
-      storeTeamsSelected(selection, allTeams, shouldSyncDB);
     },
     [allowedLeagues, storeTeamsSelected],
   );
@@ -216,26 +224,29 @@ export default function Calendar() {
   }, [beginDate]);
 
   const getStoredTeams = useCallback(() => {
-    // Try to fetch the global teams list from cache if state is empty
-    const allTeams = teams.length > 0 ? teams : getCache<Team[]>('teams') || [];
+    isRestoringSelectionRef.current = true;
 
-    if (allTeams.length > 0) {
-      if (teams.length === 0) {
-        setTeams(allTeams);
+    try {
+      // Try to fetch the global teams list from cache if state is empty
+      const allTeams = teams.length > 0 ? teams : getCache<Team[]>('teams') || [];
+
+      if (allTeams.length > 0) {
+        if (teams.length === 0) {
+          setTeams(allTeams);
+        }
+        // Delegate selection logic (DB -> Favorites -> Random) to getSelectedTeams
+        getSelectedTeams(allTeams, false); // false = don't sync to DB on load
+
+        setGames(getStoredGames() as FilterGames);
+
+        const storedGamesSelected = getCache<GameFormatted[]>('gameSelected') ?? [];
+        const today = new Date().toISOString().split('T')[0];
+        const gamesSelectedFromStorage = storedGamesSelected.filter((game) => game.gameDate >= today);
+        setGamesSelected(gamesSelectedFromStorage);
+        saveCache('gameSelected', gamesSelectedFromStorage);
       }
-      // Delegate selection logic (DB -> Favorites -> Random) to getSelectedTeams
-      getSelectedTeams(allTeams, false); // false = don't sync to DB on load
-
-      setGames(getStoredGames() as FilterGames);
-
-      const storedGamesSelected = getCache<GameFormatted[]>('gameSelected') ?? [];
-      const today = new Date().toISOString().split('T')[0];
-      const gamesSelectedFromStorage = storedGamesSelected.filter((game) => game.gameDate >= today);
-      setGamesSelected(gamesSelectedFromStorage);
-      saveCache('gameSelected', gamesSelectedFromStorage);
-      if (globalThis.window !== undefined) {
-        globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
-      }
+    } finally {
+      isRestoringSelectionRef.current = false;
     }
   }, [teams, getSelectedTeams, getStoredGames]);
 
@@ -417,6 +428,9 @@ export default function Calendar() {
         isInternalChange.current = false;
         return;
       }
+      if (isRestoringSelectionRef.current) {
+        return;
+      }
       getStoredTeams();
     };
     if (globalThis.window !== undefined) {
@@ -455,7 +469,7 @@ export default function Calendar() {
   const displayAccordions = () => {
     if (!games || Object.keys(games).length === 0) return null;
 
-    const sortedDates = Object.keys(games).sort();
+    const sortedDates = Object.keys(games).sort((a, b) => a.localeCompare(b));
 
     return sortedDates.map((date, index) => {
       const startStr = readableDate(dateRange.startDate);
@@ -547,6 +561,7 @@ export default function Calendar() {
           <ThemedView>
             <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
               <ThemedElements>
+                <Separator label={translateFilterLabel('team')} />
                 <div
                   style={{
                     display: 'flex',
@@ -631,12 +646,15 @@ export default function Calendar() {
                   </TouchableOpacity>
                 </div>
               </ThemedElements>
-              <Separator />
+              <Separator label={'Sélectionner vos dates'} />
               <ThemedElements style={{ zIndex: 20 }}>
                 <div style={{ position: 'relative' }}>
                   <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
                 </div>
               </ThemedElements>
+              <div style={{ paddingTop: 6, paddingBottom: 6 }}>
+                <Separator />
+              </div>
             </div>
           </ThemedView>
         </div>

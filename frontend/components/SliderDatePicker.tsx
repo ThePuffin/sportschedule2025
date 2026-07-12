@@ -272,7 +272,7 @@ export default function SliderDatePicker({
           styles.todayButton,
           {
             backgroundColor: unselectedBackgroundColor,
-            borderColor: isSelected(today) ? selectedBackgroundColor : 'transparent',
+            borderColor: isSelected(today) ? selectedBackgroundColor : unselectedTextColor,
             borderWidth: 1,
             borderRadius: 12,
             marginRight: 15,
@@ -283,7 +283,7 @@ export default function SliderDatePicker({
         ]}
       >
         <MaterialCommunityIcons
-          name={isSelected(today) ? 'calendar-today' : 'calendar-arrow-left'}
+          name={isSelected(today) ? 'calendar-check' : 'calendar-arrow-left'}
           size={20}
           color={theme === 'dark' ? '#ffffff' : '#0f172a'}
         />

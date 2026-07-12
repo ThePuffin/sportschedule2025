@@ -119,6 +119,47 @@ export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, p
   }
 };
 
+export const translateFilterLabel = (context: 'league' | 'team' | 'date') => {
+  const language = (typeof navigator !== 'undefined' ? navigator.language : 'en').split('-')[0];
+
+  switch (language) {
+    case 'fr':
+      return context === 'league'
+        ? 'Filtrer par ligue'
+        : context === 'team'
+          ? 'Filtrer par équipe'
+          : 'Filtrer par date';
+    case 'de':
+      return context === 'league'
+        ? 'Nach Liga filtern'
+        : context === 'team'
+          ? 'Nach Team filtern'
+          : 'Nach Datum filtern';
+    case 'es':
+      return context === 'league'
+        ? 'Filtrar por liga'
+        : context === 'team'
+          ? 'Filtrar por equipo'
+          : 'Filtrar por fecha';
+    case 'it':
+      return context === 'league' ? 'Filtra per lega' : context === 'team' ? 'Filtra per squadra' : 'Filtra per data';
+    case 'ja':
+      return context === 'league' ? 'リーグで絞り込む' : context === 'team' ? 'チームで絞り込む' : '日付で絞り込む';
+    case 'ko':
+      return context === 'league' ? '리그로 필터링' : context === 'team' ? '팀으로 필터링' : '날짜로 필터링';
+    case 'nl':
+      return context === 'league' ? 'Filter op competitie' : context === 'team' ? 'Filter op team' : 'Filter op datum';
+    case 'pt':
+      return context === 'league' ? 'Filtrar por liga' : context === 'team' ? 'Filtrar por time' : 'Filtrar por data';
+    case 'ru':
+      return context === 'league' ? 'Фильтр по лиге' : context === 'team' ? 'Фильтр по команде' : 'Фильтр по дате';
+    case 'zh':
+      return context === 'league' ? '按联赛筛选' : context === 'team' ? '按球队筛选' : '按日期筛选';
+    default:
+      return context === 'league' ? 'Filter by league' : context === 'team' ? 'Filter by team' : 'Filter by date';
+  }
+};
+
 export const translateWord = (word: string) => {
   let translation: { [key: string]: string } = {};
   const language = navigator.language.split('-')[0];

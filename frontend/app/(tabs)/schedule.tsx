@@ -4,11 +4,12 @@ import NoResults from '@/components/NoResults';
 import TeamFilter from '@/components/TeamFilter';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
+import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { db } from '@/utils/firebaseConfig';
-import { getRandomTeamId, randomNumber, translateWord } from '@/utils/utils';
-import { FontAwesome6, Ionicons } from '@expo/vector-icons';
+import { getRandomTeamId, randomNumber, translateFilterLabel, translateWord } from '@/utils/utils';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -436,7 +437,11 @@ export default function Schedule() {
     let allGames = mergeGames(results, games);
 
     const today = new Date().toISOString().split('T')[0];
-    if (!allGames || (Object.keys(allGames).length === 1 && (allGames[today]?.[0]?.updateDate ?? '')) === '') {
+    const gameKeys = Object.keys(allGames);
+    if (
+      !allGames ||
+      (gameKeys.length === 1 && gameKeys[0] === today && (allGames[today]?.[0]?.updateDate ?? '') === '')
+    ) {
       return [];
     }
 
@@ -656,6 +661,7 @@ export default function Schedule() {
                 <PreviousScoreToggle value={showPreviousScores} onValueChange={handlePreviousScoreToggle} />
               </div>
               <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
+                <Separator label={translateFilterLabel('league')} />
                 <ThemedElements style={{ width: '100%' }}>
                   <FilterSlider
                     selectedFilter={leagueOfSelectedTeam}
@@ -663,7 +669,7 @@ export default function Schedule() {
                     availableLeagues={leagues}
                   />
                 </ThemedElements>
-                <Separator />
+                <Separator label={translateFilterLabel('team')} />
                 <div
                   style={
                     isSmallDevice
@@ -691,7 +697,13 @@ export default function Schedule() {
                   {showTeamFilter && (
                     <div style={{ width: isSmallDevice ? '100%' : '50%' }}>
                       <TeamFilter
-                        icon={<FontAwesome6 name="people-arrows" size={18} color="white" />}
+                        icon={
+                          <span
+                            style={{ color: Colors[colorScheme ?? 'light'].text, fontWeight: 'bold', fontSize: 18 }}
+                          >
+                            VS
+                          </span>
+                        }
                         selectorData={dataTeamsFilter}
                         onSelectorChange={handleTeamFilterChange}
                         selectorPlaceholder={translateWord('filterTeams')}
@@ -709,7 +721,7 @@ export default function Schedule() {
                 </div>
                 {visibleGamesByMonth.length > 1 && (
                   <>
-                    <Separator />
+                    <Separator label={translateFilterLabel('date')} />
                     <FilterSlider
                       selectedFilter={monthFilter.length > 0 ? monthFilter[0] : 'ALL'}
                       onFilterChange={(value) => setMonthFilter(value === 'ALL' ? [] : [value])}
@@ -720,7 +732,7 @@ export default function Schedule() {
                       style={{ backgroundImage: 'none', backgroundColor: 'transparent' } as any}
                       itemStyle={{ borderWidth: 1, borderColor: 'transparent' }}
                       selectedItemStyle={{
-                        backgroundColor: 'transparent',
+                        backgroundColor: selectedBackgroundColor,
                         borderWidth: 1,
                         borderColor: selectedBackgroundColor,
                       }}
@@ -731,10 +743,13 @@ export default function Schedule() {
                         textTransform: 'capitalize',
                       }}
                       selectedTextStyle={{
-                        color: colorScheme === 'light' ? selectedBackgroundColor : '#ecedee',
+                        color: colorScheme === 'light' ? '#ffffff' : '#ecedee',
                         fontWeight: 'bold',
                       }}
                     />
+                    <div style={{ paddingTop: 6, paddingBottom: 6 }}>
+                      <Separator />
+                    </div>
                   </>
                 )}
               </div>
@@ -757,7 +772,11 @@ export default function Schedule() {
 
     if (visibleGamesByMonth.length === 0) {
       const today = new Date().toISOString().split('T')[0];
-      if (!games || (Object.keys(games).length === 1 && (games[today]?.[0]?.updateDate ?? '')) === '') {
+      const gameKeys2 = Object.keys(games);
+      if (
+        !games ||
+        (gameKeys2.length === 1 && gameKeys2[0] === today && (games[today]?.[0]?.updateDate ?? '') === '')
+      ) {
         return (
           <div style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
             <br />

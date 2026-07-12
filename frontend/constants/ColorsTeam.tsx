@@ -187,10 +187,6 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ece83a',
     backgroundColor: '#1f1646',
   },
-  'MLS-NY': {
-    color: '#ffc72c',
-    backgroundColor: '#ba0c2f',
-  },
   'MLS-NYC': {
     color: '#9fd2ff',
     backgroundColor: '#000229',
@@ -4747,15 +4743,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#f05023',
     backgroundColor: '#0a2240',
   },
-  'WNBA-CONNECTICU': {
-    color: '#f05023',
-    backgroundColor: '#0a2240',
-  },
   'WNBA-DAL': {
-    color: '#c4d600',
-    backgroundColor: '#002b5c',
-  },
-  'WNBA-DALLAS': {
     color: '#c4d600',
     backgroundColor: '#002b5c',
   },
