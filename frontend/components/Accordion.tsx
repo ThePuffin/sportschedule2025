@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import CardLarge from './CardLarge';
 
+import { getScheduleScrollOffset } from '@/utils/scroll';
 import { GameFormatted } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import type { AccordionProps } from '../utils/types';
@@ -22,6 +23,8 @@ export default function Accordion({
   onSelection,
   showTime = false,
   forceShowScores = false,
+  filtersHeaderHeight = 0,
+  homeGameVisibility = false,
 }: Readonly<
   AccordionProps & {
     onRetry?: () => void;
@@ -34,7 +37,12 @@ export default function Accordion({
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 768;
   const isMedium = width < 1200;
-  const containerWidth = isSmallDevice ? '100%' : isMedium ? '95%' : '75%';
+  let containerWidth = '75%';
+  if (isSmallDevice) {
+    containerWidth = '100%';
+  } else if (isMedium) {
+    containerWidth = '95%';
+  }
   const badgeBackgroundColor = 'rgba(120, 120, 120, 0.1)';
   const badgeTextColor = useThemeColor({ light: '#404040', dark: '#8E8E93' }, 'text');
   const titleColor = useThemeColor({ light: '#48484A', dark: '#8E8E93' }, 'text');
@@ -61,8 +69,10 @@ export default function Accordion({
           d1.getUTCHours() === d2.getUTCHours()
         );
       });
-      // Offset for the sticky header in schedule.tsx to prevent the card from being hidden
-      const scrollMarginTopValue = isSmallDevice ? 220 : 260;
+      const scrollMarginTopValue = getScheduleScrollOffset({
+        isSmallDevice,
+        filtersHeaderHeight: isSmallDevice ? filtersHeaderHeight : 0,
+      });
 
       return (
         <div
@@ -85,6 +95,7 @@ export default function Accordion({
             showTime={showTime}
             animateEntry={true}
             delay={index * 15}
+            homeGameVisibility={homeGameVisibility}
           />
         </div>
       );
@@ -147,7 +158,6 @@ export default function Accordion({
           borderBottomWidth: 0,
           paddingTop: 20, // Space above the line
         }}
-        underlayColor="transparent"
       >
         <div
           style={{

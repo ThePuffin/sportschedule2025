@@ -285,10 +285,10 @@ export default function Selector({
     if (!allowMultipleSelection && itemSelectedId) {
       const selectedItem = allOptions.find((o) => o.id === itemSelectedId);
       if (selectedItem) {
-        if (selectedItem.league && leagueLogos[selectedItem.league]) {
-          logo = leagueLogos[selectedItem.league];
-        } else if (leagueLogos[selectedItem.id]) {
-          logo = leagueLogos[selectedItem.id];
+        if (selectedItem.league && leagueLogos[selectedItem.league as keyof typeof leagueLogos]) {
+          logo = leagueLogos[selectedItem.league as keyof typeof leagueLogos];
+        } else if (leagueLogos[selectedItem.id as keyof typeof leagueLogos]) {
+          logo = leagueLogos[selectedItem.id as keyof typeof leagueLogos];
         } else {
           logo = (selectedItem.original as any)?.logo || (selectedItem.original as any)?.teamLogo;
         }
@@ -427,10 +427,10 @@ export default function Selector({
                       : tempSelectedId === item.id;
 
                   let logo = null;
-                  if (item.league && leagueLogos[item.league]) {
-                    logo = leagueLogos[item.league];
-                  } else if (leagueLogos[item.id]) {
-                    logo = leagueLogos[item.id];
+                  if (item.league && leagueLogos[item.league as keyof typeof leagueLogos]) {
+                    logo = leagueLogos[item.league as keyof typeof leagueLogos];
+                  } else if (leagueLogos[item.id as keyof typeof leagueLogos]) {
+                    logo = leagueLogos[item.id as keyof typeof leagueLogos];
                   } else {
                     logo = (item.original as any)?.logo || (item.original as any)?.teamLogo;
                   }

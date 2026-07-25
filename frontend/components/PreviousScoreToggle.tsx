@@ -1,7 +1,8 @@
 import { translateWord } from '@/utils/utils';
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleProp, StyleSheet, Switch, View, ViewStyle } from 'react-native';
+import { StyleProp, ViewStyle } from 'react-native';
+import PillToggle, { PillToggleOption } from './PillToggle';
 
 interface PreviousScoreToggleProps {
   value: boolean;
@@ -12,34 +13,19 @@ interface PreviousScoreToggleProps {
 export default function PreviousScoreToggle({ value, onValueChange, style }: PreviousScoreToggleProps) {
   const helperText = translateWord('showHidePreviousScores');
 
+  const options: PillToggleOption<'hide' | 'show'>[] = [
+    { key: 'hide', renderIcon: (color) => <MaterialIcons name="update-disabled" size={20} color={color} /> },
+    { key: 'show', renderIcon: (color) => <MaterialIcons name="restore" size={20} color={color} /> },
+  ];
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        ...StyleSheet.flatten(style),
-      }}
-      title={helperText}
-    >
-      <View
-        style={{
-          opacity: value ? 0.3 : 1,
-          transform: [{ scaleX: -1 }],
-        }}
-      >
-        <MaterialIcons name="update-disabled" size={24} color="gray" />
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: '#767577', true: '#81b0ff' }}
-        thumbColor={value ? '#f5dd4b' : '#f4f3f4'}
-        style={{ marginHorizontal: 10 }}
+    <div title={helperText} style={{ display: 'inline-block' }}>
+      <PillToggle
+        value={value ? 'show' : 'hide'}
+        onValueChange={(v) => onValueChange(v === 'show')}
+        options={options}
+        style={style}
       />
-      <View style={{ opacity: value ? 1 : 0.3 }}>
-        <MaterialIcons name="restore" size={24} color="#81b0ff" />
-      </View>
     </div>
   );
 }

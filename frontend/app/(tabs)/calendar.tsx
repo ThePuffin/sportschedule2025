@@ -1,5 +1,7 @@
-import AppLogo from '@/components/AppLogo';
 import DateRangePicker from '@/components/DatePicker';
+import FilterAccordion from '@/components/FilterAccordion';
+import HomeGameToggle, { HomeGameFilter } from '@/components/HomeGameToggle';
+import PageHeader from '@/components/PageHeader';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
 import { maxTeamsNumber } from '@/constants/Constants';
@@ -46,6 +48,7 @@ export default function Calendar() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
+  const [homeGameVisibility, setHomeGameVisibility] = useState<HomeGameFilter>('all');
 
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
@@ -56,6 +59,7 @@ export default function Calendar() {
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
   const [gamesModalVisible, setGamesModalVisible] = useState(false);
   const isRestoringSelectionRef = useRef(false);
+  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(true);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -506,6 +510,7 @@ export default function Calendar() {
             showDate={false}
             gamesSelected={gamesSelected}
             onSelection={handleGamesSelection}
+            homeGameVisibility={homeGameVisibility}
           />
         </div>
       );
@@ -531,6 +536,10 @@ export default function Calendar() {
     fetchTeams();
   }, []);
 
+  const handleHomeGameToggle = (value: HomeGameFilter) => {
+    setHomeGameVisibility(value);
+  };
+
   useEffect(() => {
     if (teamsSelected.length > 0) {
       async function fetchGames() {
@@ -542,16 +551,7 @@ export default function Calendar() {
 
   return (
     <ThemedView style={{ flex: 1 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '5px 15px 5px 15px',
-        }}
-      >
-        <AppLogo />
-      </div>
+      <PageHeader rightElement={<HomeGameToggle value={homeGameVisibility} onValueChange={handleHomeGameToggle} />} />
       <ScrollView
         ref={scrollViewRef}
         onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
@@ -560,101 +560,111 @@ export default function Calendar() {
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView>
             <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
-              <ThemedElements>
-                <Separator label={translateFilterLabel('team')} />
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    width: '100%',
-                    alignItems: 'center',
-                    paddingLeft: 15,
-                    paddingRight: 15,
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  <TouchableOpacity
-                    onPress={handleOpenReorder}
+              <FilterAccordion label={translateFilterLabel('team')} defaultOpen={true} isSmallDevice={isSmallDevice}>
+                <ThemedElements>
+                  <div
                     style={{
-                      position: 'relative',
-                      width: 40,
-                      height: 40,
                       display: 'flex',
+                      flexDirection: 'row',
+                      width: '100%',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 10,
-                      backgroundColor,
-                      borderWidth: 1,
-                      borderColor: iconColor,
-                      borderStyle: 'solid',
-                      borderRadius: 20,
-                      flexShrink: 0,
+                      paddingLeft: 15,
+                      paddingRight: 15,
+                      boxSizing: 'border-box',
                     }}
                   >
-                    <MaterialIcons name="playlist-add" size={24} color={iconColor} />
-                  </TouchableOpacity>
-                  <View
-                    style={
-                      {
-                        flex: 1,
-                        overflow: 'hidden',
-                        maskImage:
-                          'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
-                        WebkitMaskImage:
-                          'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
-                      } as any
-                    }
-                  >
-                    <FilterSlider
-                      multipleSelection={true}
-                      data={filteredTeamsSelected
-                        .map((id) => teams.find((t) => t.uniqueId === id))
-                        .filter((t): t is Team => !!t)
-                        .map((t) => ({ label: t.label, value: t.uniqueId }))}
-                      selectedFilters={filteredTeamsSelected.filter((id) => !hiddenTeams.includes(id))}
-                      onFilterChange={(val) => {
-                        setHiddenTeams((prev) =>
-                          prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val],
-                        );
+                    <TouchableOpacity
+                      onPress={handleOpenReorder}
+                      style={{
+                        position: 'relative',
+                        width: 40,
+                        height: 40,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 10,
+                        backgroundColor,
+                        borderWidth: 1,
+                        borderColor: iconColor,
+                        borderStyle: 'solid',
+                        borderRadius: 20,
+                        flexShrink: 0,
                       }}
-                    />
-                  </View>
+                    >
+                      <MaterialIcons name="playlist-add" size={24} color={iconColor} />
+                    </TouchableOpacity>
+                    <View
+                      style={
+                        {
+                          flex: 1,
+                          overflow: 'hidden',
+                          maskImage:
+                            'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
+                          WebkitMaskImage:
+                            'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
+                        } as any
+                      }
+                    >
+                      <FilterSlider
+                        multipleSelection={true}
+                        data={filteredTeamsSelected
+                          .map((id) => teams.find((t) => t.uniqueId === id))
+                          .filter((t): t is Team => !!t)
+                          .map((t) => ({ label: t.label, value: t.uniqueId }))}
+                        selectedFilters={filteredTeamsSelected.filter((id) => !hiddenTeams.includes(id))}
+                        onFilterChange={(val) => {
+                          setHiddenTeams((prev) =>
+                            prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val],
+                          );
+                        }}
+                      />
+                    </View>
 
-                  <TouchableOpacity
-                    onPress={() => filteredGamesSelected.length > 0 && setGamesModalVisible(true)}
-                    style={{
-                      position: 'relative',
-                      width: 40,
-                      height: 40,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginLeft: 10,
-                      backgroundColor,
-                      borderWidth: 1,
-                      borderColor: iconColor,
-                      borderStyle: 'solid',
-                      borderRadius: 20,
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Ionicons
-                      name={filteredGamesSelected.length > 0 ? 'bookmarks' : 'bookmarks-outline'}
-                      size={20}
-                      color={iconColor}
-                    />
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      disabled={filteredGamesSelected.length === 0}
+                      onPress={() => filteredGamesSelected.length > 0 && setGamesModalVisible(true)}
+                      style={{
+                        position: 'relative',
+                        width: 40,
+                        height: 40,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginLeft: 10,
+                        backgroundColor,
+                        borderWidth: 1,
+                        borderColor: iconColor,
+                        borderStyle: 'solid',
+                        borderRadius: 20,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Ionicons
+                        name={filteredGamesSelected.length > 0 ? 'bookmarks' : 'bookmarks-outline'}
+                        size={20}
+                        color={iconColor}
+                      />
+                    </TouchableOpacity>
+                  </div>
+                </ThemedElements>
+              </FilterAccordion>
+              <FilterAccordion
+                label={'Sélectionner vos dates'}
+                defaultOpen={true}
+                isSmallDevice={isSmallDevice}
+                onExpandedChange={setIsDateAccordionOpen}
+              >
+                <ThemedElements style={{ zIndex: 20 }}>
+                  <div style={{ position: 'relative' }}>
+                    <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
+                  </div>
+                </ThemedElements>
+              </FilterAccordion>
+              {!isSmallDevice || isDateAccordionOpen ? (
+                <div style={{ paddingTop: 10, paddingBottom: 10 }}>
+                  <Separator />
                 </div>
-              </ThemedElements>
-              <Separator label={'Sélectionner vos dates'} />
-              <ThemedElements style={{ zIndex: 20 }}>
-                <div style={{ position: 'relative' }}>
-                  <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
-                </div>
-              </ThemedElements>
-              <div style={{ paddingTop: 6, paddingBottom: 6 }}>
-                <Separator />
-              </div>
+              ) : null}
             </div>
           </ThemedView>
         </div>

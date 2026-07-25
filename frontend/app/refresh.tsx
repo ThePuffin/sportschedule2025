@@ -68,8 +68,23 @@ export default function GameofTheDay() {
   width = windowWidth;
   const isTwoColumns = leaguesAvailable.length > 6 && width >= 700;
   const gridTemplateColumns = isTwoColumns ? 'repeat(2, minmax(0, 1fr))' : 'repeat(1, 1fr)';
-  const containerMaxWidth = isTwoColumns ? '600px' : width < 700 ? '90%' : '300px';
-  const buttonMaxWidth = isTwoColumns ? '300px' : width < 700 ? '100%' : '300px';
+  let containerMaxWidth: string;
+  if (isTwoColumns) {
+    containerMaxWidth = '600px';
+  } else if (width < 700) {
+    containerMaxWidth = '90%';
+  } else {
+    containerMaxWidth = '300px';
+  }
+
+  let buttonMaxWidth: string;
+  if (isTwoColumns) {
+    buttonMaxWidth = '300px';
+  } else if (width < 700) {
+    buttonMaxWidth = '100%';
+  } else {
+    buttonMaxWidth = '300px';
+  }
 
   const topGridTemplateColumns = width < 700 ? 'repeat(1, 1fr)' : 'repeat(2, minmax(0, 1fr))';
   const topContainerMaxWidth = width < 700 ? '90%' : '600px';
@@ -277,7 +292,7 @@ export default function GameofTheDay() {
                       {league.replace('-', ' ').toUpperCase()}
                     </ThemedText>
                     <Image
-                      source={leagueLogos[league.toUpperCase()] || leagueLogos.DEFAULT}
+                      source={leagueLogos[league.toUpperCase() as keyof typeof leagueLogos] || leagueLogos.DEFAULT}
                       style={{ height: 20, width: 40, resizeMode: 'contain' }}
                       accessibilityLabel={`${league} logo`}
                     />

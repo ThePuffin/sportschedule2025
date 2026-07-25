@@ -14,7 +14,7 @@ export default function Separator({ height = 1, label }: Readonly<SeparatorProps
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: label ? 8 : 0,
         width: '100%',
         margin: label ? '10px 0' : `${height}px 0`,
       }}

@@ -1,3 +1,4 @@
+import { HomeGameFilter } from '@/components/HomeGameToggle';
 import { ButtonProps } from '@rneui/themed';
 
 export interface GameFormatted {
@@ -87,6 +88,8 @@ export type AccordionProps = {
   readonly gamesSelected?: readonly GameFormatted[];
   readonly showTime?: boolean;
   readonly onSelection?: (game: GameFormatted) => void;
+  readonly filtersHeaderHeight?: number;
+  readonly homeGameVisibility?: HomeGameFilter;
 };
 
 export interface ButtonsProps {
@@ -143,4 +146,5 @@ export interface CardsProps {
   verticalMode?: boolean;
   showTime?: boolean;
   forceShowScores?: boolean;
+  homeGameVisibility?: HomeGameFilter;
 }

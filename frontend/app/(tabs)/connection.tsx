@@ -1,5 +1,5 @@
-import AppLogo from '@/components/AppLogo';
 import FavModal from '@/components/FavModal';
+import PageHeader from '@/components/PageHeader';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getCache } from '@/utils/fetchData';
@@ -18,6 +18,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  User,
 } from 'firebase/auth';
 
 // Firestore database tools import
@@ -35,7 +36,7 @@ export default function ConnectionScreen() {
   const [successMessage, setSuccessMessage] = useState('');
 
   const [isRegistering, setIsRegistering] = useState(false);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
 
   const [isFavModalOpen, setIsFavModalOpen] = useState(false);
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>([]);
@@ -167,8 +168,6 @@ export default function ConnectionScreen() {
       console.log('User logged in successfully:', loggedUser.displayName, loggedUser.email);
 
       // Store or update basic user profile info in Firestore
-      // We no longer push local guest preferences here.
-      // The onAuthStateChanged hook will pull existing DB data and overwrite local storage.
       const userRef = doc(db, 'users', loggedUser.uid);
       await setDoc(
         userRef,
@@ -258,16 +257,7 @@ export default function ConnectionScreen() {
 
   return (
     <ThemedView style={{ flex: 1 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '5px 15px 5px 15px',
-        }}
-      >
-        <AppLogo />
-      </div>
+      <PageHeader />
       <View style={styles.content}>
         <ThemedText>
           <h3>{!user ? translateWord('authentication') : translateWord('loggedInAs')}</h3>

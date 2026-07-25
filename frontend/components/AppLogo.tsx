@@ -3,7 +3,11 @@ import { Link } from 'expo-router';
 import React from 'react';
 import { Image, TouchableOpacity } from 'react-native';
 
-export default function AppLogo() {
+interface AppLogoProps {
+  compact?: boolean;
+}
+
+export default function AppLogo({ compact }: Readonly<AppLogoProps>) {
   return (
     <Link href="/" asChild>
       <TouchableOpacity activeOpacity={0.7} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -12,10 +16,10 @@ export default function AppLogo() {
           type="title"
           aria-level="1"
           style={{
-            fontSize: 30,
+            fontSize: compact ? 20 : 30,
             fontWeight: '900',
             fontStyle: 'italic',
-            letterSpacing: 1,
+            letterSpacing: compact ? 0 : 1,
             fontFamily: 'Impact, sans-serif-condensed, sans-serif',
           }}
         >

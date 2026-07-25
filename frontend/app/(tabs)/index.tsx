@@ -1,6 +1,7 @@
-import AppLogo from '@/components/AppLogo';
+import FilterAccordion from '@/components/FilterAccordion';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
+import PageHeader from '@/components/PageHeader';
 import ScoreToggle from '@/components/ScoreToggle';
 import Separator from '@/components/Separator';
 import SliderDatePicker from '@/components/SliderDatePicker';
@@ -71,6 +72,8 @@ const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
 };
 
 const GameofTheDayContent = () => {
+  const { width } = useWindowDimensions();
+  const isSmallDevice = width < 768;
   const { user } = useAuth();
   const router = useRouter();
   const { date: dateParam } = useLocalSearchParams<{ date: string }>();
@@ -279,6 +282,14 @@ const GameofTheDayContent = () => {
     const activeLeaguesInGames = new Set(games.map((game) => game.league));
     return userLeagues.filter((league) => !activeLeaguesInGames.has(league));
   }, [games, userLeagues]);
+
+  const disabledFilters: string[] = useMemo(() => {
+    const disabled: string[] = [...disabledLeagues];
+    if (gamesSelected.length === 0) {
+      disabled.push('BOOKMARKS');
+    }
+    return disabled;
+  }, [disabledLeagues, gamesSelected]);
 
   const visibleGamesByHour = useMemo(() => {
     const sortGamesByFavorites = (gamesToSort: GameFormatted[]) => {
@@ -519,10 +530,7 @@ const GameofTheDayContent = () => {
         // Reset to all leagues and clear team selection
         setSelectLeagues(userLeagues);
         setTeamSelectedId('');
-      } else if (filter === 'FAVORITES') {
-        setSelectLeagues(allLeaguesList);
-        setTeamSelectedId('');
-      } else if (filter === 'BOOKMARKS') {
+      } else if (filter === 'FAVORITES' || filter === 'BOOKMARKS') {
         setSelectLeagues(allLeaguesList);
         setTeamSelectedId('');
       } else {
@@ -615,21 +623,7 @@ const GameofTheDayContent = () => {
   }, [games, selectLeagues]);
 
   const displayScoreToggle = useCallback(() => {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '5px 15px 5px 15px',
-        }}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <AppLogo />
-        </View>
-        <ScoreToggle value={showScores} onValueChange={handleScoreToggle} />
-      </div>
-    );
+    return <PageHeader rightElement={<ScoreToggle value={showScores} onValueChange={handleScoreToggle} />} />;
   }, [showScores, handleScoreToggle, user]);
 
   const displayFilters = useCallback(() => {
@@ -851,7 +845,7 @@ const GameofTheDayContent = () => {
                 {displayScoreToggle()}
                 <div
                   style={
-                    windowWidth > 768
+                    !isSmallDevice
                       ? {
                           width: windowWidth < 1200 ? '95%' : '100%',
                           margin: '0 auto',
@@ -862,44 +856,70 @@ const GameofTheDayContent = () => {
                   }
                 >
                   <ThemedElements>
-                    <Separator label={translateFilterLabel('league')} />
-                    <FilterSlider
-                      selectedFilter={activeFilter}
-                      onFilterChange={handleFilterChange}
-                      data={[
-                        { label: translateWord('all'), value: 'ALL' },
-                        ...userLeagues.filter((l) => l !== 'ALL').map((l) => ({ label: l, value: l })),
-                        {
-                          label: '',
-                          value: 'BOOKMARKS',
-                          icon: (
-                            <Icon
-                              name={isAnyGameSelectedToday ? 'bookmark' : 'bookmark-o'}
-                              type="font-awesome"
-                              size={18}
-                              color={activeFilter === 'BOOKMARKS' ? selectedTextColor : isDark ? '#ffffff' : '#0f172a'}
-                            />
-                          ),
-                        },
-                      ]}
-                      disabledValues={disabledLeagues}
-                    />
+                    <FilterAccordion
+                      label={translateFilterLabel(isSmallDevice ? 'league_team' : 'league')}
+                      defaultOpen={false}
+                      isSmallDevice={isSmallDevice}
+                    >
+                      <FilterSlider
+                        selectedFilter={activeFilter}
+                        onFilterChange={handleFilterChange}
+                        data={[
+                          { label: translateWord('all'), value: 'ALL' },
+                          ...userLeagues.filter((l) => l !== 'ALL').map((l) => ({ label: l, value: l })),
+                          {
+                            label: '',
+                            value: 'BOOKMARKS',
+                            icon: (
+                              <Icon
+                                name={isAnyGameSelectedToday ? 'bookmark' : 'bookmark-o'}
+                                type="font-awesome"
+                                size={18}
+                                color={
+                                  activeFilter === 'BOOKMARKS' ? selectedTextColor : isDark ? '#ffffff' : '#0f172a'
+                                }
+                              />
+                            ),
+                          },
+                        ]}
+                        disabledValues={disabledFilters}
+                      />
+                      {isSmallDevice && (
+                        <div style={{ marginTop: 10, marginBottom: 10 }}>
+                          <Separator />
+                        </div>
+                      )}
+
+                      {isSmallDevice && displayFilters()}
+                    </FilterAccordion>
                   </ThemedElements>
-                  <Separator label={translateFilterLabel('team')} />
-                  {displayFilters()}
-                  <Separator label={translateFilterLabel('date')} />
-                  <div style={{ paddingLeft: 15, paddingRight: 15 }}>
-                    <SliderDatePicker
-                      onDateChange={(date) => handleDateChange(date, date)}
-                      selectDate={selectDate}
-                      disabled={isLoading}
-                      minDate={minDate}
-                      maxDate={maxDate}
-                    />
-                  </div>
-                  <div style={{ paddingTop: 6, paddingBottom: 6 }}>
-                    <Separator />
-                  </div>
+
+                  {!isSmallDevice && (
+                    <ThemedElements>
+                      <FilterAccordion label={translateFilterLabel('team')} defaultOpen={true} isSmallDevice={false}>
+                        {displayFilters()}
+                      </FilterAccordion>
+                    </ThemedElements>
+                  )}
+
+                  <FilterAccordion
+                    label={translateFilterLabel('date')}
+                    defaultOpen={true}
+                    isSmallDevice={isSmallDevice}
+                  >
+                    <div style={{ paddingLeft: 15, paddingRight: 15 }}>
+                      <SliderDatePicker
+                        onDateChange={(date) => handleDateChange(date, date)}
+                        selectDate={selectDate}
+                        disabled={isLoading}
+                        minDate={minDate}
+                        maxDate={maxDate}
+                      />
+                    </div>
+                    <div style={{ paddingTop: 10, paddingBottom: 10 }}>
+                      <Separator />
+                    </div>
+                  </FilterAccordion>
                 </div>
               </div>
             </ThemedView>

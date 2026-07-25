@@ -28,6 +28,7 @@ interface FilterSliderProps {
   readonly selectedTextStyle?: StyleProp<TextStyle>;
   readonly multipleSelection?: boolean;
   readonly disabledValues?: string[];
+  readonly disableSort?: boolean;
 }
 
 export default function FilterSlider(props: Readonly<FilterSliderProps>) {
@@ -116,11 +117,13 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
       items = availableLeagues.map((l) => ({ label: l, value: l }));
     }
 
-    if (multipleSelection) {
-      return [...items].sort((a, b) => a.label.localeCompare(b.label));
+    if (props.disableSort) {
+      return items;
     }
 
-    if (!multipleSelection) {
+    if (multipleSelection) {
+      items = [...items].sort((a, b) => a.label.localeCompare(b.label));
+    } else {
       const selectedItem = items.find((item) => item.value === selectedFilter);
       const bookmarksItem = items.find((item) => item.value === 'BOOKMARKS' && item.value !== selectedFilter);
       const allItem = items.find(
@@ -151,8 +154,17 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
         ...otherItems,
       ];
     }
+
+    // If disabledValues is provided, put active items first, then disabled items,
+    // preserving alphabetical order within each group
+    if (disabledValues && disabledValues.length > 0) {
+      const activeItems = items.filter((item) => !disabledValues.includes(item.value));
+      const inactiveItems = items.filter((item) => disabledValues.includes(item.value));
+      items = [...activeItems, ...inactiveItems];
+    }
+
     return items;
-  }, [data, availableLeagues, multipleSelection, selectedFilter, favoriteValues]);
+  }, [data, availableLeagues, multipleSelection, selectedFilter, favoriteValues, props.disableSort, disabledValues]);
 
   const sortedValuesKey = useMemo(() => {
     return sortedItems.map((item) => item.value).join('|');

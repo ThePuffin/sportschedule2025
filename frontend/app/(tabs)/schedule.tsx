@@ -1,6 +1,7 @@
-import AppLogo from '@/components/AppLogo';
+import FilterAccordion from '@/components/FilterAccordion';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
+import PageHeader from '@/components/PageHeader';
 import TeamFilter from '@/components/TeamFilter';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
@@ -73,6 +74,8 @@ export default function Schedule() {
   const [showPreviousScores, setShowPreviousScores] = useState<boolean>(
     () => getCache<boolean>('showPreviousScores') || false,
   );
+  const [isTeamAccordionOpen, setIsTeamAccordionOpen] = useState(true);
+  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(true);
 
   const isInternalChange = useRef(false);
   const handlePreviousScoreToggle = useCallback(
@@ -316,10 +319,19 @@ export default function Schedule() {
     saveCache('teamsSelectedLeagues', leaguesTeams);
   };
 
+  const scrollToTopIfNeeded = useCallback(() => {
+    if (!showPreviousScores) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }, 0);
+    }
+  }, [showPreviousScores]);
+
   const handleTeamSelectionChange = useCallback(
     async (teamSelectedId: string | string[]) => {
       setTeamFilter('');
       setMonthFilter([]);
+      scrollToTopIfNeeded();
       const finalTeamId = Array.isArray(teamSelectedId) ? teamSelectedId[0] : teamSelectedId;
       isInternalChange.current = true;
       router.setParams({ team: finalTeamId });
@@ -345,12 +357,14 @@ export default function Schedule() {
 
   const handleTeamFilterChange = (teamSelectedId: string | string[]) => {
     setTeamFilter(Array.isArray(teamSelectedId) ? teamSelectedId[0] : teamSelectedId);
+    scrollToTopIfNeeded();
   };
 
   const handleLeagueSelectionChange = useCallback(
     async (leagueSelectedId: string | string[]) => {
       setTeamFilter('');
       setMonthFilter([]);
+      scrollToTopIfNeeded();
       const finalLeagueId = Array.isArray(leagueSelectedId) ? leagueSelectedId[0] : leagueSelectedId;
       isInternalChange.current = true;
       router.setParams({ league: finalLeagueId });
@@ -448,7 +462,7 @@ export default function Schedule() {
     let subFilteredGames = Object.fromEntries(
       Object.entries(allGames).map(([date, dayGames]) => [
         date,
-        dayGames.filter((g) => g && (g.isActive || g.homeTeamScore !== null)),
+        Array.isArray(dayGames) ? dayGames.filter((g) => g && (g.isActive || g.homeTeamScore !== null)) : [],
       ]),
     ) as FilterGames;
 
@@ -458,7 +472,9 @@ export default function Schedule() {
         Object.entries(subFilteredGames)
           .map(([date, dayGames]) => [
             date,
-            dayGames.filter((g) => g && (g.homeTeamId === filterNameGame || g.awayTeamId === filterNameGame)),
+            Array.isArray(dayGames)
+              ? dayGames.filter((g) => g && (g.homeTeamId === filterNameGame || g.awayTeamId === filterNameGame))
+              : [],
           ])
           .filter(([_, filteredDayGames]) => (filteredDayGames as GameFormatted[]).length > 0),
       ) as FilterGames;
@@ -526,7 +542,7 @@ export default function Schedule() {
   }, [visibleGamesByMonth, scrollTargetId]);
 
   useEffect(() => {
-    if (teamFilter === '' && scrollTargetId && !isLoading && !monthFilter.length) {
+    if (showPreviousScores && teamFilter === '' && scrollTargetId && !isLoading && !monthFilter.length) {
       const timer = setTimeout(() => {
         const el = document.getElementById(`game-${scrollTargetId}`);
         if (el && typeof el.scrollIntoView === 'function') {
@@ -535,7 +551,15 @@ export default function Schedule() {
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [scrollTargetId, isLoading, monthFilter.length, focusCount, teamFilter]);
+  }, [scrollTargetId, isLoading, monthFilter.length, focusCount, teamFilter, showPreviousScores]);
+
+  const stickyFiltersHeight = useMemo(() => {
+    if (!isSmallDevice) return 0;
+
+    const accordionOpenCount = [isTeamAccordionOpen, isDateAccordionOpen].filter(Boolean).length;
+    const baseHeight = 180;
+    return baseHeight + accordionOpenCount * 126;
+  }, [isDateAccordionOpen, isSmallDevice, isTeamAccordionOpen]);
 
   const uniqueTeamsFromGames = useMemo(() => {
     if (teamSelected === 'all' && monthFilter.length === 0) {
@@ -649,82 +673,158 @@ export default function Schedule() {
             }}
           >
             <ThemedView>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '5px 15px 5px 15px',
-                }}
-              >
-                <AppLogo />
-                <PreviousScoreToggle value={showPreviousScores} onValueChange={handlePreviousScoreToggle} />
-              </div>
+              <PageHeader
+                rightElement={
+                  <PreviousScoreToggle value={showPreviousScores} onValueChange={handlePreviousScoreToggle} />
+                }
+              />
               <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
-                <Separator label={translateFilterLabel('league')} />
-                <ThemedElements style={{ width: '100%' }}>
-                  <FilterSlider
-                    selectedFilter={leagueOfSelectedTeam}
-                    onFilterChange={handleLeagueSelectionChange}
-                    availableLeagues={leagues}
-                  />
-                </ThemedElements>
-                <Separator label={translateFilterLabel('team')} />
-                <div
-                  style={
-                    isSmallDevice
-                      ? { width: '100%' }
-                      : { display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%' }
-                  }
-                >
-                  <div style={{ width: isSmallDevice || !showTeamFilter ? '100%' : '50%' }}>
-                    <TeamFilter
-                      icon={<Ionicons name="search" size={24} color="white" />}
-                      selectorData={dataTeams}
-                      onSelectorChange={handleTeamSelectionChange}
-                      selectorPlaceholder={translateWord('filterTeams')}
-                      isClearable={false}
-                      filterData={teamsForSelector.map((t) => ({
-                        label: t.label === 'All' ? translateWord('all') : t.label,
-                        value: t.uniqueId,
-                      }))}
-                      selectedFilter={teamSelected}
-                      onFilterChange={handleTeamSelectionChange}
-                      favoriteValues={favoriteTeams}
-                    />
-                  </div>
-
-                  {showTeamFilter && (
-                    <div style={{ width: isSmallDevice ? '100%' : '50%' }}>
+                {isSmallDevice ? (
+                  <FilterAccordion
+                    label={translateFilterLabel('league_team')}
+                    defaultOpen={true}
+                    isSmallDevice={true}
+                    onExpandedChange={setIsTeamAccordionOpen}
+                  >
+                    <ThemedElements style={{ width: '100%' }}>
+                      <FilterSlider
+                        selectedFilter={leagueOfSelectedTeam}
+                        onFilterChange={handleLeagueSelectionChange}
+                        availableLeagues={leagues}
+                      />
+                    </ThemedElements>
+                    <div style={{ marginTop: 10, marginBottom: 10 }}>
+                      <Separator />
+                    </div>
+                    <div style={{ width: '100%' }}>
                       <TeamFilter
-                        icon={
-                          <span
-                            style={{ color: Colors[colorScheme ?? 'light'].text, fontWeight: 'bold', fontSize: 18 }}
-                          >
-                            VS
-                          </span>
-                        }
-                        selectorData={dataTeamsFilter}
-                        onSelectorChange={handleTeamFilterChange}
+                        icon={<Ionicons name="search" size={24} color="white" />}
+                        selectorData={dataTeams}
+                        onSelectorChange={handleTeamSelectionChange}
                         selectorPlaceholder={translateWord('filterTeams')}
                         isClearable={false}
-                        filterData={[
-                          { label: translateWord('all'), value: '' },
-                          ...uniqueTeamsFromGames.map((t) => ({ label: t.label, value: t.uniqueId })),
-                        ]}
-                        selectedFilter={teamFilter}
-                        onFilterChange={handleTeamFilterChange}
+                        filterData={teamsForSelector.map((t) => ({
+                          label: t.label === 'All' ? translateWord('all') : t.label,
+                          value: t.uniqueId,
+                        }))}
+                        selectedFilter={teamSelected}
+                        onFilterChange={handleTeamSelectionChange}
                         favoriteValues={favoriteTeams}
                       />
                     </div>
-                  )}
-                </div>
-                {visibleGamesByMonth.length > 1 && (
+
+                    {showTeamFilter && (
+                      <div style={{ width: '100%' }}>
+                        <TeamFilter
+                          icon={
+                            <span
+                              style={{ color: Colors[colorScheme ?? 'light'].text, fontWeight: 'bold', fontSize: 18 }}
+                            >
+                              VS
+                            </span>
+                          }
+                          selectorData={dataTeamsFilter}
+                          onSelectorChange={handleTeamFilterChange}
+                          selectorPlaceholder={translateWord('filterTeams')}
+                          isClearable={false}
+                          filterData={[
+                            { label: translateWord('all'), value: '' },
+                            ...uniqueTeamsFromGames.map((t) => ({ label: t.label, value: t.uniqueId })),
+                          ]}
+                          selectedFilter={teamFilter}
+                          onFilterChange={handleTeamFilterChange}
+                          favoriteValues={favoriteTeams}
+                        />
+                      </div>
+                    )}
+                  </FilterAccordion>
+                ) : (
                   <>
-                    <Separator label={translateFilterLabel('date')} />
+                    <FilterAccordion label={translateFilterLabel('league')} defaultOpen={true} isSmallDevice={false}>
+                      <ThemedElements style={{ width: '100%' }}>
+                        <FilterSlider
+                          selectedFilter={leagueOfSelectedTeam}
+                          onFilterChange={handleLeagueSelectionChange}
+                          availableLeagues={leagues}
+                        />
+                      </ThemedElements>
+                    </FilterAccordion>
+                    <FilterAccordion
+                      label={translateFilterLabel('team')}
+                      defaultOpen={true}
+                      isSmallDevice={false}
+                      onExpandedChange={setIsTeamAccordionOpen}
+                    >
+                      <div
+                        style={
+                          isSmallDevice
+                            ? { width: '100%' }
+                            : { display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%' }
+                        }
+                      >
+                        <div style={{ width: isSmallDevice || !showTeamFilter ? '100%' : '50%' }}>
+                          <TeamFilter
+                            icon={<Ionicons name="search" size={24} color="white" />}
+                            selectorData={dataTeams}
+                            onSelectorChange={handleTeamSelectionChange}
+                            selectorPlaceholder={translateWord('filterTeams')}
+                            isClearable={false}
+                            filterData={teamsForSelector.map((t) => ({
+                              label: t.label === 'All' ? translateWord('all') : t.label,
+                              value: t.uniqueId,
+                            }))}
+                            selectedFilter={teamSelected}
+                            onFilterChange={handleTeamSelectionChange}
+                            favoriteValues={favoriteTeams}
+                          />
+                        </div>
+
+                        {showTeamFilter && (
+                          <div style={{ width: isSmallDevice ? '100%' : '50%' }}>
+                            <TeamFilter
+                              icon={
+                                <span
+                                  style={{
+                                    color: Colors[colorScheme ?? 'light'].text,
+                                    fontWeight: 'bold',
+                                    fontSize: 18,
+                                  }}
+                                >
+                                  VS
+                                </span>
+                              }
+                              selectorData={dataTeamsFilter}
+                              onSelectorChange={handleTeamFilterChange}
+                              selectorPlaceholder={translateWord('filterTeams')}
+                              isClearable={false}
+                              filterData={[
+                                { label: translateWord('all'), value: '' },
+                                ...uniqueTeamsFromGames.map((t) => ({ label: t.label, value: t.uniqueId })),
+                              ]}
+                              selectedFilter={teamFilter}
+                              onFilterChange={handleTeamFilterChange}
+                              favoriteValues={favoriteTeams}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </FilterAccordion>
+                  </>
+                )}
+                {visibleGamesByMonth.length > 1 && (
+                  <FilterAccordion
+                    label={translateFilterLabel('date')}
+                    defaultOpen={true}
+                    isSmallDevice={isSmallDevice}
+                    onExpandedChange={setIsDateAccordionOpen}
+                  >
                     <FilterSlider
+                      disableSort={true}
                       selectedFilter={monthFilter.length > 0 ? monthFilter[0] : 'ALL'}
-                      onFilterChange={(value) => setMonthFilter(value === 'ALL' ? [] : [value])}
+                      onFilterChange={(value) => {
+                        setMonthFilter(value === 'ALL' ? [] : [value]);
+                        scrollToTopIfNeeded();
+                      }}
                       data={[
                         { label: translateWord('all'), value: 'ALL' },
                         ...visibleGamesByMonth.map((m) => ({ label: m.month, value: m.month })),
@@ -747,11 +847,13 @@ export default function Schedule() {
                         fontWeight: 'bold',
                       }}
                     />
-                    <div style={{ paddingTop: 6, paddingBottom: 6 }}>
-                      <Separator />
-                    </div>
-                  </>
+                  </FilterAccordion>
                 )}
+                {!isSmallDevice || (visibleGamesByMonth.length > 1 ? isDateAccordionOpen : isTeamAccordionOpen) ? (
+                  <div style={{ paddingTop: 10, paddingBottom: 10 }}>
+                    <Separator />
+                  </div>
+                ) : null}
               </div>
             </ThemedView>
           </div>
@@ -809,6 +911,7 @@ export default function Schedule() {
               isCounted={true}
               showScores={true}
               forceShowScores={true}
+              filtersHeaderHeight={stickyFiltersHeight}
             />
           </div>
         ))}
