@@ -1,9 +1,11 @@
 import { ThemedText } from '@/components/ThemedText';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { getDateRangeLimits } from '@/utils/dateRange';
 import { DateRangePickerProps } from '@/utils/types';
+import { brightenColor } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 
@@ -34,7 +36,11 @@ export default function DateRangePicker({
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'text');
   const textDisabledColor = useThemeColor({ light: '#d9e1e8', dark: '#444444' }, 'text');
-  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
+  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#000');
+  const todayBrightColor = useMemo(() => brightenColor(selectedBackgroundColor, 90), [selectedBackgroundColor]);
+
+  // Use date limits from the API/cache instead of hardcoded today
+  const dateLimits = useMemo(() => getDateRangeLimits(), []);
 
   // Temporary state for current range selection
   const [tempRange, setTempRange] = useState<{ start: string | null; end: string | null }>({
@@ -155,9 +161,8 @@ export default function DateRangePicker({
     return `${start.toLocaleDateString(locale, opts)} - ${end.toLocaleDateString(locale, opts)}`;
   };
 
-  const minDate = new Date();
-  const maxDate = new Date();
-  maxDate.setFullYear(maxDate.getFullYear() + 1);
+  const minDate = dateLimits.minDate;
+  const maxDate = dateLimits.maxDate;
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', zIndex: 100, width: '100%' }}>
@@ -216,7 +221,7 @@ export default function DateRangePicker({
                 selectedDayBackgroundColor: selectedBackgroundColor,
                 selectedDayTextColor: selectedTextColor,
                 todayTextColor: textColor,
-                todayBackgroundColor: '#90D5FF',
+                todayBackgroundColor: todayBrightColor,
                 dayTextColor: textColor,
                 textDisabledColor,
                 monthTextColor: textColor,

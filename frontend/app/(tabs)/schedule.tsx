@@ -52,7 +52,7 @@ const mergeGames = (initial: FilterGames, remaining: FilterGames): FilterGames =
 };
 
 export default function Schedule() {
-  const { user } = useAuth();
+  const { user, firestoreReady } = useAuth();
   const router = useRouter();
   const { league: leagueParam, team: teamParam } = useLocalSearchParams<{ league: string; team: string }>();
   const [games, setGames] = useState<FilterGames>({});
@@ -65,7 +65,7 @@ export default function Schedule() {
   const [leagueTeams, setLeagueTeams] = useState<Team[]>([]);
   const { width } = useWindowDimensions();
   const colorScheme = useColorScheme();
-  const { backgroundColor: selectedBackgroundColor } = useFavoriteColor('#3b82f6');
+  const { backgroundColor: selectedBackgroundColor } = useFavoriteColor('#000');
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   const isSmallDevice = width <= 768;
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
@@ -149,6 +149,11 @@ export default function Schedule() {
   }, []);
 
   useEffect(() => {
+    // Wait for Firestore sync to complete before initializing from local cache.
+    // When a user is logged in, _layout.tsx's onSnapshot will overwrite local cache
+    // with Firestore data. We must wait for that to happen before reading the cache.
+    if (!firestoreReady) return;
+
     async function fetchTeamsAndRestore() {
       // try cached teams first
       const cachedTeams = getCache<Team[]>('teams');
@@ -225,7 +230,7 @@ export default function Schedule() {
       }
     }
     fetchTeamsAndRestore();
-  }, [leagueParam, teamParam]);
+  }, [leagueParam, teamParam, firestoreReady]);
 
   useFocusEffect(
     useCallback(() => {
@@ -313,10 +318,19 @@ export default function Schedule() {
     }
   }, [teams]);
 
-  const persistTeamForLeague = (league: string, teamSelectedId: string) => {
+  const persistTeamForLeague = async (league: string, teamSelectedId: string) => {
     const leaguesTeams = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
     leaguesTeams[league] = teamSelectedId;
     saveCache('teamsSelectedLeagues', leaguesTeams);
+
+    if (user) {
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(userRef, { teamsSelectedLeagues: leaguesTeams, lastUpdate: serverTimestamp() }, { merge: true });
+      } catch (error: unknown) {
+        console.error('Error syncing teamsSelectedLeagues to Firestore:', error);
+      }
+    }
   };
 
   const scrollToTopIfNeeded = useCallback(() => {
@@ -571,8 +585,10 @@ export default function Schedule() {
     for (const day in allGames) {
       if (!Object.hasOwn(allGames, day)) continue;
       if (monthFilter.length > 0) {
+        const year = new Date(day).getFullYear();
         const month = new Date(day).toLocaleString('default', { month: 'long' });
-        if (!monthFilter.includes(month)) continue;
+        const monthKey = `${month} ${year}`;
+        if (!monthFilter.includes(monthKey)) continue;
       }
 
       const dayGames = allGames[day];
@@ -814,7 +830,7 @@ export default function Schedule() {
                 {visibleGamesByMonth.length > 1 && (
                   <FilterAccordion
                     label={translateFilterLabel('date')}
-                    defaultOpen={true}
+                    defaultOpen={false}
                     isSmallDevice={isSmallDevice}
                     onExpandedChange={setIsDateAccordionOpen}
                   >

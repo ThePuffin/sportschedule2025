@@ -74,7 +74,7 @@ const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
 const GameofTheDayContent = () => {
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 768;
-  const { user } = useAuth();
+  const { user, firestoreReady } = useAuth();
   const router = useRouter();
   const { date: dateParam } = useLocalSearchParams<{ date: string }>();
   const { isScrollingHorizontally } = useHorizontalScroll();
@@ -125,7 +125,7 @@ const GameofTheDayContent = () => {
 
   const theme = useColorScheme() ?? 'light';
   const isDark = theme === 'dark';
-  const { textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
+  const { textColor: selectedTextColor } = useFavoriteColor('#000');
 
   const isAnyGameSelectedToday = useMemo(() => {
     const todayStr = formatDateLocal(selectDate);
@@ -739,6 +739,8 @@ const GameofTheDayContent = () => {
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
+    // Wait for Firestore sync to complete before initializing from local cache
+    if (!firestoreReady) return;
     hasInitializedRef.current = true;
 
     async function initializeGames() {
@@ -774,7 +776,7 @@ const GameofTheDayContent = () => {
     }
 
     initializeGames();
-  }, []); // Only run once on mount
+  }, [firestoreReady]); // Only run once on mount (once firestore is ready)
 
   useEffect(() => {
     const param = Array.isArray(dateParam) ? dateParam[0] : dateParam;

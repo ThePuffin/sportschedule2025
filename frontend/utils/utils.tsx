@@ -296,6 +296,7 @@ export const translateWord = (word: string) => {
         or: 'ou',
         profile: 'Mon Profil',
         changePreferences: 'Changer mes préférences',
+        selectYourDates: 'Filtrer par période',
       };
       break;
     case 'de':
@@ -376,6 +377,7 @@ export const translateWord = (word: string) => {
         or: 'oder',
         profile: 'Mein Profil',
         changePreferences: 'Präferenzen ändern',
+        selectYourDates: 'Nach Zeitraum filtern',
       };
       break;
     case 'es':
@@ -456,6 +458,7 @@ export const translateWord = (word: string) => {
         or: 'o',
         profile: 'Mi Perfil',
         changePreferences: 'Cambiar mis preferencias',
+        selectYourDates: 'Filtrar por período',
       };
       break;
 
@@ -535,6 +538,7 @@ export const translateWord = (word: string) => {
         or: 'o',
         profile: 'Il mio Profilo',
         changePreferences: 'Cambia le mie preferenze',
+        selectYourDates: 'Filtrar por período',
       };
       break;
     case 'ja':
@@ -614,6 +618,7 @@ export const translateWord = (word: string) => {
         or: 'または',
         profile: 'マイプロフィール',
         changePreferences: '設定を変更する',
+        selectYourDates: '期間でフィルター',
       };
       break;
     case 'ko':
@@ -692,6 +697,7 @@ export const translateWord = (word: string) => {
         or: '또는',
         profile: '내 프로필',
         changePreferences: '기본 설정 변경',
+        selectYourDates: '기간별 필터링',
       };
       break;
     case 'nl':
@@ -771,6 +777,7 @@ export const translateWord = (word: string) => {
         or: 'of',
         profile: 'Mijn Profiel',
         changePreferences: 'Voorkeuren wijzigen',
+        selectYourDates: 'Filteren op periode',
       };
       break;
     case 'pt':
@@ -850,6 +857,7 @@ export const translateWord = (word: string) => {
         or: 'ou',
         profile: 'Meu Perfil',
         changePreferences: 'Alterar preferências',
+        selectYourDates: 'Filtrar por período',
       };
       break;
     case 'ru':
@@ -929,6 +937,7 @@ export const translateWord = (word: string) => {
         or: 'или',
         profile: 'Мой профиль',
         changePreferences: 'Изменить настройки',
+        selectYourDates: 'Filtrar por período',
       };
       break;
     case 'zh':
@@ -1007,6 +1016,7 @@ export const translateWord = (word: string) => {
         or: '或',
         profile: '我的资料',
         changePreferences: '更改偏好',
+        selectYourDates: '按时间段筛选',
       };
       break;
     default:
@@ -1085,8 +1095,26 @@ export const translateWord = (word: string) => {
         or: 'or',
         profile: 'My Profile',
         changePreferences: 'Change my preferences',
+        selectYourDates: 'Filter by period',
       };
       break;
   }
   return translation[word] ?? '';
+};
+
+export const brightenColor = (color, amount = 100) => {
+  if (!color || !color.startsWith('#')) return color;
+
+  let hex = color.replace('#', '');
+  if (hex.length === 3)
+    hex = hex
+      .split('')
+      .map((c) => c + c)
+      .join('');
+
+  const r = Math.min(255, Math.max(0, parseInt(hex.substring(0, 2), 16) + amount));
+  const g = Math.min(255, Math.max(0, parseInt(hex.substring(2, 4), 16) + amount));
+  const b = Math.min(255, Math.max(0, parseInt(hex.substring(4, 6), 16) + amount));
+
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 };

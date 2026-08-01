@@ -50,7 +50,7 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
 
   const themeTextColor = useThemeColor({}, 'text');
   const unselectedBackgroundColor = useThemeColor({ light: '#e0e0e0', dark: '#333333' }, 'background');
-  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
+  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#000');
   const { setIsScrollingHorizontally } = useHorizontalScroll();
 
   const scrollViewRef = useRef<ScrollView>(null);

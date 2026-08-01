@@ -32,7 +32,7 @@ export default function SliderDatePicker({
   const theme = useColorScheme() ?? 'light';
 
   // Custom colors to match the screenshot
-  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#3b82f6');
+  const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#000');
   const unselectedBackgroundColor = 'rgba(120, 120, 120, 0.1)'; // Subtle dark grey for unselected
   const unselectedTextColor = useThemeColor({ light: '#404040', dark: '#8E8E93' }, 'text');
 

@@ -37,7 +37,7 @@ const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
 export default function Calendar() {
-  const { user } = useAuth();
+  const { user, firestoreReady } = useAuth();
   const iconColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const modalBackgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
@@ -518,9 +518,10 @@ export default function Calendar() {
   };
 
   useEffect(() => {
+    if (!firestoreReady) return;
     initializeDateRange();
     getStoredTeams();
-  }, []);
+  }, [firestoreReady]);
 
   useFocusEffect(
     useCallback(() => {
@@ -529,12 +530,13 @@ export default function Calendar() {
   );
 
   useEffect(() => {
+    if (!firestoreReady) return;
     async function fetchTeams() {
       const teamsData = await getTeamsFromApi();
       setTeams(teamsData);
     }
     fetchTeams();
-  }, []);
+  }, [firestoreReady]);
 
   const handleHomeGameToggle = (value: HomeGameFilter) => {
     setHomeGameVisibility(value);
@@ -607,6 +609,7 @@ export default function Calendar() {
                     >
                       <FilterSlider
                         multipleSelection={true}
+                        disableSort={true}
                         data={filteredTeamsSelected
                           .map((id) => teams.find((t) => t.uniqueId === id))
                           .filter((t): t is Team => !!t)
@@ -649,7 +652,7 @@ export default function Calendar() {
                 </ThemedElements>
               </FilterAccordion>
               <FilterAccordion
-                label={'Sélectionner vos dates'}
+                label={translateWord('selectYourDates')}
                 defaultOpen={true}
                 isSmallDevice={isSmallDevice}
                 onExpandedChange={setIsDateAccordionOpen}

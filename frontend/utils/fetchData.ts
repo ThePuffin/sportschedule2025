@@ -415,5 +415,6 @@ export const fetchDateRangeFromApi = async () => {
     return dates;
   } catch (error) {
     console.error('Error fetching date range from API:', error);
+    return { minDate: null, maxDate: null };
   }
 };
