@@ -1,61 +1,40 @@
-# File: `frontend/app/(tabs)/_layout.tsx`
+# File: `frontend/app/_layout.tsx`
 
 ## Purpose
 
-The **Tab Layout** file defines the bottom tab navigation for the app and handles the **Firestore synchronization** between local cache and the user's Firestore document.
+The **RootLayout** component is the root navigator of the Expo Router app. It loads custom fonts, manages the splash screen, and provides the navigation theme (light/dark) to the entire application.
 
 ## Key Features
 
-- **Tab navigation** — 4 tabs: Game of the Day, Schedule, Calendar, Connection
-- **Firestore sync** — bidirectional sync between local cache and Firestore
-- **`firestoreReady` signaling** — tells child screens when Firestore sync is complete
-- **Event dispatching** — dispatches `favoritesUpdated`, `leaguesUpdated`, `scoresUpdated`, etc. after sync
-- **User avatar** — shows profile photo in the Connection tab when logged in
+- **Font loading** — loads the `SpaceMono` font before rendering the app
+- **Splash screen management** — prevents auto-hide until fonts are loaded, then hides
+- **Theme provider** — applies `DarkTheme` or `DefaultTheme` based on the system color scheme
+- **Stack navigator** — defines the app's top-level screens
+- **Status bar** — renders with `auto` style
 
 ## Key Functions
 
-### `applyFirestoreData(data)`
+### `RootLayout()`
 
-Applies Firestore data to the local cache:
+Main layout component that:
 
-1. **If Firestore has data** (favoriteTeams, leaguesSelected, showScores, etc.):
-   - Saves all data to local cache via `saveCache` / `localStorage.setItem`
-   - Restores `teamsSelected` as full `Team[]` objects from team IDs
+1. Gets the current color scheme via `useColorScheme()`
+2. Loads the `SpaceMono` font via `useFonts()`
+3. Hides the splash screen once fonts are loaded (via `useEffect`)
+4. Returns `null` until fonts are loaded
+5. Renders `ThemeProvider` wrapping a `Stack` navigator and `StatusBar`
 
-2. **If Firestore is empty**:
-   - Pushes local cache data to Firestore via `setDoc` with `{ merge: true }`
+## Stack Screens
 
-3. **Always**:
-   - Ensures teams are cached (fetches from API if needed)
-   - Dispatches events to notify all screens of the data update
-
-### `useEffect` — Firestore listener
-
-```typescript
-useEffect(() => {
-  if (!user) {
-    setFirestoreReady(true); // No user → nothing to sync
-    return;
-  }
-  const unsubscribe = onSnapshot(
-    userRef,
-    (docSnap) => {
-      if (docSnap.exists()) applyFirestoreData(docSnap.data());
-      setFirestoreReady(true); // ✅ sync complete
-    },
-    (err) => {
-      console.error(err);
-      setFirestoreReady(true); // ✅ even on error
-    },
-  );
-  return () => unsubscribe();
-}, [user]);
-```
+| Name         | Options                  | Description                        |
+| ------------ | ------------------------ | ---------------------------------- |
+| `(tabs)`     | `{ headerShown: false }` | Main tab navigator (hidden header) |
+| `refresh`    | —                        | Refresh screen                     |
+| `+not-found` | —                        | 404 fallback screen                |
 
 ## Data Flow
 
-1. `AuthProvider` wraps the tab layout
-2. On mount, if user is logged in, starts `onSnapshot` listener on `users/{uid}`
-3. First snapshot: applies Firestore data to local cache, dispatches events, sets `firestoreReady = true`
-4. Child screens wait for `firestoreReady` before initializing from cache
-5. If no user: `firestoreReady = true` immediately
+1. App starts → `SplashScreen.preventAutoHideAsync()` is called immediately
+2. Fonts load asynchronously → `loaded` becomes `true`
+3. `useEffect` triggers → `SplashScreen.hideAsync()` hides the splash
+4. Root layout renders the navigation theme + stack screens

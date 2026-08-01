@@ -50,10 +50,11 @@ Each file in `frontend/docs/` (and `frontend/docs/components/`) contains AI-read
 ## Mandatory Rules for AI Agents
 
 1. **ALWAYS read the `.md` documentation file** for a source file before editing it. This is not optional.
-2. **When creating a new file**, create a corresponding documentation file in `frontend/docs/` (or `frontend/docs/components/` for components).
-3. **When making significant changes**, update the corresponding documentation file and add an entry to `frontend/CHANGELOG_ARCHITECTURE.md`.
-4. **The `backend/` directory** has its own structure; consult `backend/README.md` for backend-specific instructions.
-5. **If you are unsure about a file's behavior**, read its documentation file FIRST before reading the source code.
+2. **When creating a new file**, create a corresponding documentation file in `frontend/docs/` (or `frontend/docs/components/` for components). For backend files, create or update the matching file in `backend/docs/`.
+3. **When making significant changes**, update the corresponding documentation file and add an entry to the relevant changelog: `frontend/CHANGELOG_ARCHITECTURE.md` for frontend changes and `backend/CHANGELOG_ARCHITECTURE.md` for backend changes.
+4. **For every new feature or user-visible behavior change**, update the relevant docs and changelog as part of the implementation. Documentation is not a separate cleanup task.
+5. **The `backend/` directory** has its own structure; consult `backend/README.md` for backend-specific instructions.
+6. **If you are unsure about a file's behavior**, read its documentation file FIRST before reading the source code.
 
 ## Architecture Notes
 
