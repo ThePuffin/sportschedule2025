@@ -1,10 +1,11 @@
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { db } from '@/utils/firebaseConfig';
+import { applyFirestoreDataToLocal, flushSync, syncOnLogin } from '@/utils/syncService';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import { Tabs } from 'expo-router';
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import React, { useEffect } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
 
@@ -18,65 +19,9 @@ function TabLayoutContent() {
   const colorScheme = useColorScheme();
   const { user, setFirestoreReady } = useAuth();
 
-  // Helper to apply Firestore data to local cache
+  // Helper to apply Firestore data to local cache and refresh the UI
   const applyFirestoreData = async (data: any) => {
-    const hasFirestoreData =
-      (Array.isArray(data.favoriteTeams) && data.favoriteTeams.length > 0) ||
-      (Array.isArray(data.leaguesSelected) && data.leaguesSelected.length > 0) ||
-      data.showScores !== undefined ||
-      data.showPreviousScores !== undefined ||
-      (Array.isArray(data.gameSelected) && data.gameSelected.length > 0) ||
-      (data.teamsSelectedLeagues &&
-        typeof data.teamsSelectedLeagues === 'object' &&
-        Object.keys(data.teamsSelectedLeagues).length > 0);
-
-    if (hasFirestoreData) {
-      console.log('Firestore has data → restoring from Firestore');
-      saveCache('favoriteTeams', data.favoriteTeams || []);
-      saveCache('leaguesSelected', data.leaguesSelected || []);
-      saveCache('showScores', data.showScores ?? false);
-      saveCache('showPreviousScores', data.showPreviousScores ?? false);
-      saveCache('gameSelected', data.gameSelected || []);
-      if (data.teamsSelectedLeagues) saveCache('teamsSelectedLeagues', data.teamsSelectedLeagues);
-      if (data.teamSelected) localStorage.setItem('teamSelected', data.teamSelected);
-      if (data.leagueSelected) localStorage.setItem('leagueSelected', data.leagueSelected);
-      if (data.startDate) localStorage.setItem('startDate', data.startDate);
-      if (data.endDate) localStorage.setItem('endDate', data.endDate);
-    } else {
-      console.log('Firestore empty → pushing local data to Firestore');
-      const localFavoriteTeams = getCache<string[]>('favoriteTeams') || [];
-      const localLeaguesSelected = getCache<string[]>('leaguesSelected') || [];
-      const localShowScores = getCache<boolean>('showScores') ?? false;
-      const localShowPreviousScores = getCache<boolean>('showPreviousScores') ?? false;
-      const localGameSelected = getCache<any[]>('gameSelected') || [];
-      const localTeamsSelectedRaw = getCache<any[]>('teamsSelected') || [];
-      const localStartDate = localStorage.getItem('startDate');
-      const localEndDate = localStorage.getItem('endDate');
-      const localTeamSelected = localStorage.getItem('teamSelected');
-      const localLeagueSelected = localStorage.getItem('leagueSelected');
-      const localTeamsSelected = localTeamsSelectedRaw.map((t) => t.uniqueId).filter(Boolean);
-      const localTeamsSelectedLeagues = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
-
-      const userRef = doc(db, 'users', user!.uid);
-      await setDoc(
-        userRef,
-        {
-          lastLogin: serverTimestamp(),
-          favoriteTeams: localFavoriteTeams,
-          leaguesSelected: localLeaguesSelected,
-          showScores: localShowScores,
-          showPreviousScores: localShowPreviousScores,
-          gameSelected: localGameSelected,
-          teamsSelected: localTeamsSelected,
-          teamsSelectedLeagues: localTeamsSelectedLeagues,
-          startDate: localStartDate,
-          endDate: localEndDate,
-          teamSelected: localTeamSelected,
-          leagueSelected: localLeagueSelected,
-        },
-        { merge: true },
-      );
-    }
+    applyFirestoreDataToLocal(data);
 
     let allTeams = getCache<Team[]>('teams') || [];
     if (allTeams.length === 0) {
@@ -109,9 +54,22 @@ function TabLayoutContent() {
       return;
     }
 
-    const userRef = doc(db, 'users', user.uid);
+    let isMounted = true;
 
-    // Set up real-time listener for Firestore changes
+    // Flush any pending debounced writes from a previous session before
+    // starting the new user's sync, so no local changes are lost on user switch.
+    flushSync();
+
+    // Initial login sync:
+    // - Firestore has data → overwrite localStorage with it
+    // - No Firestore data → push localStorage to Firestore
+    // - Firestore error → fall back to localStorage (no-op)
+    syncOnLogin(user.uid).finally(() => {
+      if (isMounted) setFirestoreReady(true);
+    });
+
+    // Real-time listener for updates from other devices
+    const userRef = doc(db, 'users', user.uid);
     const unsubscribe = onSnapshot(
       userRef,
       (docSnap) => {
@@ -119,17 +77,16 @@ function TabLayoutContent() {
           const data = docSnap.data();
           applyFirestoreData(data);
         }
-        // Mark Firestore as ready after the first snapshot (initial sync)
-        setFirestoreReady(true);
       },
       (err) => {
         console.error('Firestore snapshot error:', err);
-        // Even on error, mark as ready so the app can still work with local data
-        setFirestoreReady(true);
       },
     );
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [user]);
 
   return (

@@ -4,12 +4,11 @@ import { GameStatus, leagueLogos } from '@/constants/enum';
 import { useAuth } from '@/context/AuthContext';
 import { getGamesStatus } from '@/utils/date';
 import { getCache, saveCache } from '@/utils/fetchData';
-import { db } from '@/utils/firebaseConfig';
+import { syncToFirestore } from '@/utils/syncService';
 import { CardsProps, GameFormatted, Team } from '@/utils/types';
 import { addFavoriteTeam, translateWord } from '@/utils/utils';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -228,19 +227,8 @@ export default function CardLarge({
     }
 
     if (user) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(
-          userRef,
-          {
-            gameSelected: newSelection,
-            lastUpdate: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      } catch (error: unknown) {
-        console.error('Error syncing gameSelected to Firestore:', error);
-      }
+      // Debounced replication to Firestore; errors are handled gracefully inside syncService
+      syncToFirestore(user.uid, { gameSelected: newSelection });
     }
   };
 

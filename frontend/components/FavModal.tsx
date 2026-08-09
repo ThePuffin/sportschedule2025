@@ -6,11 +6,10 @@ import { TeamsEnum } from '@/constants/Teams';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchLeagues, getCache, saveCache } from '@/utils/fetchData';
-import { db } from '@/utils/firebaseConfig';
+import { syncToFirestore } from '@/utils/syncService';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import { useRouter } from 'expo-router';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Dimensions,
@@ -115,21 +114,12 @@ const FavModal = ({
     saveCache('showScores', showScores);
 
     if (user) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(
-          userRef,
-          {
-            favoriteTeams: filteredFavorites,
-            leaguesSelected: localLeagues,
-            showScores: showScores,
-            lastUpdate: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      } catch (error: unknown) {
-        console.error('Error syncing user preferences to Firestore:', error);
-      }
+      // Debounced replication to Firestore; errors are handled gracefully inside syncService
+      syncToFirestore(user.uid, {
+        favoriteTeams: filteredFavorites,
+        leaguesSelected: localLeagues,
+        showScores: showScores,
+      });
     }
 
     if (globalThis.window !== undefined) {

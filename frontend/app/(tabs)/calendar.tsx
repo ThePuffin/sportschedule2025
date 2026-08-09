@@ -8,10 +8,9 @@ import { maxTeamsNumber } from '@/constants/Constants';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
-import { db } from '@/utils/firebaseConfig';
+import { syncToFirestore } from '@/utils/syncService';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
@@ -159,20 +158,11 @@ export default function Calendar() {
       }
 
       if (user && syncToDB) {
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(
-            userRef,
-            {
-              teamsSelected: filteredTeams,
-              ...(selectionPruned && { gameSelected: newGamesSelection }),
-              lastUpdate: serverTimestamp(),
-            },
-            { merge: true },
-          );
-        } catch (error: unknown) {
-          console.error('Error syncing teamsSelected to Firestore:', error);
-        }
+        // Debounced replication to Firestore; errors are handled gracefully inside syncService
+        syncToFirestore(user.uid, {
+          teamsSelected: filteredTeams,
+          ...(selectionPruned && { gameSelected: newGamesSelection }),
+        });
       }
     },
     [teams, gamesSelected, user],
@@ -315,21 +305,12 @@ export default function Calendar() {
     }
 
     if (user) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(
-          userRef,
-          {
-            startDate: start,
-            endDate: end,
-            gameSelected: newGamesSelection,
-            lastUpdate: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      } catch (error: unknown) {
-        console.error('Error syncing gameSelected to Firestore:', error);
-      }
+      // Debounced replication to Firestore; errors are handled gracefully inside syncService
+      syncToFirestore(user.uid, {
+        startDate: start,
+        endDate: end,
+        gameSelected: newGamesSelection,
+      });
     }
   };
 
@@ -372,19 +353,8 @@ export default function Calendar() {
       }
 
       if (user) {
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(
-            userRef,
-            {
-              gameSelected: newSelection,
-              lastUpdate: serverTimestamp(),
-            },
-            { merge: true },
-          );
-        } catch (error: unknown) {
-          console.error('Error syncing gameSelected to Firestore:', error);
-        }
+        // Debounced replication to Firestore; errors are handled gracefully inside syncService
+        syncToFirestore(user.uid, { gameSelected: newSelection });
       }
     },
     [gamesSelected, user],
@@ -410,19 +380,8 @@ export default function Calendar() {
     }
 
     if (user) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(
-          userRef,
-          {
-            gameSelected: [],
-            lastUpdate: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      } catch (error: unknown) {
-        console.error('Error clearing gameSelected in Firestore:', error);
-      }
+      // Debounced replication to Firestore; errors are handled gracefully inside syncService
+      syncToFirestore(user.uid, { gameSelected: [] });
     }
   }, [user]);
 

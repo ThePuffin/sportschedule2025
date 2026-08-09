@@ -4,6 +4,83 @@
 
 ---
 
+## Feature: "Show all results" option in NoResults when filters hide results
+
+### Overview
+
+When the `NoResults` component is displayed on the **index** (Games of the Day) and **schedule** (Focus Team) screens with an active filter and the manual retry is in cooldown, the user is now offered a "Show all results" button to switch back to the "All" option.
+
+### Problem
+
+- When a user filtered games (e.g., by a specific league/team or a specific team in Schedule) and no games matched, `NoResults` was displayed.
+- During the 60s retry cooldown, the refresh button was hidden, leaving the user with no actionable option.
+- The user could only wait for the cooldown to expire or manually change filters.
+
+### Solution
+
+- Extended `NoResults` with a new optional `onShowAll` prop.
+- When the retry cooldown is active **and** `onShowAll` is provided, a "Show all results" button is rendered instead of the refresh icon.
+- Clicking the button calls the provided handler, which resets the filter to "ALL".
+
+### Behavior per screen
+
+| Screen                       | Condition to show button                                                                    | Action                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **Index** (Games of the Day) | `activeFilter !== 'ALL'` OR a team is selected OR fewer leagues selected than all available | Calls `handleFilterChange('ALL')`        |
+| **Schedule** (Focus Team)    | `teamSelected` is not `'all'` and not `''`                                                  | Calls `handleTeamSelectionChange('all')` |
+
+### Modified files
+
+| File                                        | Change                                                                           |
+| ------------------------------------------- | -------------------------------------------------------------------------------- |
+| `frontend/components/NoResults.tsx`         | Added `onShowAll` prop and "Show all results" button shown during retry cooldown |
+| `frontend/app/(tabs)/index.tsx`             | Passes `onShowAll` when a filter is active                                       |
+| `frontend/app/(tabs)/schedule.tsx`          | Passes `onShowAll` when a specific team is selected                              |
+| `frontend/utils/utils.tsx`                  | Added `showAllResults` translation key to all 11 languages                       |
+| `frontend/docs/components/NoResults.tsx.md` | Updated documentation                                                            |
+
+---
+
+## Feature: Data synchronization between localStorage and Firestore
+
+### Overview
+
+Implemented a centralized sync service (`frontend/utils/syncService.ts`) that handles all data synchronization between localStorage and Firebase Firestore, with a React hook wrapper (`frontend/hooks/useSync.ts`).
+
+### Behavior
+
+| Scenario                            | Behavior                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| **Guest mode** (unauthenticated)    | All data read/written to localStorage only. No Firestore calls.          |
+| **Login — Firestore has data**      | Firestore takes priority. Overwrites localStorage and updates app state. |
+| **Login — no Firestore data**       | Current localStorage data is pushed to Firestore for this user.          |
+| **Login — Firestore error/offline** | Falls back seamlessly to localStorage without blocking the user.         |
+| **Authenticated writes**            | Every local change is replicated to Firestore with 800ms debounce.       |
+| **Firestore write failure**         | Error is logged and swallowed; app continues on localStorage.            |
+| **Logout / user switch**            | Pending debounced writes are flushed immediately via `flushSync()`.      |
+
+### Key implementation details
+
+- **Timeout guard** — all Firestore operations wrapped in `executeFirestoreWithTimeout` (10s default) using `Promise.race`.
+- **Debounce** — `syncToFirestore()` merges rapid successive writes into a single Firestore call after 800ms of inactivity.
+- **Module-level state** — debounce timer and pending data survive component unmounts.
+- **`hasFirestoreData()`** — treats empty/profile-only documents as "no data" so local data is pushed instead of overwritten.
+- **`flushSync()`** — called on logout (`connection.tsx`) and user switch (`_layout.tsx`) to avoid losing pending changes.
+
+### Modified files
+
+| File                                 | Change                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `frontend/utils/syncService.ts`      | Central sync service (read/write local, pull/push Firestore, debounced writes, timeout, fallback) |
+| `frontend/utils/syncService.test.ts` | 23 unit tests covering all scenarios including offline/error states                               |
+| `frontend/hooks/useSync.ts`          | React hook wrapper exposing `syncData`, `syncOnLogin`, `flushSync`                                |
+| `frontend/app/(tabs)/connection.tsx` | Added `flushSync()` before `signOut()` on logout                                                  |
+| `frontend/app/(tabs)/_layout.tsx`    | Added `flushSync()` on user switch before starting new user's sync                                |
+| `frontend/docs/syncService.ts.md`    | New documentation for syncService                                                                 |
+| `frontend/docs/useSync.ts.md`        | New documentation for useSync hook                                                                |
+
+---
+
 ## Problem: Opponent (VS) filter not recalculated when filtering by month
 
 ### Symptom

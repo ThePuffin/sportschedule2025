@@ -3,6 +3,7 @@ import PageHeader from '@/components/PageHeader';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getCache } from '@/utils/fetchData';
+import { flushSync, pushLocalDataToFirestore, syncOnLogin } from '@/utils/syncService';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
@@ -22,7 +23,7 @@ import {
 } from 'firebase/auth';
 
 // Firestore database tools import
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc } from 'firebase/firestore';
 
 // Import both auth AND db from your config file
 import { auth, db } from '../../utils/firebaseConfig';
@@ -62,9 +63,11 @@ export default function ConnectionScreen() {
         const userResult = result.user;
         console.log('User logged in successfully:', userResult.email);
 
-        // Update the user's last login timestamp in Firestore
-        const userRef = doc(db, 'users', userResult.uid);
-        await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+        // Orchestrate login sync:
+        // - Firestore has data → overwrite localStorage with it
+        // - No Firestore data → push localStorage to Firestore
+        // - Firestore error → fall back to localStorage (no-op)
+        await syncOnLogin(userResult.uid);
       } else {
         console.log('Step 2: Creating new account...');
         // Check if passwords match
@@ -77,41 +80,8 @@ export default function ConnectionScreen() {
           const newUser = registerResult.user;
           console.log('Account automatically created:', newUser.email);
 
-          // Fetch local storage data to sync with the new account
-          const favoriteTeams = getCache<string[]>('favoriteTeams') || [];
-          const leaguesSelected = getCache<string[]>('leaguesSelected') || [];
-          const showScores = getCache<boolean>('showScores') ?? false;
-          const showPreviousScores = getCache<boolean>('showPreviousScores') ?? false;
-          const gameSelected = getCache<any[]>('gameSelected') || [];
-          const teamsSelectedRaw = getCache<any[]>('teamsSelected') || [];
-          const startDate = localStorage.getItem('startDate');
-          const endDate = localStorage.getItem('endDate');
-          const teamSelected = localStorage.getItem('teamSelected');
-          const leagueSelected = localStorage.getItem('leagueSelected');
-          const teamsSelected = teamsSelectedRaw.map((t) => t.uniqueId).filter(Boolean);
-
-          const userRef = doc(db, 'users', newUser.uid);
-          await setDoc(
-            userRef,
-            {
-              uid: newUser.uid,
-              name: email.split('@')[0],
-              email: newUser.email,
-              photoURL: null,
-              lastLogin: serverTimestamp(),
-              favoriteTeams,
-              leaguesSelected,
-              showScores,
-              showPreviousScores,
-              gameSelected,
-              teamsSelected,
-              startDate,
-              endDate,
-              teamSelected,
-              leagueSelected,
-            },
-            { merge: true },
-          );
+          // Push local storage data to the new Firestore account
+          await pushLocalDataToFirestore(newUser.uid);
         } catch (err: unknown) {
           const registerError = err as { code?: string; message?: string };
           if (registerError.code === 'auth/email-already-in-use') {
@@ -167,19 +137,8 @@ export default function ConnectionScreen() {
       const loggedUser = result.user;
       console.log('User logged in successfully:', loggedUser.displayName, loggedUser.email);
 
-      // Store or update basic user profile info in Firestore
-      const userRef = doc(db, 'users', loggedUser.uid);
-      await setDoc(
-        userRef,
-        {
-          uid: loggedUser.uid,
-          name: loggedUser.displayName || loggedUser.email?.split('@')[0],
-          email: loggedUser.email,
-          photoURL: loggedUser.photoURL,
-          lastLogin: serverTimestamp(),
-        },
-        { merge: true },
-      );
+      // Orchestrate login sync (pull Firestore → local, or push local → Firestore)
+      await syncOnLogin(loggedUser.uid);
 
       console.log('User data successfully synced with Firestore');
     } catch (error: unknown) {
@@ -191,6 +150,9 @@ export default function ConnectionScreen() {
   // Function to log out
   const handleGoogleLogout = async () => {
     try {
+      // Flush any pending debounced Firestore writes before signing out
+      // so no local changes are lost when the session ends.
+      await flushSync();
       await signOut(auth);
       console.log('User logged out');
     } catch (error: unknown) {

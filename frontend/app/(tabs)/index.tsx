@@ -697,7 +697,16 @@ const GameofTheDayContent = () => {
       return displayNoContent();
     }
 
-    if (visibleGamesByHour.length === 0) return <NoResults />;
+    if (visibleGamesByHour.length === 0) {
+      // If the user has a filter active (not "All"), offer a way to switch back
+      // to the "All" option when the retry cooldown is active.
+      const isFiltered =
+        activeFilter !== 'ALL' || teamSelectedId !== '' || selectLeagues.length !== allLeaguesList.length;
+      if (isFiltered) {
+        return <NoResults onShowAll={() => handleFilterChange('ALL')} />;
+      }
+      return <NoResults />;
+    }
 
     return (
       <ThemedView style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' } as any}>
@@ -717,7 +726,19 @@ const GameofTheDayContent = () => {
         ))}
       </ThemedView>
     );
-  }, [games, displayNoContent, visibleGamesByHour, gamesSelected, showScores, isLoading]);
+  }, [
+    games,
+    displayNoContent,
+    visibleGamesByHour,
+    gamesSelected,
+    showScores,
+    isLoading,
+    activeFilter,
+    teamSelectedId,
+    selectLeagues,
+    allLeaguesList,
+    handleFilterChange,
+  ]);
 
   useEffect(() => {
     const updateLeagues = () => {

@@ -8,11 +8,10 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
-import { db } from '@/utils/firebaseConfig';
+import { syncToFirestore } from '@/utils/syncService';
 import { getRandomTeamId, randomNumber, translateFilterLabel, translateWord } from '@/utils/utils';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import Accordion from '../../components/Accordion'; // Added import
@@ -87,12 +86,8 @@ export default function Schedule() {
       }
 
       if (user) {
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(userRef, { showPreviousScores: value, lastUpdate: serverTimestamp() }, { merge: true });
-        } catch (error: unknown) {
-          console.error('Error syncing showPreviousScores to Firestore:', error);
-        }
+        // Debounced replication to Firestore; errors are handled gracefully inside syncService
+        syncToFirestore(user.uid, { showPreviousScores: value });
       }
     },
     [user],
@@ -324,12 +319,8 @@ export default function Schedule() {
     saveCache('teamsSelectedLeagues', leaguesTeams);
 
     if (user) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, { teamsSelectedLeagues: leaguesTeams, lastUpdate: serverTimestamp() }, { merge: true });
-      } catch (error: unknown) {
-        console.error('Error syncing teamsSelectedLeagues to Firestore:', error);
-      }
+      // Debounced replication to Firestore; errors are handled gracefully inside syncService
+      syncToFirestore(user.uid, { teamsSelectedLeagues: leaguesTeams });
     }
   };
 
@@ -358,12 +349,8 @@ export default function Schedule() {
       persistTeamForLeague(leagueOfSelectedTeam, finalTeamId);
 
       if (user) {
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(userRef, { teamSelected: finalTeamId, lastUpdate: serverTimestamp() }, { merge: true });
-        } catch (error: unknown) {
-          console.error('Error syncing teamSelected to Firestore:', error);
-        }
+        // Debounced replication to Firestore; errors are handled gracefully inside syncService
+        syncToFirestore(user.uid, { teamSelected: finalTeamId });
       }
     },
     [teams, leagueOfSelectedTeam, user, router],
@@ -411,16 +398,8 @@ export default function Schedule() {
       setTeamSelected(team);
 
       if (user) {
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(
-            userRef,
-            { leagueSelected: finalLeagueId, teamSelected: team, lastUpdate: serverTimestamp() },
-            { merge: true },
-          );
-        } catch (error: unknown) {
-          console.error('Error syncing leagueSelected to Firestore:', error);
-        }
+        // Debounced replication to Firestore; errors are handled gracefully inside syncService
+        syncToFirestore(user.uid, { leagueSelected: finalLeagueId, teamSelected: team });
       }
     },
     [teams, user, router],
@@ -891,6 +870,10 @@ export default function Schedule() {
     if (visibleGamesByMonth.length === 0) {
       const today = new Date().toISOString().split('T')[0];
       const gameKeys2 = Object.keys(games);
+      // If the user has filtered to a specific team (not "All"), offer a way to
+      // switch back to the "All" option when the retry cooldown is active.
+      const isFiltered = teamSelected !== 'all' && teamSelected !== '';
+      const showAllHandler = isFiltered ? () => handleTeamSelectionChange('all') : undefined;
       if (
         !games ||
         (gameKeys2.length === 1 && gameKeys2[0] === today && (games[today]?.[0]?.updateDate ?? '') === '')
@@ -898,14 +881,14 @@ export default function Schedule() {
         return (
           <div style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
             <br />
-            <NoResults />
+            <NoResults onShowAll={showAllHandler} />
           </div>
         );
       }
       return (
         <div style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
           <br />
-          <NoResults />
+          <NoResults onShowAll={showAllHandler} />
         </div>
       );
     }
