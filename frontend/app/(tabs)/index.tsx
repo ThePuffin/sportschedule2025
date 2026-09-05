@@ -24,7 +24,7 @@ import { GameStatus, League } from '../../constants/enum';
 import { fetchDateRangeLimits, getDateRangeLimits } from '../../utils/dateRange';
 import { fetchGamesByHour, fetchLeagues, fetchLiveScores, getCache, saveCache } from '../../utils/fetchData';
 import { GameFormatted } from '../../utils/types';
-import { randomNumber, translateFilterLabel, translateWord } from '../../utils/utils';
+import { getFilterAccordionLabel, randomNumber, translateFilterLabel, translateWord } from '../../utils/utils';
 
 const formatDateLocal = (date: Date) => {
   const year = date.getFullYear();
@@ -85,7 +85,7 @@ const GameofTheDayContent = () => {
     if (dateParam) {
       const param = Array.isArray(dateParam) ? dateParam[0] : dateParam;
       const d = new Date(param);
-      if (!isNaN(d.getTime())) return d;
+      if (!Number.isNaN(d.getTime())) return d;
     }
     return currentDate;
   });
@@ -97,6 +97,8 @@ const GameofTheDayContent = () => {
   // Add state for the filter slider
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [showScores, setShowScores] = useState<boolean>(false);
+  const [dateAccordionExpanded, setDateAccordionExpanded] = useState<boolean>(true);
+  const [leagueAccordionExpanded, setLeagueAccordionExpanded] = useState<boolean>(false);
 
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [retryCount, setRetryCount] = useState(0);
@@ -125,6 +127,7 @@ const GameofTheDayContent = () => {
 
   const theme = useColorScheme() ?? 'light';
   const isDark = theme === 'dark';
+  const defaultColor = isDark ? '#ffffff' : '#0f172a';
   const { textColor: selectedTextColor } = useFavoriteColor('#000');
 
   const isAnyGameSelectedToday = useMemo(() => {
@@ -622,6 +625,30 @@ const GameofTheDayContent = () => {
     return Array.from(teamsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [games, selectLeagues]);
 
+  const leagueAccordionLabel = useMemo(() => {
+    const selectedTeam = teamSelectedId
+      ? teamsOfTheDay.find((t) => t.uniqueId === teamSelectedId || t.label === teamSelectedId)
+      : null;
+    const { prefix, value } = getFilterAccordionLabel({
+      prefix: translateFilterLabel('league_team'),
+      fallbackLabel: translateFilterLabel(isSmallDevice ? 'league_team' : 'league'),
+      activeFilter,
+      selectedTeam,
+      expanded: leagueAccordionExpanded,
+    });
+    if (value) {
+      return (
+        <span>
+          {prefix} :{' '}
+          <i>
+            <b>{value}</b>
+          </i>
+        </span>
+      );
+    }
+    return prefix;
+  }, [teamSelectedId, teamsOfTheDay, activeFilter, isSmallDevice, leagueAccordionExpanded]);
+
   const displayScoreToggle = useCallback(() => {
     return <PageHeader rightElement={<ScoreToggle value={showScores} onValueChange={handleScoreToggle} />} />;
   }, [showScores, handleScoreToggle, user]);
@@ -688,9 +715,11 @@ const GameofTheDayContent = () => {
     if (isLoading) {
       return <LoadingView />;
     } else {
-      return <NoResults />;
+      // Re-fetch games for the current date while preserving the current filters
+      // (leagues, team, active filter) instead of reloading the whole page.
+      return <NoResults onRetry={() => getGamesFromApi(selectDate)} />;
     }
-  }, [isLoading]);
+  }, [isLoading, getGamesFromApi, selectDate]);
 
   const displayContent = useCallback(() => {
     if (!games || games.length === 0) {
@@ -703,9 +732,9 @@ const GameofTheDayContent = () => {
       const isFiltered =
         activeFilter !== 'ALL' || teamSelectedId !== '' || selectLeagues.length !== allLeaguesList.length;
       if (isFiltered) {
-        return <NoResults onShowAll={() => handleFilterChange('ALL')} />;
+        return <NoResults onRetry={() => getGamesFromApi(selectDate)} onShowAll={() => handleFilterChange('ALL')} />;
       }
-      return <NoResults />;
+      return <NoResults onRetry={() => getGamesFromApi(selectDate)} />;
     }
 
     return (
@@ -880,9 +909,10 @@ const GameofTheDayContent = () => {
                 >
                   <ThemedElements>
                     <FilterAccordion
-                      label={translateFilterLabel(isSmallDevice ? 'league_team' : 'league')}
+                      label={leagueAccordionLabel}
                       defaultOpen={false}
                       isSmallDevice={isSmallDevice}
+                      onExpandedChange={setLeagueAccordionExpanded}
                     >
                       <FilterSlider
                         selectedFilter={activeFilter}
@@ -898,9 +928,7 @@ const GameofTheDayContent = () => {
                                 name={isAnyGameSelectedToday ? 'bookmark' : 'bookmark-o'}
                                 type="font-awesome"
                                 size={18}
-                                color={
-                                  activeFilter === 'BOOKMARKS' ? selectedTextColor : isDark ? '#ffffff' : '#0f172a'
-                                }
+                                color={activeFilter === 'BOOKMARKS' ? selectedTextColor : defaultColor}
                               />
                             ),
                           },
@@ -926,9 +954,27 @@ const GameofTheDayContent = () => {
                   )}
 
                   <FilterAccordion
-                    label={translateFilterLabel('date')}
-                    defaultOpen={true}
+                    label={
+                      isSmallDevice && !dateAccordionExpanded ? (
+                        <span>
+                          {translateFilterLabel('date')} :{' '}
+                          <i>
+                            <b>
+                              {new Date(selectDate).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </b>
+                          </i>
+                        </span>
+                      ) : (
+                        translateFilterLabel('date')
+                      )
+                    }
+                    defaultOpen={false}
                     isSmallDevice={isSmallDevice}
+                    onExpandedChange={setDateAccordionExpanded}
                   >
                     <div style={{ paddingLeft: 15, paddingRight: 15 }}>
                       <SliderDatePicker

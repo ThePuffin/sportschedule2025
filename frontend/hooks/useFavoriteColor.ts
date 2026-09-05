@@ -2,7 +2,9 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCache } from '@/utils/fetchData';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+const STORAGE_KEY = 'favoriteColor';
 
 function getBrightness(color: string) {
   if (!color) return 0;
@@ -47,38 +49,129 @@ function computeFavoriteColor(
         finalColor = b1 > b2 ? color : teamBg;
       }
 
-      finalColor = finalColor || defaultColor;
+      // Some teams only define `color` (no `backgroundColor`). In that case
+      // `teamBg` is undefined and `finalColor` would fall back to the default
+      // color (e.g. black). Prefer the team's own `color` before the default.
+      finalColor = finalColor || color || defaultColor;
       return { backgroundColor: finalColor, textColor: getTextColorForBackground(finalColor) };
     }
   }
   return { backgroundColor: defaultColor, textColor: getTextColorForBackground(defaultColor) };
 }
 
+type FavoriteColors = { backgroundColor: string; textColor: string };
+
 // Module-level cache: computed once, reused across all hook instances and tab remounts.
 // This prevents a flash of default color when switching tabs.
-let cachedColors: { backgroundColor: string; textColor: string } | null = null;
+let cachedColors: FavoriteColors | null = null;
+
+// Web SSR hydration quirk: `useColorScheme()` returns the server snapshot
+// ('light') during the first client render, before `useSyncExternalStore`
+// synchronizes with the real browser theme. For the INITIAL computation we
+// read the browser's actual theme directly so we never compute with 'light'
+// when the browser is actually dark (which caused a red -> black flash on web).
+function getBrowserTheme(): 'light' | 'dark' {
+  if (globalThis.window !== undefined && globalThis.window.matchMedia) {
+    return globalThis.window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
+}
+
+function readStoredColors(): FavoriteColors | null {
+  if (globalThis.window === undefined) return null;
+  try {
+    const raw = globalThis.window.sessionStorage?.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as FavoriteColors;
+    if (parsed?.backgroundColor && parsed?.textColor) {
+      return parsed;
+    }
+  } catch {
+    // Ignore corrupted or unavailable storage.
+  }
+  return null;
+}
+
+function writeStoredColors(colors: FavoriteColors) {
+  if (globalThis.window === undefined) return;
+  try {
+    globalThis.window.sessionStorage?.setItem(STORAGE_KEY, JSON.stringify(colors));
+  } catch {
+    // Storage may be unavailable (private mode, etc.).
+  }
+}
 
 export function useFavoriteColor(defaultColor: string = '#3b82f6') {
   const { firestoreReady } = useAuth();
   const theme = useColorScheme() ?? 'light';
 
-  // Track if the color has been finalized (Firestore-synced data).
-  // On initial mount with a logged-in user, we wait for firestoreReady before computing
-  // the final color, so we never show the wrong color first.
+  // Initial value, returned immediately:
+  // 1. sessionStorage first — no computation needed, avoids any flash.
+  //    Also sync the module-level cache so all hook instances share the
+  //    same value before the async recompute happens.
+  // 2. Module-level cache shared across hook instances.
+  // 3. Fallback: compute synchronously and persist it for next time.
   const [colors, setColors] = useState(() => {
-    // If firestore is already ready (or no user), compute from cache directly.
-    // If firestore is still syncing, use the module-level cache or compute from cache
-    // (it will be updated via favoritesUpdated event after sync).
-    if (!cachedColors) {
-      cachedColors = computeFavoriteColor(theme, defaultColor);
+    const stored = readStoredColors();
+    if (stored) {
+      cachedColors = stored;
+      return stored;
     }
+    if (cachedColors) {
+      return cachedColors;
+    }
+    // Use the real browser theme for the initial computation so the first
+    // paint can never be computed with the SSR 'light' snapshot on web.
+    const initialTheme = getBrowserTheme();
+    cachedColors = computeFavoriteColor(initialTheme, defaultColor);
+    writeStoredColors(cachedColors);
     return cachedColors;
   });
 
-  const updateColor = useCallback(() => {
+  // Recompute the color and persist it to sessionStorage WITHOUT notifying the
+  // front (no setColors). Used by the background async refresh so the session
+  // stays up to date for future mounts without triggering a re-render.
+  const recomputeAndStore = useCallback(() => {
     cachedColors = computeFavoriteColor(theme, defaultColor);
-    setColors(cachedColors);
+    writeStoredColors(cachedColors);
+    return cachedColors;
   }, [theme, defaultColor]);
+
+  // Recompute, persist, and update the displayed color (theme change, firestore
+  // sync, favoritesUpdated event).
+  const updateColor = useCallback(() => {
+    setColors(recomputeAndStore());
+  }, [recomputeAndStore]);
+
+  // Recompute asynchronously 2 seconds after every mount (or theme change).
+  // The stored session value is returned immediately, then refreshed in the
+  // background. Only the session is updated — the displayed color is not
+  // re-rendered.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      recomputeAndStore();
+    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [recomputeAndStore]);
+
+  // Recompute immediately when the theme changes (dark <-> light), instead of
+  // waiting for the 2s async refresh, so the accent color updates right away.
+  // On web, `useColorScheme` returns 'light' before hydration then the real
+  // theme afterwards. We ignore that first transition (prevTheme === null) so
+  // it doesn't trigger a spurious recompute (which caused a red -> black ->
+  // red flicker).
+  const prevTheme = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevTheme.current === null) {
+      // First render / hydration — record the theme without recomputing.
+      prevTheme.current = theme;
+      return;
+    }
+    if (prevTheme.current !== theme) {
+      prevTheme.current = theme;
+      updateColor();
+    }
+  }, [theme, updateColor]);
 
   // When firestoreReady becomes true, recompute the color from the now-synced cache.
   useEffect(() => {

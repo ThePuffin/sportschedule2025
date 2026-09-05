@@ -48,3 +48,22 @@ Returns a localized label for filter sections (`league`, `team`, `date`, `league
 ### `translateWord(word)`
 
 Returns a localized translation for a word/key. Supports the same languages as `translateFilterLabel`. Used for UI text like `all`, `gamesOfDay`, `filterTeams`, `inProgress`, etc.
+
+### `getFilterAccordionLabel({ prefix, fallbackLabel, activeFilter, selectedTeam, expanded })`
+
+Builds an accordion label for filter sections, only showing the dynamic selection when the accordion is **closed** (collapsed). Reusable across screens (e.g. index, schedule).
+
+Returns `{ prefix, value }` so callers can render the value with the same styling as the date filter (e.g. `<i><b>value</b></i>`).
+
+- `prefix` — translated prefix, e.g. `"Filtrer par ligue / équipe"`
+- `fallbackLabel` — label shown when no specific filter is active
+- `activeFilter` — selected league value (e.g. `"NFL"`). Ignored when `ALL`/`FAVORITES`/`BOOKMARKS`
+- `selectedTeam` — `{ league, abbrev }` of the selected team
+- `expanded` — when `true`, the fallback label is shown
+
+Examples:
+
+- no filter: `{ prefix: "Filter by league / team", value: "" }`
+- league selected: `{ prefix: "Filter by league / team", value: "NFL" }`
+- team selected: `{ prefix: "Filter by league / team", value: "MLB / CHC" }`
+- expanded: `{ prefix: "Filter by league / team", value: "" }`

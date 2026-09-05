@@ -18,6 +18,7 @@ The **CardLarge** component displays a single game as a card with team logos, sc
 - **Selection pulse** — subtle scale animation when selected
 - **Adaptive colors** — team colors adapt to light/dark theme
 - **Home/Away visibility** — hides cards based on `homeGameVisibility`
+- **Vertical stacked ordering** — in `verticalMode`, the card stacks as away → `@`/score → home, with the date/time (center column `centerTime`) placed at the very bottom (order 4), keeping the `@` between the two logos. The gap below the bottom logo equals the gap above the footer separator (`marginTop: 20`, `marginBottom: 0`, combined with `mainRow` bottom padding and `footer` top margin).
 
 ## Props
 

@@ -60,15 +60,19 @@ async function updateData() {
         return nameA.localeCompare(nameB);
       });
 
-      teams.forEach((t) => {
-        // Look for ID and Name in likely fields
-        const key = t.uniqueId || t.id;
-        const value = t.teamCommonName || t.name || t.displayName;
+      // Only active teams should appear in the frontend selection file
+      // (inactive/historical teams must not pollute filters/favorites).
+      teams
+        .filter((t) => t.isActive !== false)
+        .forEach((t) => {
+          // Look for ID and Name in likely fields
+          const key = t.uniqueId || t.id;
+          const value = t.teamCommonName || t.name || t.displayName;
 
-        if (key && value) {
-          teamsObj[key] = value;
-        }
-      });
+          if (key && value) {
+            teamsObj[key] = value;
+          }
+        });
 
       const fileContent = [
         'export const TeamsEnum: Record<string, string> = {',
@@ -88,7 +92,8 @@ async function updateData() {
       // --- Update university logos keyed by id only ---
       try {
         const collegeLeagues = ['NCAAF', 'NCAAB', 'NCCABB', 'WNCAAB'];
-        const logosObj = {};
+        // Build the new logos map from the API (only non-empty college logos).
+        const newLogos = {};
         teams.forEach((t) => {
           if (collegeLeagues.includes(t.league)) {
             const parts = t.uniqueId ? t.uniqueId.split('-') : [];
@@ -97,24 +102,51 @@ async function updateData() {
             if (!key) return;
 
             const logo = t.teamLogo || '';
-            if (logosObj[key]) {
+            if (newLogos[key]) {
               // if we already have this key stored, keep the first one
               return;
             }
             if (logo) {
-              logosObj[key] = logo;
+              newLogos[key] = logo;
             }
           }
         });
 
+        // Merge with the existing file so we never remove a previously
+        // stored logo/entry — we only add new keys or update existing ones.
+        const LOGOS_TARGET_FILE = path.join(__dirname, 'frontend/constants/UniversityLogos.tsx');
+        const existingLogos = {};
+        try {
+          if (fs.existsSync(LOGOS_TARGET_FILE)) {
+            const raw = fs.readFileSync(LOGOS_TARGET_FILE, 'utf8');
+            const lineRe = /  '([^']+)': '([^']*)',/g;
+            let m;
+            while ((m = lineRe.exec(raw)) !== null) {
+              existingLogos[m[1]] = m[2];
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not read existing UniversityLogos.tsx:', e.message);
+        }
+
+        const mergedLogos = { ...existingLogos };
+        for (const key of Object.keys(newLogos)) {
+          mergedLogos[key] = newLogos[key];
+        }
+
+        // Keep the same ordering as the existing file, then append new keys.
+        const orderedKeys = [
+          ...Object.keys(existingLogos).filter((k) => mergedLogos.hasOwnProperty(k)),
+          ...Object.keys(mergedLogos).filter((k) => !existingLogos.hasOwnProperty(k)),
+        ];
+
         const logosFileContent = [
           'export const UniversityLogos: Record<string, string> = {',
-          ...Object.keys(logosObj).map((key) => `  '${key}': '${logosObj[key]}',`),
+          ...orderedKeys.map((key) => `  '${key}': '${mergedLogos[key]}',`),
           '};',
           '',
         ].join('\n');
 
-        const LOGOS_TARGET_FILE = path.join(__dirname, 'frontend/constants/UniversityLogos.tsx');
         if (fs.existsSync(LOGOS_TARGET_FILE) && fs.readFileSync(LOGOS_TARGET_FILE, 'utf8') === logosFileContent) {
           console.log('👍 UniversityLogos.tsx is already up to date.');
         } else {

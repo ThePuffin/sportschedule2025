@@ -14,6 +14,64 @@ const leagueName = League.NHL;
 const pwhlAPI = 'https://lscluster.hockeytech.com/feed/';
 
 export class HockeyData {
+  /**
+   * Fetch the list of PWHL seasons (by default ordered from most recent to oldest).
+   */
+  private async getPWHLSeasons(): Promise<
+    {
+      season_id: string;
+      season_name: string;
+      start_date: string;
+      end_date: string;
+    }[]
+  > {
+    const response = await fetch(
+      `${pwhlAPI}index.php?feed=modulekit&view=seasons&key=446521baf8c38984&client_code=pwhl&fmt=json`,
+    );
+    const json = await response.json();
+    const seasons = json?.SiteKit?.Seasons;
+    return Array.isArray(seasons) ? seasons : [];
+  }
+
+  /**
+   * Resolve the PWHL `season_id`(s) to request for a specific calendar year.
+   *
+   * - When `year` is provided, returns every season whose date span overlaps that
+   *   calendar year (a PWHL season runs across two years, e.g. 2024-25), so a full
+   *   calendar year of results is recovered.
+   * - When `year` is omitted, returns the currently live season, falling back to the
+   *   most recent regular season, to avoid hitting the API's default (often a
+   *   pre-season) which has an empty schedule.
+   */
+  private async getPWHLSeasonIds(year?: number): Promise<string[]> {
+    try {
+      const seasons = await this.getPWHLSeasons();
+      if (!Array.isArray(seasons) || seasons.length === 0) return [];
+
+      if (year) {
+        const yearStart = `${year}-01-01`;
+        const yearEnd = `${year}-12-31`;
+        return seasons
+          .filter((s) => s.start_date <= yearEnd && s.end_date >= yearStart)
+          .map((s) => s.season_id);
+      }
+
+      const nowStr = new Date().toISOString().slice(0, 10);
+      const ongoing = seasons.find(
+        (s) => s.start_date <= nowStr && s.end_date >= nowStr,
+      );
+      if (ongoing) return [ongoing.season_id];
+
+      const latestReg = seasons.find((s) =>
+        s.season_name.toLowerCase().includes('regular season'),
+      );
+      return latestReg ? [latestReg.season_id] : [];
+    } catch (error) {
+      console.error('Error fetching PWHL seasons:', error);
+      return [];
+    }
+  }
+
   async getNHLTeams(): Promise<TeamType[]> {
     try {
       let allTeams: TeamNHL[];
@@ -151,6 +209,7 @@ export class HockeyData {
     leagueLogos,
     league,
     forceUpdate = false,
+    season?: number,
   ) => {
     const allGames = {};
 
@@ -166,6 +225,7 @@ export class HockeyData {
               leagueLogos,
               color,
               backgroundColor,
+              season,
             );
           }
           if (league === League.PWHL) {
@@ -178,6 +238,7 @@ export class HockeyData {
               color,
               backgroundColor,
               forceUpdate,
+              season,
             );
           }
         } catch (error) {
@@ -200,27 +261,38 @@ export class HockeyData {
     return allGames;
   };
 
-  fetchGamesData = async (id: string, league: string) => {
+  fetchGamesData = async (id: string, league: string, season?: number) => {
     try {
       let fetchGames;
       if (league === League.NHL) {
+        const seasonParam = season ? `${season}${season + 1}` : 'now';
         const fetchedGames = await fetch(
-          `https://api-web.nhle.com/v1/club-schedule-season/${id}/now`,
+          `https://api-web.nhle.com/v1/club-schedule-season/${id}/${seasonParam}`,
         );
         const tempGames = await fetchedGames.json();
 
         fetchGames = await tempGames.games;
       }
       if (league === League.PWHL) {
-        const fetchedGames = await fetch(
-          `${pwhlAPI}?feed=modulekit&view=schedule&key=446521baf8c38984&client_code=pwhl`,
+        const seasonIds = await this.getPWHLSeasonIds(season);
+        const urls = seasonIds.length
+          ? seasonIds.map(
+              (seasonId) =>
+                `${pwhlAPI}?feed=modulekit&view=schedule&key=446521baf8c38984&client_code=pwhl&season_id=${seasonId}`,
+            )
+          : [
+              `${pwhlAPI}?feed=modulekit&view=schedule&key=446521baf8c38984&client_code=pwhl`,
+            ];
+        const fetchedSchedules = await Promise.all(
+          urls.map((url) => fetch(url).then((res) => res.json())),
         );
-        const allFetchGames = (await fetchedGames.json()).SiteKit.Schedule;
+        const allFetchGames = fetchedSchedules.flatMap(
+          (json) => json?.SiteKit?.Schedule || [],
+        );
         fetchGames = allFetchGames.filter(
           (game) =>
             game.home_team_code === id || game.visiting_team_code === id,
         );
-        console.info('yes', id);
         return (await fetchGames.games) || fetchGames;
       }
       console.info('yes', id);
@@ -275,9 +347,6 @@ export class HockeyData {
             (Number.parseInt(team.shootout_losses, 10) || 0);
           const gamesPlayed = Number.parseInt(team.games_played, 10) || 0;
 
-          // The API is inconsistent. For some teams, 'wins' is total wins, for others it's regulation wins.
-          // We check if the sum of wins, losses, and otLosses equals gamesPlayed.
-          // If it doesn't, we assume 'wins' is regulation wins and add OT/SO wins to it.
           if (gamesPlayed > 0 && wins + losses + otLosses !== gamesPlayed) {
             wins += otWins + shootoutWins;
           }
@@ -316,10 +385,15 @@ export class HockeyData {
     color: string | undefined,
     backgroundColor: string | undefined,
     forceUpdate = false,
+    season?: number,
   ) => {
     const leagueName = League.PWHL;
 
-    const games: PWHLGameAPI[] = await this.fetchGamesData(id, League.PWHL);
+    const games: PWHLGameAPI[] = await this.fetchGamesData(
+      id,
+      League.PWHL,
+      season,
+    );
     if (!games || games.length === 0) {
       return [];
     }
@@ -340,22 +414,27 @@ export class HockeyData {
           visiting_goal_count,
           venue_location,
         } = game;
-        const homeGoalCount = home_goal_count;
-        const visitingGoalCount = visiting_goal_count;
-        let status = null;
-        if (
-          homeGoalCount !== '0' &&
-          homeGoalCount !== '' &&
-          visitingGoalCount !== '0' &&
-          visitingGoalCount !== ''
-        ) {
-          status = 'FINISHED';
-        }
+        const isFinished = Boolean(
+          game.final === '1' ||
+            game.status === '4' ||
+            game.game_status?.toUpperCase().startsWith('FINAL'),
+        );
+        const status = isFinished ? 'FINISHED' : null;
         const now = new Date();
-        const tenMonthAgo = new Date(now.getTime() - 300 * 24 * 60 * 60 * 1000);
-        const untilDate = forceUpdate ? tenMonthAgo : now;
         const isActive = true;
-        if (new Date(GameDateISO8601) < untilDate) return;
+
+        if (season) {
+          const gameYear = new Date(GameDateISO8601).getFullYear();
+          // `season` is the requested calendar year: keep only games played that
+          // year (a PWHL season spans two years, e.g. 2024-25).
+          if (gameYear !== season) return;
+        } else {
+          const tenMonthAgo = new Date(
+            now.getTime() - 300 * 24 * 60 * 60 * 1000,
+          );
+          const untilDate = forceUpdate ? tenMonthAgo : now;
+          if (new Date(GameDateISO8601) < untilDate) return;
+        }
 
         const awayTeamName = visiting_team_name.includes(visiting_team_city)
           ? visiting_team_name
@@ -380,9 +459,8 @@ export class HockeyData {
           homeTeamLogo: leagueLogos[home_team_code],
           homeTeamLogoDark: leagueLogos[home_team_code],
           homeTeamShort: home_team_code,
-          homeTeamScore: status === 'FINISHED' ? Number(home_goal_count) : null,
-          awayTeamScore:
-            status === 'FINISHED' ? Number(visiting_goal_count) : null,
+          homeTeamScore: isFinished ? Number(home_goal_count) : null,
+          awayTeamScore: isFinished ? Number(visiting_goal_count) : null,
           gameStatus: status,
           league: leagueName,
           placeName: capitalize(venue_location),
@@ -406,8 +484,13 @@ export class HockeyData {
     leagueLogos: { string },
     color: string | undefined,
     backgroundColor: string | undefined,
+    season?: number,
   ) => {
-    const games: NHLGameAPI[] = await this.fetchGamesData(id, League.NHL);
+    const games: NHLGameAPI[] = await this.fetchGamesData(
+      id,
+      League.NHL,
+      season,
+    );
 
     let gamesData: GameFormatted[] = games.map((game: NHLGameAPI) => {
       const {
@@ -421,9 +504,12 @@ export class HockeyData {
       } = game;
 
       const now = new Date();
-
       const isActive = true;
-      if (new Date(startTimeUTC) < now) return;
+
+      if (!season) {
+        if (new Date(startTimeUTC) < now) return;
+      }
+
       const awayTeamName = `${awayTeam.placeName.default} ${awayTeam.commonName.default}`;
       const homeTeamName = `${homeTeam.placeName.default} ${homeTeam.commonName.default}`;
 
@@ -532,7 +618,6 @@ export class HockeyData {
       const liveData = await liveRes.json();
       const clockData = await clockRes.json();
 
-      // Access games within the goalssummary category based on the Firebase dump structure
       const gamesMap = liveData?.goalssummary?.[1]?.games || {};
       const clockGamesMap = clockData?.games || {};
       const results = [];
@@ -541,7 +626,6 @@ export class HockeyData {
         const clockEntry = clockGamesMap[gameId] || {};
         const gameData = data as any;
 
-        // Use correct field names for scores from the goalssummary category
         const homeScore = gameData.HomeGoalTotal;
         const awayScore = gameData.VisitorGoalTotal;
 
@@ -566,7 +650,6 @@ export class HockeyData {
         } else if (clock && period) {
           gameStatus = `${clock} - ${period}`;
         } else if (homeScore != null && awayScore != null) {
-          // Heuristic: If scores exist but it's not in the running clock, assume finished
           gameStatus = 'FINISHED';
           isFinal = true;
         }

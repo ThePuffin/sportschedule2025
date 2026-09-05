@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { CollegeLeague, League } from '../utils/enum';
 import { getESPNTeams } from '../utils/fetchData/espnAllData';
 import { HockeyData } from '../utils/fetchData/hockeyData';
+import { HistoricalTeams } from '../utils/HistoricalTeams';
 import { TeamType } from '../utils/interface/team';
 import { UniversityLogos } from '../utils/UniversityLogos';
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -255,6 +256,29 @@ export class TeamService {
     return deleted;
   }
 
+  async deleteManyByIds(ids: string[]): Promise<DeleteResult> {
+    if (!ids || ids.length === 0) {
+      return { acknowledged: true, deletedCount: 0 };
+    }
+
+    // Only include the `_id` (Mongo ObjectId) branch for ids that are actually valid
+    // 24-char hex ObjectIds. Passing plain strings like "PWHL-DET" into $in on the
+    // `_id` field makes Mongoose throw a CastError ("Cast to ObjectId failed ... at
+    // path \"_id\""). The textual key is handled by `uniqueId` below.
+    const validObjectIds = ids.filter(
+      (id) => typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id),
+    );
+
+    const conditions: Array<Record<string, unknown>> = [
+      { uniqueId: { $in: ids } },
+    ];
+    if (validObjectIds.length > 0) {
+      conditions.push({ _id: { $in: validObjectIds } });
+    }
+
+    return this.teamModel.deleteMany({ $or: conditions }).exec();
+  }
+
   async removeByLeague(league: string): Promise<DeleteResult> {
     const filter = { league: league };
     console.log(`Removing teams with league: ${league}`);
@@ -271,8 +295,97 @@ export class TeamService {
     return this.teamModel.countDocuments({ league }).exec();
   }
 
+  private async readExistingFile(relPath: string): Promise<string> {
+    const p = path.join(process.cwd(), relPath);
+    try {
+      return await fs.promises.readFile(p, 'utf8');
+    } catch {
+      return '';
+    }
+  }
+
+  private parseExistingColorBlocks(
+    content: string,
+  ): Map<string, { color: string; backgroundColor: string }> {
+    const map = new Map<string, { color: string; backgroundColor: string }>();
+    if (!content) return map;
+
+    const re =
+      /['"]([^'"]+)['"]\s*:\s*\{\s*color\s*:\s*['"]([^'"]*)['"]\s*,\s*backgroundColor\s*:\s*['"]([^'"]*)['"]\s*,?\s*\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      map.set(m[1], { color: m[2], backgroundColor: m[3] });
+    }
+    return map;
+  }
+
+  private parseExistingLogoBlocks(content: string): Map<string, string> {
+    const map = new Map<string, string>();
+    if (!content) return map;
+
+    const re = /['"]([^'"]+)['"]\s*:\s*['"]((?:[^'\\]|\\.)*)['"]/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      map.set(m[1], m[2]);
+    }
+    return map;
+  }
+
+  private mergeColorsContent(
+    existingContent: string,
+    newEntries: Array<{
+      uniqueId: string;
+      color?: string;
+      backgroundColor?: string;
+    }>,
+  ): string {
+    const map = this.parseExistingColorBlocks(existingContent);
+
+    for (const item of newEntries) {
+      map.set(item.uniqueId, {
+        color: item.color ?? '#000000',
+        backgroundColor: item.backgroundColor ?? '#ffffff',
+      });
+    }
+
+    const sortedKeys = Array.from(map.keys()).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const blocks = sortedKeys.map((key) => {
+      const val = map.get(key)!;
+      return `  '${key}': {\n    color: '${val.color}',\n    backgroundColor: '${val.backgroundColor}',\n  },`;
+    });
+
+    return blocks.join('\n');
+  }
+
+  private mergeLogosContent(
+    existingContent: string,
+    newEntries: Map<string, string>,
+  ): string {
+    const map = this.parseExistingLogoBlocks(existingContent);
+
+    for (const [id, newLogo] of newEntries.entries()) {
+      const existingLogo = map.get(id);
+      if (newLogo || !existingLogo) {
+        map.set(id, newLogo);
+      }
+    }
+
+    const sortedKeys = Array.from(map.keys()).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const blocks = sortedKeys.map((id) => {
+      const logo = map.get(id) || '';
+      return `  '${id}': '${logo}',`;
+    });
+
+    return blocks.join('\n');
+  }
+
   private async generateLeaguesTeamsAndColorsFiles() {
     try {
+      // --- 1. Enums Leagues & Teams ---
       const AllLeagues = await this.findAllLeagues();
       const leaguesLines = AllLeagues.map(
         (league) => `  '${league}': '${league}',`,
@@ -280,99 +393,125 @@ export class TeamService {
       const leaguesFileContent = `export const LeaguesEnum: Record<string, string> = {\n${leaguesLines.join(
         '\n',
       )}\n};\n`;
-      const leaguesFilePath = path.join(
-        process.cwd(),
-        '../frontend/constants/Leagues.tsx',
+      await fs.promises.writeFile(
+        path.join(process.cwd(), '../frontend/constants/Leagues.tsx'),
+        leaguesFileContent,
       );
-      await fs.promises.writeFile(leaguesFilePath, leaguesFileContent);
+
       const allTeams = await this.teamModel
         .find()
         .sort({ uniqueId: 1 })
         .lean()
         .exec();
-      const lines = allTeams.map(
+      // Ne jamais exposer les équipes inactives/historiques dans le fichier de
+      // sélection du frontend : seules les équipes actives apparaissent dans
+      // Teams.tsx (filtres / favoris).
+      const visibleTeams = allTeams.filter(
+        (team: any) => team.isActive !== false && !HistoricalTeams[team.uniqueId],
+      );
+      const lines = visibleTeams.map(
         (team) => `  '${team.uniqueId}': '${team.label.replace(/'/g, "\\'")}',`,
       );
       const fileContent = `export const TeamsEnum: Record<string, string> = {\n${lines.join(
         '\n',
       )}\n};\n`;
-      const filePath = path.join(
-        process.cwd(),
-        '../frontend/constants/Teams.tsx',
+      await fs.promises.writeFile(
+        path.join(process.cwd(), '../frontend/constants/Teams.tsx'),
+        fileContent,
       );
-      await fs.promises.writeFile(filePath, fileContent);
 
-      const colorLines = allTeams.map((team: any) => {
-        return `  '${team.uniqueId}': {\n    color: '${
-          team.color ?? '#000000'
-        }',\n    backgroundColor: '${team.backgroundColor ?? '#ffffff'}',\n  },`;
-      });
-      const colorsFileContent = `export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: string }> = {\n${colorLines.join(
-        '\n',
-      )}\n};\n`;
-      const colorsFilePath = path.join(
+      // --- 2. ColorsTeam (Front & Back) ---
+      const colorEntries = allTeams.map((team: any) => ({
+        uniqueId: team.uniqueId,
+        color: team.color,
+        backgroundColor: team.backgroundColor,
+      }));
+
+      // Front
+      const colorsPathFront = path.join(
         process.cwd(),
         '../frontend/constants/ColorsTeam.tsx',
       );
-      await fs.promises.writeFile(colorsFilePath, colorsFileContent);
+      const existingColorsFront = await this.readExistingFile(
+        '../frontend/constants/ColorsTeam.tsx',
+      );
+      const mergedColorsFront = this.mergeColorsContent(
+        existingColorsFront,
+        colorEntries,
+      );
+      await fs.promises.writeFile(
+        colorsPathFront,
+        `export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: string }> = {\n${mergedColorsFront}\n};\n`,
+      );
 
-      const colorsFilePathBack = path.join(
+      // Back
+      const colorsPathBack = path.join(
         process.cwd(),
         'src/utils/ColorsTeam.ts',
       );
-      await fs.promises.writeFile(colorsFilePathBack, colorsFileContent);
+      const existingColorsBack = await this.readExistingFile(
+        'src/utils/ColorsTeam.ts',
+      );
+      const mergedColorsBack = this.mergeColorsContent(
+        existingColorsBack,
+        colorEntries,
+      );
+      await fs.promises.writeFile(
+        colorsPathBack,
+        `export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: string }> = {\n${mergedColorsBack}\n};\n`,
+      );
 
-      // --- generate a mapping of university logos keyed by team id (abbrev) ---
-      // only include college leagues so we don't duplicate professional teams.
-      // we want a single entry per abbreviation and prefer the first non-empty
-      // logo we encounter; later duplicates are ignored.
+      // --- 3. UniversityLogos (Front & Back) ---
       const logoMap = new Map<string, string>();
       allTeams
         .filter((team: any) =>
           Object.values(CollegeLeague).includes(team.league),
         )
         .forEach((team: any) => {
-          // use the portion of uniqueId after the hyphen (usually the abbreviation)
           const parts = team.uniqueId ? team.uniqueId.split('-') : [];
           let id = parts.length > 1 ? parts[1] : team.abbrev || '';
           id = id.trim().toUpperCase();
           if (!id) return;
 
           const logo = team.teamLogo || '';
-
-          if (logoMap.has(id)) {
-            // if we already have a non-empty logo, keep it; otherwise replace
-            // the empty placeholder with whatever we have now.
-            if (logoMap.get(id)) {
-              return;
-            }
+          if (!logoMap.has(id) || logo) {
+            logoMap.set(id, logo);
           }
-          logoMap.set(id, logo);
         });
 
-      // --- create content for university logos file ---
-      // sort by key to make output deterministic and easier to diff.
-      const sortedEntries = Array.from(logoMap.entries()).sort(([a], [b]) =>
-        a.localeCompare(b),
-      );
-      const logoLines = sortedEntries.map(
-        ([id, logo]) => `  '${id}': '${logo}',`,
-      );
-      const logosFileContent = `export const UniversityLogos: Record<string, string> = {\n${logoLines.join(
-        '\n',
-      )}\n};\n`;
-
-      const logosFilePath = path.join(
+      // Front
+      const logosPathFront = path.join(
         process.cwd(),
         '../frontend/constants/UniversityLogos.tsx',
       );
-      await fs.promises.writeFile(logosFilePath, logosFileContent);
+      const existingLogosFront = await this.readExistingFile(
+        '../frontend/constants/UniversityLogos.tsx',
+      );
+      const mergedLogosFront = this.mergeLogosContent(
+        existingLogosFront,
+        logoMap,
+      );
+      await fs.promises.writeFile(
+        logosPathFront,
+        `export const UniversityLogos: Record<string, string> = {\n${mergedLogosFront}\n};\n`,
+      );
 
-      const logosFilePathBack = path.join(
+      // Back
+      const logosPathBack = path.join(
         process.cwd(),
         'src/utils/UniversityLogos.ts',
       );
-      await fs.promises.writeFile(logosFilePathBack, logosFileContent);
+      const existingLogosBack = await this.readExistingFile(
+        'src/utils/UniversityLogos.ts',
+      );
+      const mergedLogosBack = this.mergeLogosContent(
+        existingLogosBack,
+        logoMap,
+      );
+      await fs.promises.writeFile(
+        logosPathBack,
+        `export const UniversityLogos: Record<string, string> = {\n${mergedLogosBack}\n};\n`,
+      );
     } catch (error) {
       console.error(
         'Error generating TeamsEnum or ColorsTeamEnum file:',

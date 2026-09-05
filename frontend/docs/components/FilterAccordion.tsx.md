@@ -10,6 +10,7 @@ The **FilterAccordion** component provides a collapsible section for filter cont
 - **Collapsible** — expand/collapse via chevron icon
 - **Expanded state callback** — notifies parent when expanded state changes
 - **Theme-aware** — colors adapt to light/dark mode
+- **Label animation** — the label (including the dynamic filter value after the colon) fades in and slides down whenever the accordion is opened or closed, via a CSS keyframe animation
 
 ## Props
 

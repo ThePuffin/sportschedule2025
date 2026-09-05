@@ -31,6 +31,8 @@ The **Schedule** tab (also called "Focus Team" / "Suivre une équipe") displays 
 | `showPreviousScores`   | `boolean`     | Whether to show past results                |
 | `isTeamAccordionOpen`  | `boolean`     | Mobile accordion state for team filter      |
 | `isDateAccordionOpen`  | `boolean`     | Mobile accordion state for date filter      |
+| `teamAccordionLabel`   | `string`      | Dynamic label for team/league accordion     |
+| `dateAccordionLabel`   | `string`      | Dynamic label for date/month accordion      |
 
 ## Key Functions
 
@@ -120,3 +122,12 @@ Also changed `showTeamFilter` from `> 1` to `> 0` so the filter shows even with 
 3. `visibleGamesByMonth` groups games by month
 4. `uniqueTeamsFromGames` builds the opponent list (respecting month filter)
 5. UI renders filters + accordions per month
+
+## Accordion Label Behavior
+
+The team/league and date/month accordions use `getFilterAccordionLabel` to show dynamic labels **only when the accordion is closed**:
+
+- **Team/League accordion** (`teamAccordionLabel`): shows `"Filter by league / team : <LEAGUE>/<team short name>"` when a team is selected, or `"Filter by league / team : <league>"` when a league is selected.
+- **Date/Month accordion** (`dateAccordionLabel`): shows `"Filter by date : <month>"` when a month is selected.
+
+When the accordion is open, the default translated label is shown. The `onExpandedChange` callbacks update `isTeamAccordionOpen` and `isDateAccordionOpen`.

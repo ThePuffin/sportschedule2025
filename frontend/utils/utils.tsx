@@ -1102,6 +1102,57 @@ export const translateWord = (word: string) => {
   return translation[word] ?? '';
 };
 
+export interface FilterAccordionLabelParams {
+  /** Translated prefix, e.g. "Filtrer par ligue / équipe" */
+  prefix: string;
+  /** Label shown when no specific filter is active */
+  fallbackLabel: string;
+  /** Selected league value (e.g. "NFL"). Ignored when ALL/FAVORITES/BOOKMARKS */
+  activeFilter?: string;
+  /** If a team is selected, its league code (e.g. "MLB") and short name (e.g. "CHC") */
+  selectedTeam?: { league?: string; abbrev?: string } | null;
+  /** Whether the accordion is expanded — when true the fallback label is shown */
+  expanded?: boolean;
+}
+
+export interface FilterAccordionLabelResult {
+  /** Translated prefix, e.g. "Filtrer par ligue / équipe" */
+  prefix: string;
+  /** The dynamic value shown after the colon, e.g. "MLB/CHC" or "NFL" */
+  value: string;
+}
+
+/**
+ * Builds an accordion label for filter sections, only showing the dynamic
+ * selection when the accordion is closed (collapsed). Reusable across screens.
+ *
+ * Returns `{ prefix, value }` so callers can render the value with the same
+ * styling as the date filter (e.g. `<i><b>value</b></i>`).
+ *
+ * Examples:
+ * - no filter:        { prefix: "Filter by league / team", value: "" }
+ * - league selected:  { prefix: "Filter by league / team", value: "NFL" }
+ * - team selected:    { prefix: "Filter by league / team", value: "MLB/CHC" }
+ * - expanded:         { prefix: "Filter by league / team", value: "" }
+ */
+export const getFilterAccordionLabel = ({
+  prefix,
+  fallbackLabel,
+  activeFilter,
+  selectedTeam,
+  expanded = false,
+}: FilterAccordionLabelParams): FilterAccordionLabelResult => {
+  if (!expanded) {
+    if (selectedTeam?.league && selectedTeam?.abbrev) {
+      return { prefix, value: `${selectedTeam.league} / ${selectedTeam.abbrev}` };
+    }
+    if (activeFilter && activeFilter !== 'ALL' && activeFilter !== 'FAVORITES' && activeFilter !== 'BOOKMARKS') {
+      return { prefix, value: activeFilter };
+    }
+  }
+  return { prefix: fallbackLabel, value: '' };
+};
+
 export const brightenColor = (color, amount = 100) => {
   if (!color || !color.startsWith('#')) return color;
 

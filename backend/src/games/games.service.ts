@@ -12,6 +12,7 @@ import {
   getTeamsSchedule,
 } from '../utils/fetchData/espnAllData';
 import { HockeyData } from '../utils/fetchData/hockeyData';
+import { HistoricalTeams } from '../utils/HistoricalTeams';
 import { TeamType } from '../utils/interface/team';
 import { UniversityLogos } from '../utils/UniversityLogos';
 import {
@@ -38,6 +39,22 @@ export class GameService {
     private readonly refreshTimestampService: RefreshTimestampService,
   ) {}
 
+  maxYearBeforeDelete = 15;
+  // Purge games that are still active/resolved-less several months after their start
+  // (e.g. a PWHL game stuck on 2026-05-11 whose final result can never be fetched).
+  staleGameMaxAgeDays = 90;
+
+  // Grace period before a *future* game that disappears from the external source (e.g. a
+  // playoff game 5/6/7 that is "if necessary") is deactivated. Prevents flicker when the
+  // source data is transient: the game is marked `missingSince` and only deactivated after
+  // it has been continuously missing for this many hours (default 48h, ~2 daily refresh cycles).
+  gracePeriodHours = 48;
+
+  // Capacity-based purge configuration
+  private readonly DISK_USAGE_THRESHOLD = 0.9; // 90%
+  private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  private lastDiskCheck = 0;
+
   getTeams = (teamSelectedIds, games) => {
     if (teamSelectedIds) {
       return teamSelectedIds.split(',');
@@ -60,8 +77,12 @@ export class GameService {
   }
 
   private _enrichGameWithTeamData(game: any, teamsMap: Map<string, TeamType>) {
-    const homeTeam = teamsMap.get(game.homeTeamId);
-    const awayTeam = teamsMap.get(game.awayTeamId);
+    // Fallback sur le fichier statique `HistoricalTeams` pour les équipes
+    // disparues/déménagées/renommées absentes de la base (vieux matchs).
+    const homeTeam =
+      teamsMap.get(game.homeTeamId) ?? HistoricalTeams[game.homeTeamId];
+    const awayTeam =
+      teamsMap.get(game.awayTeamId) ?? HistoricalTeams[game.awayTeamId];
     const isPlayoffs =
       (game.seriesSummary || game.seriesStatus) &&
       !game.seriesSummary?.toLowerCase().includes('regular season');
@@ -143,14 +164,140 @@ export class GameService {
     return await newGame.save();
   }
 
+  /**
+   * Fetch a league's games for a given season (or current when no season) and
+   * return them flattened + deduplicated by `uniqueId`, WITHOUT persisting them.
+   * Used by `getLeagueGames` (which saves) and by the "dry run" season counting
+   * for the oldies cron job.
+   */
+  private async _fetchUniqueGames(normalizedLeague: string, season?: number) {
+    const leagueTeams = await this.teamService.findAll([normalizedLeague]);
+    const leagueLogos = await this.getTeamsLogo(leagueTeams);
+
+    let gamesObj = {};
+    if (normalizedLeague === League.PWHL) {
+      const hockeyData = new HockeyData();
+      gamesObj = await hockeyData.getHockeySchedule(
+        leagueTeams,
+        leagueLogos,
+        normalizedLeague,
+        true,
+        season,
+      );
+    } else {
+      gamesObj = await getTeamsSchedule(
+        leagueTeams,
+        normalizedLeague,
+        leagueLogos,
+        true,
+        season,
+      );
+    }
+
+    const games = Object.values(gamesObj).flat() as any[];
+    const uniqueGamesMap = new Map<string, any>();
+
+    for (const game of games) {
+      if (!game) continue;
+
+      // 1. Fallback unique key if uniqueId is missing from the API response
+      const fallbackKey = `${game.homeTeamId || game.homeTeam}-${game.awayTeamId || game.awayTeam}-${game.startTimeUTC || game.gameDate}`;
+      const uniqueKey = game.uniqueId || fallbackKey;
+
+      if (uniqueGamesMap.has(uniqueKey)) {
+        const existingGame = uniqueGamesMap.get(uniqueKey);
+
+        // Check if the already stored game has populated scores
+        const existingHasScore =
+          existingGame.homeTeamScore !== null &&
+          existingGame.homeTeamScore !== undefined &&
+          existingGame.awayTeamScore !== null &&
+          existingGame.awayTeamScore !== undefined;
+
+        const newHasScore =
+          game.homeTeamScore !== null &&
+          game.homeTeamScore !== undefined &&
+          game.awayTeamScore !== null &&
+          game.awayTeamScore !== undefined;
+
+        // 2. Overwrite only if the new game record contains scores while the existing one does not
+        if (!existingHasScore && newHasScore) {
+          uniqueGamesMap.set(uniqueKey, game);
+        }
+        // Otherwise, retain the existing entry
+      } else {
+        uniqueGamesMap.set(uniqueKey, game);
+      }
+    }
+
+    return Array.from(uniqueGamesMap.values());
+  }
+
+  /**
+   * Compares the number of games the API would produce for a league+season
+   * (dry run, nothing saved) against how many of those are already in the DB.
+   * Returns `complete = true` when both counts match.
+   *
+   * Only meaningful for seasons BEFORE the current one: a current (or upcoming)
+   * season is still in progress, so a partial DB is expected and should not be
+   * treated as "missing". `isCurrentSeason` reflects that.
+   */
+  async getSeasonStatus(league: string, season?: number) {
+    const normalizedLeague = league.toUpperCase().trim();
+
+    // The PWHL debuted in 2024: prior years are a no-op (0 expected games).
+    if (normalizedLeague === League.PWHL && season && season < 2024) {
+      return {
+        league: normalizedLeague,
+        season,
+        obtained: 0,
+        stored: 0,
+        complete: true,
+        isCurrentSeason: false,
+      };
+    }
+
+    const isCurrent =
+      !season ||
+      (await isCurrentSeason(normalizedLeague, new Date(`${season}-06-30`)));
+
+    const obtainedGames = await this._fetchUniqueGames(
+      normalizedLeague,
+      season,
+    );
+    const uniqueIds = obtainedGames.map((g) => g.uniqueId);
+
+    let stored = 0;
+    if (uniqueIds.length > 0) {
+      stored = await this.gameModel.countDocuments({
+        league: normalizedLeague,
+        uniqueId: { $in: uniqueIds },
+      });
+    }
+
+    // For the current season, do not treat a partial DB as "incomplete".
+    const complete = isCurrent ? true : uniqueIds.length === stored;
+
+    return {
+      league: normalizedLeague,
+      season,
+      obtained: uniqueIds.length,
+      stored,
+      complete,
+      isCurrentSeason: isCurrent,
+    };
+  }
+
   async getLeagueGames(params): Promise<any> {
     const {
       league,
       forceUpdate = false,
       skipCascade = true,
-      maxRecall = 2,
+      maxRecall = 3,
       startDate,
       endDate,
+      season,
+      addMissingOnly = false,
     } = params;
     const normalizedLeague = league.toUpperCase().trim();
     if (this.isFetchingGames[normalizedLeague]) {
@@ -177,6 +324,15 @@ export class GameService {
         return;
       }
 
+      // The PWHL debuted in 2024 : there is nothing to recover for earlier
+      // seasons. Early-return so earlier years are a no-op for this league.
+      if (normalizedLeague === League.PWHL && season && season < 2024) {
+        console.info(
+          `Skipping PWHL refresh for season ${season} because the PWHL did not exist before 2024.`,
+        );
+        return;
+      }
+
       const now = new Date();
 
       if (startDate && endDate) {
@@ -193,7 +349,8 @@ export class GameService {
         }
       }
 
-      if (!forceUpdate) {
+      // Bypass freshness check if a specific past season is requested
+      if (!forceUpdate && !season) {
         const lastRefresh =
           await this.refreshTimestampService.getLastRefresh(normalizedLeague);
         if (lastRefresh) {
@@ -238,7 +395,7 @@ export class GameService {
         }
       }
 
-      if (forceUpdate) {
+      if (forceUpdate && !season) {
         const todayTimestamps =
           await this.refreshTimestampService.getTodayManualTimestamps(
             normalizedLeague,
@@ -255,60 +412,215 @@ export class GameService {
         `Data for ${normalizedLeague} is stale. Refreshing in background...`,
       );
 
-      // Add current timestamp
-      await this.refreshTimestampService.addTimestamp(
-        normalizedLeague,
-        forceUpdate ? 'manual' : 'auto',
-      );
+      // Add current timestamp (only if not a historical season bulk fetch)
+      if (!season) {
+        await this.refreshTimestampService.addTimestamp(
+          normalizedLeague,
+          forceUpdate ? 'manual' : 'auto',
+        );
+      }
 
       const todayStr = readableDate(now);
-      await this.gameModel.updateMany(
-        {
-          league: normalizedLeague,
-          gameDate: { $gte: todayStr },
-          isActive: true,
-          startTimeUTC: { $gt: now.toISOString() },
-        },
-        { $set: { isActive: false } },
+      // Only deactivate future games (done AFTER the fetch but: never blank the league on a crash.)
+      // (Details in the safe-replace guard below,the fetch, and empty-fetch guard.)
+
+      // Fetch teams and logos for the league, then fetch + deduplicate the
+      // season's games (same pipeline used by getSeasonStatus, without saving).
+      const uniqueGames = await this._fetchUniqueGames(
+        normalizedLeague,
+        season,
       );
-
-      // Fetch teams and logos for the league
-      const leagueTeams = await this.teamService.findAll([normalizedLeague]);
-      const leagueLogos = await this.getTeamsLogo(leagueTeams);
-
-      let gamesObj = {};
-      if (normalizedLeague === League.PWHL) {
-        const hockeyData = new HockeyData();
-        gamesObj = await hockeyData.getHockeySchedule(
-          leagueTeams,
-          leagueLogos,
-          normalizedLeague,
-          forceUpdate,
+      const games = uniqueGames;
+      // Only deactivate future games if we are not fetching an old season, and only the
+      // ones that are absent from the freshly fetched season. This turns the previous
+      // "deactivate everything, then rewrite" into a safe "replace" that cannot lose the
+      // league's upcoming games if the process dies before saving (see empty fetch guard above).
+      // A fetch returning 0 games never triggers a deactivation (guard below).
+      if (!season && uniqueGames && uniqueGames.length > 0) {
+        const freshIds = new Set(
+          uniqueGames.map((g: any) => g?.uniqueId).filter((id: any) => !!id),
         );
-      } else {
-        gamesObj = await getTeamsSchedule(
-          leagueTeams,
-          normalizedLeague,
-          leagueLogos,
-          forceUpdate,
-        );
-      }
 
-      // Flatten the games object into an array and deduplicate by uniqueId
-      const games = Object.values(gamesObj).flat() as any[];
-      const uniqueGamesMap = new Map<string, any>();
-      for (const game of games) {
-        if (game?.uniqueId) {
-          uniqueGamesMap.set(game.uniqueId, game);
+        if (freshIds.size > 0) {
+          const existingFuture = (await this.gameModel
+            .find(
+              {
+                league: normalizedLeague,
+                gameDate: { $gte: todayStr },
+                isActive: true,
+                startTimeUTC: { $gt: now.toISOString() },
+              },
+              { uniqueId: 1, missingSince: 1, _id: 0 },
+            )
+            .lean()
+            .exec()) as Array<{ uniqueId?: string; missingSince?: string }>;
+
+          const graceMs = this.gracePeriodHours * 60 * 60 * 1000;
+          const nowIso = now.toISOString();
+          const nowMs = now.getTime();
+
+          const toMarkMissing: string[] = [];
+          const toDeactivate: string[] = [];
+          const toConfirm: string[] = [];
+
+          for (const g of existingFuture) {
+            const id = g.uniqueId;
+            if (!id) continue;
+
+            if (freshIds.has(id)) {
+              // Game is back in the source data: clear any pending grace marker.
+              if (g.missingSince) toConfirm.push(id);
+              continue;
+            }
+
+            // Game absent from the freshly fetched source.
+            if (!g.missingSince) {
+              // First time it is seen missing: start the grace period, keep it active.
+              toMarkMissing.push(id);
+            } else {
+              const missingMs = new Date(g.missingSince).getTime();
+              if (!Number.isFinite(missingMs) || nowMs - missingMs >= graceMs) {
+                toDeactivate.push(id);
+              }
+              // else: still within the grace period, leave it active (no flicker).
+            }
+          }
+
+          if (toMarkMissing.length > 0) {
+            await this.gameModel.updateMany(
+              {
+                league: normalizedLeague,
+                uniqueId: { $in: toMarkMissing },
+                isActive: true,
+                startTimeUTC: { $gt: nowIso },
+              },
+              { $set: { missingSince: nowIso } },
+            );
+            console.info(
+              `[Games] ${toMarkMissing.length} future game(s) missing from source for ${normalizedLeague}; grace period started (kept active pending confirmation).`,
+            );
+          }
+
+          if (toDeactivate.length > 0) {
+            await this.gameModel.updateMany(
+              {
+                league: normalizedLeague,
+                uniqueId: { $in: toDeactivate },
+                isActive: true,
+                startTimeUTC: { $gt: nowIso },
+              },
+              { $set: { isActive: false }, $unset: { missingSince: 1 } },
+            );
+            console.info(
+              `[Games] Deactivated ${toDeactivate.length} future game(s) for ${normalizedLeague} missing from source for more than ${this.gracePeriodHours}h.`,
+            );
+          }
+
+          if (toConfirm.length > 0) {
+            await this.gameModel.updateMany(
+              {
+                league: normalizedLeague,
+                uniqueId: { $in: toConfirm },
+              },
+              { $unset: { missingSince: 1 } },
+            );
+            console.info(
+              `[Games] ${toConfirm.length} future game(s) for ${normalizedLeague} reappeared in source; grace marker cleared.`,
+            );
+          }
         }
       }
-      const uniqueGames = Array.from(uniqueGamesMap.values());
-
       if (uniqueGames && uniqueGames.length > 0) {
+        // Oldies recovery: only ever add missing games without overwriting an existing match.
+        // A game is considered "already present" (same game) only when its uniqueId matches
+        // AND both the home and the away scores match the stored ones.
+        // Otherwise we refresh it with the fresh (more complete) data.
+        let existingResults = new Map<
+          string,
+          { homeTeamScore?: number; awayTeamScore?: number }
+        >();
+        if (addMissingOnly) {
+          const ids = uniqueGames.map((g) => g?.uniqueId).filter((id) => !!id);
+          if (ids.length > 0) {
+            const existing = await this.gameModel
+              .find(
+                { uniqueId: { $in: ids } },
+                { uniqueId: 1, homeTeamScore: 1, awayTeamScore: 1, _id: 0 },
+              )
+              .lean()
+              .exec();
+            for (const g of existing) {
+              existingResults.set(g?.uniqueId, {
+                homeTeamScore: g?.homeTeamScore,
+                awayTeamScore: g?.awayTeamScore,
+              });
+            }
+          }
+        }
+
+        let added = 0;
+        let skippedExisting = 0;
+        let skippedMissingTeamData = 0;
         for (const game of uniqueGames) {
           game.updateDate = new Date().toISOString();
           game.isActive = true;
+
+          if (addMissingOnly) {
+            // Treat as "already present" only ifthe stored game has the same result
+            // (id AND home/away scores). Otherwise we refresh it with the fresh data.
+            const stored = game?.uniqueId
+              ? existingResults.get(game?.uniqueId)
+              : undefined;
+            const sameResult =
+              stored &&
+              (stored.homeTeamScore ?? null) ===
+                (game?.homeTeamScore ?? null) &&
+              (stored.awayTeamScore ?? null) === (game?.awayTeamScore ?? null);
+            if (game?.uniqueId && sameResult) {
+              skippedExisting++;
+              continue;
+            }
+
+            // Oldies recovery: require home/away teams.
+            // Scores can be null for past games (cron will fill them later);
+            // future scheduled games are skipped (to avoid polluting oldies with scheduling).
+            const hasHomeTeam =
+              game?.homeTeamId || game?.homeTeamShort || game?.homeTeam;
+            const hasAwayTeam =
+              game?.awayTeamId || game?.awayTeamShort || game?.awayTeam;
+
+            if (!hasHomeTeam || !hasAwayTeam) {
+              skippedMissingTeamData++;
+              console.warn(
+                `[Oldies] Skipping ${game?.uniqueId} for ${normalizedLeague} because team data is incomplete (home: ${game?.homeTeamShort || game?.homeTeam || 'none'}, away: ${game?.awayTeamShort || game?.awayTeam || 'none'}).`,
+              );
+              continue;
+            }
+
+            // Reject future games (not yet played) to avoid storing scheduled games as historical
+            const gameStartTime = game?.startTimeUTC
+              ? new Date(game.startTimeUTC).getTime()
+              : null;
+            const isFutureGame = gameStartTime && gameStartTime > now.getTime();
+
+            if (isFutureGame) {
+              skippedMissingTeamData++;
+              console.warn(
+                `[Oldies] Skipping future game ${game?.uniqueId} for ${normalizedLeague} (scheduled for ${game?.startTimeUTC}, not yet played).`,
+              );
+              continue;
+            }
+            // Past games are accepted even with null scores; cron will fill them later via fetchGamesScores()
+          }
+
           await this.create(game);
+          added++;
+        }
+
+        if (addMissingOnly) {
+          console.info(
+            `[Oldies] ${normalizedLeague} ${season ? `(season ${season})` : ''}: added ${added}, skipped (existing identical) ${skippedExisting}, skipped (missing team/score data) ${skippedMissingTeamData}.`,
+          );
         }
       }
 
@@ -466,9 +778,11 @@ export class GameService {
 
   async findResultsByTeam(teamSelectedId: string, startDate?: string) {
     if (!startDate) {
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      startDate = readableDate(oneYearAgo);
+      const fewYearsAgo = new Date();
+      fewYearsAgo.setFullYear(
+        fewYearsAgo.getFullYear() - this.maxYearBeforeDelete,
+      );
+      startDate = readableDate(fewYearsAgo);
     }
     const today = readableDate(new Date());
     const games = await this.filterGames({
@@ -501,9 +815,11 @@ export class GameService {
     maxResults?: number,
   ) {
     if (!startDate) {
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      startDate = readableDate(oneYearAgo);
+      const fewYearsAgo = new Date();
+      fewYearsAgo.setFullYear(
+        fewYearsAgo.getFullYear() - this.maxYearBeforeDelete,
+      );
+      startDate = readableDate(fewYearsAgo);
     }
     maxResults = maxResults || 5000;
 
@@ -810,15 +1126,38 @@ export class GameService {
   async removeDuplicatesAndOlds() {
     console.info('Removing duplicates and old games...');
 
-    const tenMonthsAgo = new Date();
-    tenMonthsAgo.setMonth(tenMonthsAgo.getMonth() - 10);
+    const maxYearsAgo = new Date();
+    maxYearsAgo.setFullYear(
+      maxYearsAgo.getFullYear() - this.maxYearBeforeDelete,
+    );
 
-    // 1. Delete games older than 10 months directly in DB for efficiency
+    // Prepare both date formats
+    const maxYearsAgoISO = maxYearsAgo.toISOString();
+    // E.g., "2025-10-23" to match the format of your gameDate field
+    const maxYearsAgoStr = maxYearsAgo.toISOString().split('T')[0];
+
+    // 1. Delete games older than 5 years directly in DB for efficiency
     const deleteResult = await this.gameModel.deleteMany({
-      startTimeUTC: { $lt: tenMonthsAgo.toISOString() },
+      $or: [
+        {
+          // Condition 1: startTimeUTC is valid and older than 5 years
+          startTimeUTC: {
+            $lt: maxYearsAgoISO,
+            $nin: ['', null], // Ignore empty or null fields here
+          },
+        },
+        {
+          // Condition 2 (safety net): gameDate is older than 5 years
+          gameDate: {
+            $lt: maxYearsAgoStr,
+            $nin: ['', null],
+          },
+        },
+      ],
     });
+
     console.info(
-      `Deleted ${deleteResult.deletedCount} games older than 10 months.`,
+      `Deleted ${deleteResult.deletedCount} games older than ${this.maxYearBeforeDelete} years.`,
     );
 
     // 2. Handle duplicates among remaining active games
@@ -985,7 +1324,7 @@ export class GameService {
               }
             } catch (error) {
               console.error(
-                `[fetchGamesScores] Erreur lors de la récupération PWHL pour ${date}:`,
+                `[fetchGamesScores] Error while fetching PWHL data for ${date}:`,
                 error,
               );
               // ignore fetch errors for PWHL
@@ -1183,6 +1522,7 @@ export class GameService {
 
       await this.fixScoreIssue();
       await this.removeOldGamesWithoutScore();
+      await this.removeStaleUnresolvedGames();
 
       return appliedUpdates.length ? appliedUpdates : results;
     } catch (error) {
@@ -1221,6 +1561,42 @@ export class GameService {
       );
       await this.remove(game.uniqueId);
     }
+  }
+
+  /**
+   * Purges games that are still active (and not resolved to a terminal status) several
+   * months after they started. These are stuck/stale games whose final result can no
+   * longer be recovered from the source, so they would otherwise trigger the
+   * "Fetching scores for {league}..." cycle on every run (e.g. a PWHL game on 2026-05-11).
+   */
+  private async removeStaleUnresolvedGames(
+    maxAgeDays = this.staleGameMaxAgeDays,
+  ): Promise<Game[]> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+
+    const staleGames = await this.gameModel
+      .find({
+        isActive: true,
+        startTimeUTC: { $lte: cutoff.toISOString(), $nin: ['', null] },
+        gameStatus: {
+          $nin: ['FINISHED', 'FINAL', 'CANCELLED', 'POSTPONED'],
+        },
+      })
+      .exec();
+
+    console.info(
+      `[fetchGamesScores] ${staleGames.length} active game(s) unresolved for more than ${maxAgeDays} days. Processing...`,
+    );
+
+    for (const game of staleGames) {
+      console.info(
+        `[fetchGamesScores] Removing unresolved game ${game.uniqueId} (${game.league}) started more than ${maxAgeDays} days ago without a final status...`,
+      );
+      await this.remove(game.uniqueId);
+    }
+
+    return staleGames;
   }
 
   async fetchLiveScores(gameIds: string[]): Promise<any[]> {
@@ -1769,39 +2145,263 @@ export class GameService {
       .exec();
   }
 
-  private async _deleteUnlinkedTeams(normalizedLeague: string): Promise<void> {
-    const allTeamsInLeague =
-      await this.teamService.findByLeague(normalizedLeague);
-    const activeGamesInLeague = await this.gameModel
-      .find({
-        league: normalizedLeague,
-        isActive: true,
-      })
-      .lean()
-      .exec();
+  private async _deleteUnlinkedTeams(league: string): Promise<void> {
+    const normalizedLeague = league.toUpperCase().trim();
 
-    const linkedTeamIds = new Set<string>();
-    activeGamesInLeague.forEach((game) => {
-      if (game.homeTeamId) linkedTeamIds.add(game.homeTeamId);
-      if (game.awayTeamId) linkedTeamIds.add(game.awayTeamId);
+    // 1. Exclude all college leagues to prevent infinite delete/refetch loops
+    const isCollegeLeague = Object.values(CollegeLeague).includes(
+      normalizedLeague as CollegeLeague,
+    );
+
+    if (isCollegeLeague) {
+      return;
+    }
+
+    // 2. Safeguard: stop cleanup if no games exist at all for this league in the DB
+    const totalGamesForLeague = await this.gameModel.countDocuments({
+      league: normalizedLeague,
+    });
+    if (totalGamesForLeague === 0) {
+      return;
+    }
+
+    // 3. Fetch all teams currently stored for the specified league
+    const teams = await this.teamService.findAll([normalizedLeague]);
+    if (!teams.length) return;
+
+    // 4. Find all team IDs referenced in games across all years (without date filters)
+    const [referencedTeamIds, homeTeamIds, awayTeamIds] = await Promise.all([
+      this.gameModel.distinct('teamSelectedId', { league: normalizedLeague }),
+      this.gameModel.distinct('homeTeamId', { league: normalizedLeague }),
+      this.gameModel.distinct('awayTeamId', { league: normalizedLeague }),
+    ]);
+
+    const usedTeamIds = new Set([
+      ...referencedTeamIds,
+      ...homeTeamIds,
+      ...awayTeamIds,
+    ]);
+
+    // 5. Identify unlinked teams (pro leagues only) with zero existing games.
+    //    Teams marked as inactive (`HistoricalTeams` ou `isActive:false`) are
+    //    never deleted: they are needed to enrich historical/oldies games.
+    const unlinkedTeams = teams.filter(
+      (team) =>
+        !usedTeamIds.has(team.uniqueId) &&
+        team.isActive !== false &&
+        !HistoricalTeams[team.uniqueId],
+    );
+
+    if (unlinkedTeams.length > 0) {
+      console.info(
+        `[Cleanup] Found ${unlinkedTeams.length} unlinked teams for ${normalizedLeague}. Deleting...`,
+      );
+
+      const idsToDelete = unlinkedTeams.map((t) => t.uniqueId);
+      await this.teamService.deleteManyByIds(idsToDelete);
+    }
+  }
+
+  /**
+   * Retrieves all years currently present in the database and counts games by year.
+   * Returns a list sorted from oldest to newest.
+   */
+  private async getAvailableYears(): Promise<
+    { year: number; count: number; oldestDate: string; newestDate: string }[]
+  > {
+    const result = await this.gameModel.aggregate([
+      {
+        $group: {
+          _id: {
+            $substrCP: ['$gameDate', 0, 4], // Extract the first 4 characters (YYYY)
+          },
+          count: { $sum: 1 },
+          oldestDate: { $min: '$gameDate' },
+          newestDate: { $max: '$gameDate' },
+        },
+      },
+      { $sort: { _id: 1 } }, // Years from oldest to newest
+      {
+        $project: {
+          _id: 0,
+          year: { $toInt: '$_id' },
+          count: 1,
+          oldestDate: 1,
+          newestDate: 1,
+        },
+      },
+    ]);
+
+    return result;
+  }
+
+  /**
+   * Calculates MongoDB disk usage inside Docker.
+   * Returns { usedMB, totalMB, percentage (0-1) }
+   */
+  private async getDiskUsage(): Promise<{
+    usedMB: number;
+    totalMB: number;
+    percentage: number;
+  }> {
+    try {
+      // Try to get the disk space of the Docker volume
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+
+      try {
+        // For Docker/Linux: check the persistent volume
+        const { stdout } = await execAsync(
+          'df -B1M /data/db 2>/dev/null || df -B1M .',
+        );
+        const lines = stdout.trim().split('\n');
+        const row = lines[1].split(/\s+/);
+        const totalMB = parseInt(row[1], 10);
+        const usedMBTotal = parseInt(row[2], 10);
+
+        return {
+          usedMB: usedMBTotal,
+          totalMB,
+          percentage: usedMBTotal / totalMB,
+        };
+      } catch {
+        // Fallback: estimate usage via aggregate
+        const sizeInfo = await (this.gameModel.collection as any)
+          .aggregate([
+            {
+              $collStats: { storageStats: {} },
+            },
+          ])
+          .toArray()
+          .catch(() => []);
+
+        if (sizeInfo && sizeInfo.length > 0) {
+          const sizeMB = (sizeInfo[0].storageStats?.size || 0) / (1024 * 1024);
+          return {
+            usedMB: Math.round(sizeMB),
+            totalMB: Math.round(sizeMB * 2), // Estimate
+            percentage: 0.5,
+          };
+        }
+
+        // Full fallback: return 0% (no purge if usage is uncertain)
+        return { usedMB: 0, totalMB: 1, percentage: 0 };
+      }
+    } catch (error) {
+      console.warn(
+        '[Capacity Manager] Could not check disk usage:',
+        error instanceof Error ? error.message : String(error),
+      );
+      // Full fallback: return 0% (no purge if usage is uncertain)
+      return { usedMB: 0, totalMB: 1, percentage: 0 };
+    }
+  }
+
+  /**
+   * Deletes all games from a given year.
+   * Returns the number of deleted games.
+   */
+  private async deleteGamesForYear(year: number): Promise<number> {
+    const yearStr = year.toString();
+    const startDate = `${yearStr}-01-01`;
+    const endDate = `${yearStr}-12-31`;
+
+    const result = await this.gameModel.deleteMany({
+      gameDate: { $gte: startDate, $lte: endDate },
     });
 
-    let deletedCount = 0;
-    for (const team of allTeamsInLeague) {
-      if (!linkedTeamIds.has(team.uniqueId)) {
-        console.info(
-          `Deleting team ${team.uniqueId} from league ${normalizedLeague} as it has no linked active games.`,
-        );
-        await this.teamService.remove(team.uniqueId);
-        deletedCount++;
+    console.info(
+      `[Capacity Manager] Deleted ${result.deletedCount} games from year ${year}`,
+    );
+    return result.deletedCount || 0;
+  }
+
+  /**
+   * Checks disk space and deletes the oldest years if needed.
+   * Returns a report with the action taken and the current disk usage.
+   */
+  async purgeOldestYearsIfNeeded(): Promise<{
+    action: 'none' | 'purged';
+    diskUsage: { usedMB: number; totalMB: number; percentage: number };
+    purgedYears?: number[];
+    remainingYears?: number[];
+  }> {
+    const now = Date.now();
+
+    // Avoid overly frequent checks (maximum once per hour)
+    if (now - this.lastDiskCheck < this.CHECK_INTERVAL_MS) {
+      return {
+        action: 'none',
+        diskUsage: { usedMB: 0, totalMB: 1, percentage: 0 },
+      };
+    }
+
+    this.lastDiskCheck = now;
+
+    const diskUsage = await this.getDiskUsage();
+    const purgedYears: number[] = [];
+
+    console.info(
+      `[Capacity Manager] Disk usage: ${(diskUsage.percentage * 100).toFixed(1)}% (${diskUsage.usedMB}MB / ${diskUsage.totalMB}MB)`,
+    );
+
+    // If the storage is full, purge years one by one
+    if (diskUsage.percentage >= this.DISK_USAGE_THRESHOLD) {
+      const years = await this.getAvailableYears();
+
+      if (years.length === 0) {
+        console.warn('[Capacity Manager] No games to delete!');
+        return {
+          action: 'none',
+          diskUsage,
+          remainingYears: [],
+        };
       }
-    }
-    if (deletedCount > 0) {
-      console.info(
-        `Refetching teams for league ${normalizedLeague} due to ${deletedCount} unlinked team(s) deleted.`,
+
+      console.warn(
+        `[Capacity Manager] Disk usage exceeds ${(this.DISK_USAGE_THRESHOLD * 100).toFixed(0)}%! Starting purge...`,
       );
-      await this.teamService.getTeams(normalizedLeague);
+
+      // Delete years from oldest to newest until usage drops below the threshold
+      for (const { year, count } of years) {
+        console.info(
+          `[Capacity Manager] Purging year ${year} (${count} games)...`,
+        );
+
+        await this.deleteGamesForYear(year);
+        purgedYears.push(year);
+
+        // Re-check after each deletion
+        const updatedDiskUsage = await this.getDiskUsage();
+        console.info(
+          `[Capacity Manager] New disk usage: ${(updatedDiskUsage.percentage * 100).toFixed(1)}%`,
+        );
+
+        if (updatedDiskUsage.percentage < this.DISK_USAGE_THRESHOLD) {
+          console.info('[Capacity Manager] Disk usage back to normal.');
+          break;
+        }
+      }
+
+      const remainingYears = (await this.getAvailableYears()).map(
+        (y) => y.year,
+      );
+
+      return {
+        action: 'purged',
+        diskUsage: await this.getDiskUsage(),
+        purgedYears,
+        remainingYears,
+      };
     }
+
+    const remainingYears = (await this.getAvailableYears()).map((y) => y.year);
+    return {
+      action: 'none',
+      diskUsage,
+      remainingYears,
+    };
   }
 
   async checkLeagueGamesAvailability() {
@@ -1879,5 +2479,87 @@ export class GameService {
     } finally {
       this.isCheckingAvailability = false;
     }
+  }
+
+  async getOldiesGames(yearStr?: string, leagueParam?: string) {
+    const currentYear = new Date().getFullYear();
+    const minYear = currentYear - this.maxYearBeforeDelete;
+
+    let years: number[];
+    if (yearStr === undefined || yearStr === null || yearStr.trim() === '') {
+      // No year specified -> loop over the last N seasons (years), from the
+      // most recent to the oldest allowed by the historical limit.
+      years = [];
+      for (let y = currentYear; y > minYear; y--) {
+        years.push(y);
+      }
+    } else {
+      const targetYear = parseInt(yearStr, 10);
+
+      // Security check: the year must be valid, not in the future,
+      // and not older than the allowed historical limit
+      if (
+        isNaN(targetYear) ||
+        targetYear > currentYear ||
+        targetYear < minYear
+      ) {
+        throw new HttpException(
+          `The year parameter must be a valid year between ${minYear} and ${currentYear}`,
+          400,
+        );
+      }
+      years = [targetYear];
+    }
+
+    // 1. Retrieve all teams to infer the leagues
+    let teams = await this.teamService.findAll();
+    if (!teams.length) {
+      teams = (await this.teamService.getTeams()) || [];
+    }
+
+    let leagues = Array.from(new Set(teams.map((team) => team.league)));
+
+    // Filter leagues if a specific league query parameter is provided
+    if (leagueParam) {
+      const normalizedLeague = leagueParam.toUpperCase().trim();
+      if (!leagues.includes(normalizedLeague)) {
+        throw new HttpException(`League ${normalizedLeague} not found`, 404);
+      }
+      leagues = [normalizedLeague];
+    }
+
+    const yearsLabel =
+      years.length > 1 ? `years ${years.join(', ')}` : `the year ${years[0]}`;
+    console.info(
+      `[Oldies] Starting data recovery for ${yearsLabel} ${leagueParam ? `(League: ${leagueParam})` : ''}...`,
+    );
+
+    // 2. Loop through the leagues and the requested years
+    for (const league of leagues) {
+      for (const year of years) {
+        console.info(
+          `[Oldies] Fetching league ${league} for the year ${year}...`,
+        );
+
+        try {
+          // Call getLeagueGames passing the specific season parameter.
+          // addMissingOnly ensures we never overwrite existing matches (only insert missing ones..
+          await this.getLeagueGames({
+            league,
+            forceUpdate: true,
+            skipCascade: true, // true to avoid concurrent refresh conflicts
+            season: year,
+            addMissingOnly: true, // Oldies: do not overwrite, only add missing games.
+          });
+        } catch (error) {
+          console.error(`[Oldies] Error for ${league} in ${year}:`, error);
+        }
+      }
+    }
+
+    console.info('[Oldies] History data recovery completed!');
+    return {
+      message: `History recovery for ${yearsLabel} ${leagueParam ? `for league ${leagueParam}` : ''} started successfully.`,
+    };
   }
 }

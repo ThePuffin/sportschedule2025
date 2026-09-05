@@ -9,7 +9,13 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { syncToFirestore } from '@/utils/syncService';
-import { getRandomTeamId, randomNumber, translateFilterLabel, translateWord } from '@/utils/utils';
+import {
+  getFilterAccordionLabel,
+  getRandomTeamId,
+  randomNumber,
+  translateFilterLabel,
+  translateWord,
+} from '@/utils/utils';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -74,7 +80,7 @@ export default function Schedule() {
     () => getCache<boolean>('showPreviousScores') || false,
   );
   const [isTeamAccordionOpen, setIsTeamAccordionOpen] = useState(true);
-  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(true);
+  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(false);
 
   const isInternalChange = useRef(false);
   const handlePreviousScoreToggle = useCallback(
@@ -614,6 +620,50 @@ export default function Schedule() {
 
   const showTeamFilter = uniqueTeamsFromGames.length > 1;
 
+  const teamAccordionLabel = useMemo(() => {
+    const selectedTeam = teamSelected ? teamsForSelector.find((t) => t.uniqueId === teamSelected) : null;
+    const { prefix, value } = getFilterAccordionLabel({
+      prefix: translateFilterLabel('league_team'),
+      fallbackLabel: translateFilterLabel('league_team'),
+      activeFilter: leagueOfSelectedTeam,
+      selectedTeam,
+      expanded: isTeamAccordionOpen,
+    });
+    if (value) {
+      return (
+        <span>
+          {prefix} :{' '}
+          <i>
+            <b>{value}</b>
+          </i>
+        </span>
+      );
+    }
+    return prefix;
+  }, [teamSelected, teamsForSelector, leagueOfSelectedTeam, isTeamAccordionOpen]);
+
+  const dateAccordionLabel = useMemo(() => {
+    const selectedMonth = monthFilter.length > 0 ? monthFilter[0] : '';
+    const { prefix, value } = getFilterAccordionLabel({
+      prefix: translateFilterLabel('date'),
+      fallbackLabel: translateFilterLabel('date'),
+      activeFilter: selectedMonth || undefined,
+      selectedTeam: null,
+      expanded: isDateAccordionOpen,
+    });
+    if (value) {
+      return (
+        <span>
+          {prefix} :{' '}
+          <i>
+            <b>{value}</b>
+          </i>
+        </span>
+      );
+    }
+    return prefix;
+  }, [monthFilter, isDateAccordionOpen]);
+
   const display = () => {
     const leagues = leaguesAvailable || [];
 
@@ -676,7 +726,7 @@ export default function Schedule() {
               <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
                 {isSmallDevice ? (
                   <FilterAccordion
-                    label={translateFilterLabel('league_team')}
+                    label={teamAccordionLabel}
                     defaultOpen={true}
                     isSmallDevice={true}
                     onExpandedChange={setIsTeamAccordionOpen}
@@ -808,7 +858,7 @@ export default function Schedule() {
                 )}
                 {visibleGamesByMonth.length > 1 && (
                   <FilterAccordion
-                    label={translateFilterLabel('date')}
+                    label={dateAccordionLabel}
                     defaultOpen={false}
                     isSmallDevice={isSmallDevice}
                     onExpandedChange={setIsDateAccordionOpen}

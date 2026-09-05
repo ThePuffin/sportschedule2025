@@ -7,13 +7,14 @@ import { ThemedView } from '@/components/ThemedView';
 import { maxTeamsNumber } from '@/constants/Constants';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
+import { fetchDateRangeFromApi, fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { syncToFirestore } from '@/utils/syncService';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,8 +31,9 @@ import LoadingView from '../../components/LoadingView';
 import Separator from '../../components/Separator';
 import TeamReorderSelector from '../../components/TeamReorderSelector';
 import { addDays, readableDate } from '../../utils/date';
+import { getNextHomeGameFilter, getPreviousHomeGameFilter } from '../../utils/homeGameFilter';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
-import { translateFilterLabel, translateWord } from '../../utils/utils';
+import { getFilterAccordionLabel, translateFilterLabel, translateWord } from '../../utils/utils';
 const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
@@ -58,7 +60,8 @@ export default function Calendar() {
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
   const [gamesModalVisible, setGamesModalVisible] = useState(false);
   const isRestoringSelectionRef = useRef(false);
-  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(true);
+  const [isTeamAccordionOpen, setIsTeamAccordionOpen] = useState(true);
+  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(false);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -95,37 +98,135 @@ export default function Calendar() {
     return teams.filter((t) => allowedLeagues.includes(t.league));
   }, [teams, allowedLeagues]);
 
-  const beginDate = new Date();
-  beginDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(addDays(beginDate, 15));
-  endDate.setHours(23, 59, 59, 999);
-  const initializeDateRange = () => {
+  const teamAccordionLabel = useMemo(() => {
+    const labels =
+      filteredTeamsSelected
+        .filter((id) => !hiddenTeams.includes(id))
+        .map((id) => {
+          const team = teams.find((t) => t.uniqueId === id);
+          return team ? team.abbrev : id;
+        }) ?? [];
+    const { prefix, value } = getFilterAccordionLabel({
+      prefix: translateFilterLabel('team'),
+      fallbackLabel: translateFilterLabel('team'),
+      activeFilter: labels.join(', '),
+      selectedTeam: null,
+      expanded: isTeamAccordionOpen,
+    });
+    if (value) {
+      return (
+        <span
+          style={{
+            display: 'block',
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {prefix} :{' '}
+          <i>
+            <b>{value}</b>
+          </i>
+        </span>
+      );
+    }
+    return prefix;
+  }, [filteredTeamsSelected, hiddenTeams, teams, isTeamAccordionOpen]);
+
+  const initializeDateRange = async () => {
+    const apiRange = await fetchDateRangeFromApi();
+    const apiMinDate = apiRange.minDate ? new Date(apiRange.minDate) : new Date();
+    const apiMaxDate = apiRange.maxDate ? new Date(apiRange.maxDate) : new Date(addDays(apiMinDate, 365));
+
+    apiMinDate.setHours(0, 0, 0, 0);
+    apiMaxDate.setHours(23, 59, 59, 999);
+
     const storedStartDate = localStorage.getItem('startDate');
     const storedEndDate = localStorage.getItem('endDate');
 
-    let start = storedStartDate;
-    let end = storedEndDate;
-    if (!storedStartDate || new Date(storedStartDate) < beginDate) {
-      start = beginDate.toISOString();
-      localStorage.setItem('startDate', start);
+    let beginDate = storedStartDate ? new Date(storedStartDate) : new Date();
+    let endDate = storedEndDate ? new Date(storedEndDate) : new Date(addDays(beginDate, 15));
+
+    if (beginDate < apiMinDate) {
+      beginDate = new Date(apiMinDate);
     }
-    if (!storedEndDate || new Date(storedEndDate) < beginDate) {
-      end = endDate.toISOString();
-      localStorage.setItem('endDate', end);
+
+    if (endDate > apiMaxDate) {
+      endDate = new Date(apiMaxDate);
     }
-    if (start !== storedStartDate || end !== storedEndDate) {
+
+    if (beginDate > endDate) {
+      endDate = new Date(addDays(beginDate, 15));
+      if (endDate > apiMaxDate) endDate = new Date(apiMaxDate);
+    }
+
+    beginDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    const startStr = beginDate.toISOString();
+    const endStr = endDate.toISOString();
+
+    if (startStr !== storedStartDate) {
+      localStorage.setItem('startDate', startStr);
+    }
+    if (endStr !== storedEndDate) {
+      localStorage.setItem('endDate', endStr);
+    }
+
+    if (startStr !== storedStartDate || endStr !== storedEndDate) {
       setDateRange({
-        startDate: new Date(start ?? beginDate.toISOString()),
-        endDate: new Date(end ?? endDate.toISOString()),
+        startDate: beginDate,
+        endDate: endDate,
       });
-      getGamesFromApi(start ?? beginDate.toISOString(), end ?? endDate.toISOString());
+      getGamesFromApi(startStr, endStr);
     }
   };
 
   const [dateRange, setDateRange] = useState({
-    startDate: new Date(localStorage.getItem('startDate') ?? beginDate),
-    endDate: new Date(localStorage.getItem('endDate') ?? endDate),
+    startDate: new Date(localStorage.getItem('startDate') || new Date().toISOString()),
+    endDate: new Date(localStorage.getItem('endDate') || new Date(addDays(new Date(), 15)).toISOString()),
   });
+
+  const dateAccordionLabel = useMemo(() => {
+    const startLabel = dateRange.startDate.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+    const endLabel = dateRange.endDate.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+    const period = `${startLabel} - ${endLabel}`;
+    const { prefix, value } = getFilterAccordionLabel({
+      prefix: translateWord('selectYourDates'),
+      fallbackLabel: translateWord('selectYourDates'),
+      activeFilter: period,
+      selectedTeam: null,
+      expanded: isDateAccordionOpen,
+    });
+    if (value) {
+      return (
+        <span
+          style={{
+            display: 'block',
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {prefix} :{' '}
+          <i>
+            <b>{value}</b>
+          </i>
+        </span>
+      );
+    }
+    return prefix;
+  }, [dateRange, isDateAccordionOpen]);
 
   const storeTeamsSelected = useCallback(
     async (teamsSelectedIds: string[], teamsList?: Team[], syncToDB: boolean = true) => {
@@ -207,15 +308,14 @@ export default function Calendar() {
     const storedGamesDataRaw = getCache<FilterGames>('gamesData');
     if (!storedGamesDataRaw || !Object.keys(storedGamesDataRaw).length) return {};
 
-    const begindateStr = beginDate.toISOString().split('T')[0];
+    const begindateStr = dateRange.startDate.toISOString().split('T')[0];
 
-    // Keep only games whose date is today or in the future
     const filteredGamesData = Object.fromEntries(
       Object.entries(storedGamesDataRaw).filter(([date]) => date >= begindateStr),
     );
 
     return filteredGamesData;
-  }, [beginDate]);
+  }, [dateRange.startDate]);
 
   const getStoredTeams = useCallback(() => {
     isRestoringSelectionRef.current = true;
@@ -510,8 +610,27 @@ export default function Calendar() {
     }
   }, [teamsSelected, teams]);
 
+  // Swipe gesture to cycle through home / all / away filters
+  const swipePanResponder = useMemo(() => {
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only capture horizontal swipes (ignore vertical scroll)
+        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -30) {
+          // Swipe left → next filter
+          handleHomeGameToggle(getNextHomeGameFilter(homeGameVisibility));
+        } else if (gestureState.dx > 30) {
+          // Swipe right → previous filter
+          handleHomeGameToggle(getPreviousHomeGameFilter(homeGameVisibility));
+        }
+      },
+    });
+  }, [homeGameVisibility, handleHomeGameToggle]);
+
   return (
-    <ThemedView style={{ flex: 1 }}>
+    <ThemedView style={{ flex: 1 }} {...swipePanResponder.panHandlers}>
       <PageHeader rightElement={<HomeGameToggle value={homeGameVisibility} onValueChange={handleHomeGameToggle} />} />
       <ScrollView
         ref={scrollViewRef}
@@ -521,7 +640,12 @@ export default function Calendar() {
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView>
             <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
-              <FilterAccordion label={translateFilterLabel('team')} defaultOpen={true} isSmallDevice={isSmallDevice}>
+              <FilterAccordion
+                label={teamAccordionLabel}
+                defaultOpen={true}
+                isSmallDevice={isSmallDevice}
+                onExpandedChange={setIsTeamAccordionOpen}
+              >
                 <ThemedElements>
                   <div
                     style={{
@@ -611,7 +735,7 @@ export default function Calendar() {
                 </ThemedElements>
               </FilterAccordion>
               <FilterAccordion
-                label={translateWord('selectYourDates')}
+                label={dateAccordionLabel}
                 defaultOpen={true}
                 isSmallDevice={isSmallDevice}
                 onExpandedChange={setIsDateAccordionOpen}

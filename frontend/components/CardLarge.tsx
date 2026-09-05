@@ -506,10 +506,9 @@ export default function CardLarge({
   const shouldShowReveal =
     hasScore && !forceShowScores && (!showScores || (showScores && isFavorite && !isLive)) && !scoreRevealed;
 
-  const centerContent = (
-    <>
-      <View style={{ height: 80, justifyContent: 'center', alignItems: 'center' }}>
-        {shouldShowReveal ? (
+  const centerScoreVs = (
+    <View style={{ height: 80, justifyContent: 'center', alignItems: 'center' }}>
+      {shouldShowReveal ? (
           <TouchableOpacity
             style={styles.revealButton}
             onPress={(e) => {
@@ -556,46 +555,48 @@ export default function CardLarge({
           </ThemedText>
         )}
       </View>
+  );
 
-      <View
-        style={[
-          styles.timeContainer,
-          { backgroundColor: revertColor },
-          isSmallCard && { paddingHorizontal: 2, paddingVertical: 2, marginTop: 2 },
-        ]}
-      >
-        {urlLive ? (
-          <a
-            href={urlLive}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              textDecoration: 'none',
-              cursor: 'pointer',
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'center',
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setScoreRevealed(true);
-            }}
-          >
-            <ThemedText style={[styles.liveTimeText, isSmallCard && { fontSize: 10 }]}>
-              {timeText.split(',')[0].trim()}
-            </ThemedText>
-          </a>
-        ) : (
-          <ThemedText
-            lightColor={isLive ? undefined : '#475569'}
-            darkColor={isLive ? undefined : '#94a3b8'}
-            style={[isLive ? styles.liveTimeText : styles.timeText, isSmallCard && { fontSize: 10 }]}
-          >
-            {timeText}
+  const centerTime = (
+    <View
+      style={[
+        styles.timeContainer,
+        { backgroundColor: revertColor },
+        isSmallCard && { paddingHorizontal: 2, paddingVertical: 2, marginTop: 2 },
+        verticalMode && { width: '100%', order: 4, marginTop: 20, marginBottom: 0 },
+      ] as any}
+    >
+      {urlLive ? (
+        <a
+          href={urlLive}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            textDecoration: 'none',
+            cursor: 'pointer',
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setScoreRevealed(true);
+          }}
+        >
+          <ThemedText style={[styles.liveTimeText, isSmallCard && { fontSize: 10 }]}>
+            {timeText.split(',')[0].trim()}
           </ThemedText>
-        )}
-      </View>
-    </>
+        </a>
+      ) : (
+        <ThemedText
+          lightColor={isLive ? undefined : '#475569'}
+          darkColor={isLive ? undefined : '#94a3b8'}
+          style={[isLive ? styles.liveTimeText : styles.timeText, isSmallCard && { fontSize: 10 }]}
+        >
+          {timeText}
+        </ThemedText>
+      )}
+    </View>
   );
 
   const bookmarkElement =
@@ -741,8 +742,9 @@ export default function CardLarge({
                       width: '100%',
                       paddingLeft: isSmallCard ? 0 : 20,
                       alignItems: 'center',
+                      order: 1,
                     },
-                  ]}
+                  ] as any}
                 >
                   <View
                     style={[
@@ -804,8 +806,11 @@ export default function CardLarge({
                 </View>
 
                 {/* Center: Score or VS/@ */}
-                <View style={[styles.centerColumn, verticalMode && { flex: 0, marginVertical: 5, width: '100%' }]}>
-                  {centerContent}
+                <View
+                  style={[styles.centerColumn, verticalMode && { flex: 0, marginVertical: 5, width: '100%', order: 2 }] as any}
+                >
+                  {centerScoreVs}
+                  {!verticalMode && centerTime}
                 </View>
 
                 {/* home Team */}
@@ -819,8 +824,9 @@ export default function CardLarge({
                       width: '100%',
                       paddingLeft: isSmallCard ? 0 : 20,
                       alignItems: 'center',
+                      order: 3,
                     },
-                  ]}
+                  ] as any}
                 >
                   <View
                     style={[
@@ -880,6 +886,7 @@ export default function CardLarge({
                     </ThemedText>
                   )}
                 </View>
+                {verticalMode && centerTime}
               </View>
 
               {/* Footer: Arena */}

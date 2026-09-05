@@ -19,20 +19,22 @@ The **Game of the Day** tab (also called "Programme du jour") displays all games
 
 ## State Variables
 
-| Variable         | Type                   | Description                                            |
-| ---------------- | ---------------------- | ------------------------------------------------------ |
-| `games`          | `GameFormatted[]`      | Games for the selected date                            |
-| `selectDate`     | `Date`                 | Currently selected date                                |
-| `selectLeagues`  | `League[]`             | Leagues to display                                     |
-| `userLeagues`    | `League[]`             | User's selected leagues                                |
-| `favoriteTeams`  | `string[]`             | Favorite team IDs                                      |
-| `activeFilter`   | `string`               | Active filter: `ALL`, league, `FAVORITES`, `BOOKMARKS` |
-| `showScores`     | `boolean`              | Whether to show scores                                 |
-| `gamesSelected`  | `GameFormatted[]`      | Bookmarked games (max 10)                              |
-| `teamSelectedId` | `string`               | Selected team filter                                   |
-| `dateLimits`     | `{ minDate, maxDate }` | Min/max selectable dates                               |
-| `isLoading`      | `boolean`              | Loading state                                          |
-| `retryCount`     | `number`               | Auto-retry counter                                     |
+| Variable                  | Type                   | Description                                            |
+| ------------------------- | ---------------------- | ------------------------------------------------------ |
+| `games`                   | `GameFormatted[]`      | Games for the selected date                            |
+| `selectDate`              | `Date`                 | Currently selected date                                |
+| `selectLeagues`           | `League[]`             | Leagues to display                                     |
+| `userLeagues`             | `League[]`             | User's selected leagues                                |
+| `favoriteTeams`           | `string[]`             | Favorite team IDs                                      |
+| `activeFilter`            | `string`               | Active filter: `ALL`, league, `FAVORITES`, `BOOKMARKS` |
+| `showScores`              | `boolean`              | Whether to show scores                                 |
+| `gamesSelected`           | `GameFormatted[]`      | Bookmarked games (max 10)                              |
+| `teamSelectedId`          | `string`               | Selected team filter                                   |
+| `dateLimits`              | `{ minDate, maxDate }` | Min/max selectable dates                               |
+| `isLoading`               | `boolean`              | Loading state                                          |
+| `retryCount`              | `number`               | Auto-retry counter                                     |
+| `dateAccordionExpanded`   | `boolean`              | Whether the date filter accordion is open (mobile)     |
+| `leagueAccordionExpanded` | `boolean`              | Whether the league filter accordion is open (mobile)   |
 
 ## Key Functions
 
@@ -109,3 +111,22 @@ Leagues with no active games today + `BOOKMARKS` if no games selected.
 3. `visibleGamesByHour` filters and groups games
 4. Live scores update every 30 seconds while the tab is focused
 5. UI renders accordions per hour group
+
+## Date Accordion Label Behavior
+
+The date filter accordion's label (the `<span>` containing the formatted date) is only shown when:
+
+- The device is **mobile** (`isSmallDevice` is `true`), **and**
+- The accordion is **closed** (`dateAccordionExpanded` is `false`)
+
+When the accordion is open, or on desktop (no accordion), only the plain translated "Date" label is displayed. The `onExpandedChange` callback updates `dateAccordionExpanded` whenever the accordion toggles.
+
+## League Accordion Label Behavior
+
+The league filter accordion's label (`leagueAccordionLabel`) dynamically reflects the current filter state, but **only when the accordion is closed** (`leagueAccordionExpanded` is `false`):
+
+- If a **team** is selected (`teamSelectedId` is set), the label shows `"Filter by league / team : <LEAGUE>/<team short name>"` (e.g. `MLB/CHC` for the Chicago Cubs).
+- If a **specific league** is selected (`activeFilter` is not `ALL`, `FAVORITES`, or `BOOKMARKS`), the label shows `"Filter by league / team : <league name>"`.
+- Otherwise, the default translated label ("League / Team" on mobile, "League" on desktop) is shown.
+
+When the accordion is open, the default translated label is always shown. The `onExpandedChange` callback updates `leagueAccordionExpanded` whenever the accordion toggles.
