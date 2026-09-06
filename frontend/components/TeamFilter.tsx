@@ -44,9 +44,6 @@ export default function TeamFilter({
           width: '100%',
           alignItems: 'center',
           paddingLeft: 15,
-          maskImage: 'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
-          WebkitMaskImage:
-            'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
           boxSizing: 'border-box',
         }}
       >
@@ -63,6 +60,7 @@ export default function TeamFilter({
             border: `1px solid ${iconColor}`,
             borderRadius: '50%',
             flexShrink: 0,
+            zIndex: 20, // stays above the slider, which extends underneath it
           }}
         >
           {themedIcon}
@@ -87,8 +85,13 @@ export default function TeamFilter({
             />
           </div>
         </div>
-        <View style={{ flex: 1, overflow: 'hidden' }}>
+        {/* The slider's ScrollView extends UNDER the loupe/VS button (negative margin) and carries the
+            dynamic edge fade itself (inside FilterSlider), exactly like the date sliders: chips fade
+            out progressively beneath the button — same visual for loupe and VS */}
+        <View style={{ flex: 1, marginLeft: -50 }}>
           <FilterSlider
+            scrollPaddingLeft={50} // compensates the negative margin: chips rest at the same position as before
+            fadeLeftInset={50} // button (40px) + its 10px margin cover the first 50px of the ScrollView → 40px fade visible right of the button
             selectedFilter={selectedFilter}
             onFilterChange={onFilterChange}
             data={filterData}

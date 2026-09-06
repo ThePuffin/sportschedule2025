@@ -107,6 +107,8 @@ export interface DateRangePickerProps {
   dateRange?: DateRange;
   selectDate?: Date;
   readonly?: boolean;
+  /** When false, hides the input box so the calendar can be opened imperatively via ref. Defaults to true. */
+  showInput?: boolean;
 }
 
 export interface IconButtonProps extends ButtonProps {

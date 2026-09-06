@@ -1,10 +1,11 @@
+import { SliderDatePickerStyles as styles } from '@/components/styles/SliderDatePicker.styles';
 import { useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 interface SliderDatePickerProps {
   selectDate: Date;
@@ -12,6 +13,8 @@ interface SliderDatePickerProps {
   disabled?: boolean;
   minDate?: Date | string;
   maxDate?: Date | string;
+  /** Optional handler for the search (magnifier) button shown above the "today" button. */
+  onSearch?: () => void;
 }
 
 export default function SliderDatePicker({
@@ -20,14 +23,16 @@ export default function SliderDatePicker({
   disabled = false,
   minDate,
   maxDate,
+  onSearch,
 }: SliderDatePickerProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const monthScrollViewRef = useRef<ScrollView>(null);
   const { setIsScrollingHorizontally } = useHorizontalScroll();
   const [dates, setDates] = useState<Date[]>([]);
   const [months, setMonths] = useState<Date[]>([]);
+  const [monthLayouts, setMonthLayouts] = useState<{ x: number; width: number }[]>([]);
   const [locale, setLocale] = useState('en-US');
-  const backgroundColor = useThemeColor({}, 'background');
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const textColor = useThemeColor({}, 'text');
   const theme = useColorScheme() ?? 'light';
 
@@ -39,7 +44,6 @@ export default function SliderDatePicker({
   const ITEM_WIDTH = 55;
   const ITEM_SPACING = 8;
   const TOTAL_ITEM_WIDTH = ITEM_WIDTH + ITEM_SPACING * 2;
-  const MONTH_ITEM_WIDTH = 150;
   const { width: windowWidth } = useWindowDimensions();
   const today = new Date();
 
@@ -114,16 +118,24 @@ export default function SliderDatePicker({
   }, [selectDate, safeMinDate, safeMaxDate]);
 
   useEffect(() => {
+    // Reset measured month offsets whenever the months list changes (stale offsets would mis-center the scroll)
+    setMonthLayouts((prev) => (prev.length === months.length ? prev : []));
+  }, [months]);
+
+  useEffect(() => {
     if (months.length > 0 && monthScrollViewRef.current) {
       const index = months.findIndex(
         (m) => m.getMonth() === selectDate.getMonth() && m.getFullYear() === selectDate.getFullYear(),
       );
       if (index !== -1) {
-        const x = index * MONTH_ITEM_WIDTH - windowWidth / 2 + MONTH_ITEM_WIDTH / 2;
-        monthScrollViewRef.current.scrollTo({ x: x, animated: true });
+        const layout = monthLayouts[index];
+        if (layout) {
+          const x = layout.x + layout.width / 2 - windowWidth / 2;
+          monthScrollViewRef.current.scrollTo({ x: x, animated: true });
+        }
       }
     }
-  }, [selectDate, months, windowWidth]);
+  }, [selectDate, months, monthLayouts, windowWidth]);
 
   useEffect(() => {
     let isRangeValid = true;
@@ -255,6 +267,26 @@ export default function SliderDatePicker({
     }, [ref, setIsScrollingHorizontally]);
   };
 
+  // Edge-fade state per row: the left fade is ALWAYS applied (from the initial render,
+  // no scroll needed); the right fade only until the end of the list is reached.
+  const [monthAtEnd, setMonthAtEnd] = useState(false);
+  const [dayAtEnd, setDayAtEnd] = useState(false);
+
+  const makeScrollHandler =
+    (setter: React.Dispatch<React.SetStateAction<boolean>>) =>
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const x = e.nativeEvent.contentOffset.x;
+      const contentWidth = e.nativeEvent.contentSize.width;
+      const visibleWidth = e.nativeEvent.layoutMeasurement.width;
+      setter(x >= contentWidth - visibleWidth - 2);
+    };
+  const handleMonthScroll = makeScrollHandler(setMonthAtEnd);
+  const handleDayScroll = makeScrollHandler(setDayAtEnd);
+  const edgeMask = (atEnd: boolean, leftInset = 0) =>
+    `linear-gradient(to right, transparent ${leftInset}px, black ${leftInset + 40}px, ${
+      atEnd ? 'black 100%' : 'black calc(100% - 40px), transparent 100%'
+    })`;
+
   useDragScroll(scrollViewRef);
   useDragScroll(monthScrollViewRef);
 
@@ -265,55 +297,16 @@ export default function SliderDatePicker({
         { flexDirection: 'row', alignItems: 'stretch', backgroundColor, opacity: disabled ? 0.5 : 1 },
       ]}
     >
-      <TouchableOpacity
-        onPress={() => !disabled && onDateChange(new Date())}
-        disabled={disabled || isSelected(today)}
-        style={[
-          styles.todayButton,
-          {
-            backgroundColor: unselectedBackgroundColor,
-            borderColor: isSelected(today) ? selectedBackgroundColor : unselectedTextColor,
-            borderWidth: 1,
-            borderRadius: 12,
-            marginRight: 15,
-          },
-          Platform.OS === 'web'
-            ? ({ cursor: disabled || isSelected(today) ? 'default' : 'pointer' } as any)
-            : undefined,
-        ]}
-      >
-        <MaterialCommunityIcons
-          name={isSelected(today) ? 'calendar-check' : 'calendar-arrow-left'}
-          size={20}
-          color={theme === 'dark' ? '#ffffff' : '#0f172a'}
-        />
-        <Text style={[styles.todayWeekdayText, { color: theme === 'dark' ? '#ffffff' : '#0f172a' }]}>
-          {new Date().toLocaleDateString(locale, { weekday: 'short' })}
-        </Text>
-        <Text style={[styles.todayDateText, { color: theme === 'dark' ? '#ffffff' : '#0f172a' }]}>
-          {new Date().toLocaleDateString(locale, { day: 'numeric', month: 'short' })}
-        </Text>
-        <Text style={[styles.todayYearText, { color: theme === 'dark' ? '#94a3b8' : '#64748b' }]}>
-          {new Date().getFullYear()}
-        </Text>
-      </TouchableOpacity>
-
-      <View
-        style={[
-          { flex: 1 },
-          Platform.OS === 'web' &&
-            ({
-              maskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 1%, black 99%, transparent 100%)',
-            } as any),
-        ]}
-      >
+      <View style={[{ flex: 1, paddingRight: 15, paddingLeft: 15 }]}>
         <View style={styles.monthContainer}>
           <ScrollView
             ref={monthScrollViewRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
+            onScroll={handleMonthScroll}
+            scrollEventThrottle={16}
+            style={{ maskImage: edgeMask(monthAtEnd), WebkitMaskImage: edgeMask(monthAtEnd) } as any}
           >
             {months.map((date, index) => {
               const selected = isMonthSelected(date);
@@ -322,15 +315,26 @@ export default function SliderDatePicker({
                 <TouchableOpacity
                   key={date.toLocaleString(locale, { month: 'long', year: 'numeric' })}
                   disabled={disabled}
+                  onLayout={(e) => {
+                    const { x, width } = e.nativeEvent.layout;
+                    setMonthLayouts((prev) => {
+                      const next = [...prev];
+                      next[index] = { x, width };
+                      return next;
+                    });
+                  }}
                   style={[
                     styles.monthItem,
                     {
-                      width: MONTH_ITEM_WIDTH,
+                      paddingHorizontal: 12, // auto-width chips with a uniform gap so spacing between months is constant
+                      marginHorizontal: 12,
                       borderWidth: isCurrentMonth ? 1 : 0,
                       borderColor: isCurrentMonth ? selectedBackgroundColor : 'transparent',
                       borderRadius: 15,
                     },
-                    Platform.OS === 'web' ? { cursor: disabled ? 'default' : 'pointer' } : undefined,
+                    Platform.OS === 'web'
+                      ? ({ cursor: disabled ? 'default' : 'pointer' } as any)
+                      : undefined,
                   ]}
                   onPress={() => onMonthSelect(date)}
                 >
@@ -360,6 +364,9 @@ export default function SliderDatePicker({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          onScroll={handleDayScroll}
+          scrollEventThrottle={16}
+          style={{ maskImage: edgeMask(dayAtEnd, 40), WebkitMaskImage: edgeMask(dayAtEnd, 40) } as any}
         >
           {dates.map((date, index) => {
             const selected = isSelected(date);
@@ -393,72 +400,30 @@ export default function SliderDatePicker({
           })}
         </ScrollView>
       </View>
+
+      <TouchableOpacity
+        onPress={() => !disabled && onSearch?.()}
+        disabled={disabled}
+        style={[
+          styles.searchButton,
+          ({
+            backgroundColor: useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background'),
+            borderColor: useThemeColor({}, 'text'),
+            borderWidth: 1,
+            boxSizing: 'border-box',
+            alignSelf: 'center', // vertically centered on the row (parent has alignItems: 'stretch')
+          } as any),
+          Platform.OS === 'web'
+            ? ({ cursor: disabled ? 'default' : 'pointer' } as any)
+            : undefined,
+        ]}
+      >
+        <Ionicons
+          name="search"
+          size={24}
+          color={useThemeColor({}, 'text')}
+        />
+      </TouchableOpacity>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  todayButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  todayWeekdayText: {
-    fontWeight: 'bold',
-    fontSize: 10,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-  },
-  todayDateText: {
-    fontWeight: 'bold',
-    fontSize: 11,
-    textAlign: 'center',
-  },
-  todayYearText: {
-    fontWeight: 'bold',
-    fontSize: 10,
-    textAlign: 'center',
-  },
-  container: {
-    paddingVertical: 10,
-  },
-  monthContainer: {
-    marginBottom: 10,
-    height: 40,
-  },
-  monthItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  monthText: {
-    fontSize: 16,
-    textTransform: 'capitalize',
-  },
-  scrollContent: {
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-  dateItem: {
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  dayName: {
-    fontSize: 12,
-    marginBottom: 4,
-    fontWeight: '600',
-  },
-  dayNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'white',
-    marginTop: 4,
-  },
-});

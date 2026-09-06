@@ -10,7 +10,7 @@ The **TeamFilter** component combines a search icon (with a hidden `Selector` mo
 - **Filter slider** — horizontal chips for quick team selection
 - **Favorite highlighting** — favorite teams appear first in the slider
 - **Theme-aware** — colors adapt to light/dark mode
-- **Masked edges** — gradient mask on the slider edges
+- **Masked edges (dynamic)** — the gradient fade lives **on the ScrollView itself** (same as `SliderDatePicker`) and is computed from the scroll position: the left fade appears only once the user scrolled away from the start, the right fade only while the end is not reached (no fade at all if the content fits). When a loupe/VS button overlaps the slider (`marginLeft: -50` + `scrollPaddingLeft/Right`), the ScrollView extends under the opaque button and chips fade out progressively beneath it — `fadeLeftInset`/`fadeRightInset` describe how many px of the ScrollView are covered by the buttons
 
 ## Props
 

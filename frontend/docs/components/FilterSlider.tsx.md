@@ -12,7 +12,7 @@ The **FilterSlider** component displays a horizontal scrollable row of filter ch
 - **Disabled items** — dimmed and non-clickable
 - **Favorite highlighting** — favorite items appear first
 - **Theme-aware** — colors adapt to light/dark mode
-- **Auto-scroll** — scrolls to start when items change
+- **Masked edges** — the ScrollView carries a CSS edge-fade (`maskImage`) that makes chips fade as they pass under the adjacent opaque button (loupe/VS/bookmarks). The left fade is **always** applied from the initial render (no scroll needed); the right fade is only drawn while the end of the list is not yet reached. The mask zone is shifted by `fadeLeftInset`/`fadeRightInset` so the visible gradient sits **outside** the button (chips stay fully transparent while sliding under the button), exactly like `SliderDatePicker`.
 - **Custom styling** — supports custom styles for items, selected items, and text
 
 ## Props
@@ -33,6 +33,10 @@ The **FilterSlider** component displays a horizontal scrollable row of filter ch
 | `multipleSelection` | `boolean`                   | Enable multi-select mode               |
 | `disabledValues`    | `string[]`                  | Values to disable                      |
 | `disableSort`       | `boolean`                   | Disable automatic sorting              |
+| `scrollPaddingLeft`   | `number`                    | Left padding applied to the ScrollView's content (compensates a negative margin when the slider extends under a button, default `0`) |
+| `scrollPaddingRight`  | `number`                    | Right padding applied to the ScrollView's content (compensates a negative margin when the slider extends under a button, default `0`) |
+| `fadeLeftInset`       | `number`                    | Width (px) covered by an opaque button at the ScrollView's left edge: the left fade ramps from the ScrollView's left edge (under the button) to full opacity ~15px past the button's right edge (default `0`) |
+| `fadeRightInset`      | `number`                    | Same as `fadeLeftInset` but for the right edge (default `0`) |
 
 ## Key Functions
 
@@ -49,7 +53,7 @@ Sorts items in this order:
 
 ### Mouse drag scrolling (web)
 
-Adds `mousedown`, `mouseleave`, `mouseup`, `mousemove` listeners to enable drag-to-scroll. Sets `isScrollingHorizontally` in the `HorizontalScrollContext` to prevent conflicts with swipe gestures.
+Adds drag-to-scroll listeners: `mousedown` on the slider, but `mousemove`/`mouseup` on `window` while dragging — so the drag keeps working even when the cursor leaves the bar (previously `mouseleave` cancelled the drag, making it feel broken). Sets `isScrollingHorizontally` in the `HorizontalScrollContext` to prevent conflicts with swipe gestures, disables text selection during the drag (`body.userSelect`), and swallows the click that follows a drag (> 5px) so no chip gets selected accidentally on release.
 
 ## Data Flow
 

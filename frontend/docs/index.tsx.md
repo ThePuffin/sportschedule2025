@@ -7,6 +7,7 @@ The **Game of the Day** tab (also called "Programme du jour") displays all games
 ## Key Features
 
 - **Date navigation** via `SliderDatePicker` (horizontal date slider)
+- **Calendar picker** — an imperatively-controlled `DateRangePicker` (single-date mode) is rendered alongside the slider; its dropdown is opened by the magnifier icon in `SliderDatePicker` (`onSearch`) and writes the picked date back to `selectDate` via `handleDateChange`
 - **Swipe gestures** to navigate between days (PanResponder)
 - **League filter** via `FilterSlider` (ALL, specific leagues, BOOKMARKS)
 - **Team filter** via `TeamFilter` (search icon + slider)

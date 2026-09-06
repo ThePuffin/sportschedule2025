@@ -3,6 +3,7 @@ import PageHeader from '@/components/PageHeader';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { getCache } from '@/utils/fetchData';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { flushSync, pushLocalDataToFirestore, syncOnLogin } from '@/utils/syncService';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
@@ -216,6 +217,8 @@ export default function ConnectionScreen() {
     setFavoriteTeams(cached || []);
     setIsFavModalOpen(true);
   };
+
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
 
   return (
     <ThemedView style={{ flex: 1 }}>

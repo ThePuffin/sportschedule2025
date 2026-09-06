@@ -287,6 +287,8 @@ export const translateWord = (word: string) => {
         changePreferences: 'Changer mes préférences',
         selectYourDates: 'Filtrer par période',
         showAllResults: 'Afficher tous les résultats',
+
+        today: 'Aujourd\'hui',
       };
       break;
     case 'de':
@@ -369,6 +371,7 @@ export const translateWord = (word: string) => {
         changePreferences: 'Präferenzen ändern',
         selectYourDates: 'Nach Zeitraum filtern',
         showAllResults: 'Alle Ergebnisse anzeigen',
+        today: 'Heute',
       };
       break;
     case 'es':
@@ -451,6 +454,7 @@ export const translateWord = (word: string) => {
         changePreferences: 'Cambiar mis preferencias',
         selectYourDates: 'Filtrar por período',
         showAllResults: 'Mostrar todos los resultados',
+        today: 'Hoy',
       };
       break;
 
@@ -532,6 +536,7 @@ export const translateWord = (word: string) => {
         changePreferences: 'Cambia le mie preferenze',
         selectYourDates: 'Filtrar por período',
         showAllResults: 'Mostra tutti i risultati',
+        today: 'Oggi',
       };
       break;
     case 'ja':
@@ -613,6 +618,7 @@ export const translateWord = (word: string) => {
         changePreferences: '設定を変更する',
         selectYourDates: '期間でフィルター',
         showAllResults: 'すべての結果を表示',
+        today: '今日',
       };
       break;
     case 'ko':
@@ -693,6 +699,7 @@ export const translateWord = (word: string) => {
         changePreferences: '기본 설정 변경',
         selectYourDates: '기간별 필터링',
         showAllResults: '모든 결과 표시',
+        today: '오늘',
       };
       break;
     case 'nl':
@@ -774,6 +781,7 @@ export const translateWord = (word: string) => {
         changePreferences: 'Voorkeuren wijzigen',
         selectYourDates: 'Filteren op periode',
         showAllResults: 'Alle resultaten tonen',
+        today: 'Vandaag',
       };
       break;
     case 'pt':
@@ -855,6 +863,7 @@ export const translateWord = (word: string) => {
         changePreferences: 'Alterar preferências',
         selectYourDates: 'Filtrar por período',
         showAllResults: 'Mostrar todos os resultados',
+        today: 'Hoje',
       };
       break;
     case 'ru':
@@ -936,6 +945,7 @@ export const translateWord = (word: string) => {
         changePreferences: 'Изменить настройки',
         selectYourDates: 'Filtrar por período',
         showAllResults: 'Показать все результаты',
+        today: 'Сегодня',
       };
       break;
     case 'zh':
@@ -1016,6 +1026,7 @@ export const translateWord = (word: string) => {
         changePreferences: '更改偏好',
         selectYourDates: '按时间段筛选',
         showAllResults: '显示所有结果',
+        today: '今天',
       };
       break;
     default:

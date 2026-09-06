@@ -6,11 +6,13 @@ import ScoreToggle from '@/components/ScoreToggle';
 import Separator from '@/components/Separator';
 import SliderDatePicker from '@/components/SliderDatePicker';
 import TeamFilter from '@/components/TeamFilter';
+import DateRangePicker, { DatePickerHandle } from '@/components/DatePicker';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
 import { useAuth } from '@/context/AuthContext';
 import { HorizontalScrollProvider, useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { getGamesStatus } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '@rneui/themed';
@@ -123,6 +125,7 @@ const GameofTheDayContent = () => {
   const gamesDayCache = useRef<{ [key: string]: GameFormatted[] }>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
+  const dateRangePickerRef = useRef<DatePickerHandle>(null);
   const gamesRef = useRef<GameFormatted[]>([]);
 
   const theme = useColorScheme() ?? 'light';
@@ -883,6 +886,8 @@ const GameofTheDayContent = () => {
     }, []),
   );
 
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
+
   return (
     <ThemedView style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
@@ -892,7 +897,7 @@ const GameofTheDayContent = () => {
           scrollEventThrottle={16}
         >
           <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-            <ThemedView>
+            <ThemedView style={{ backgroundColor }}>
               <div style={{ position: 'relative', zIndex: 20 }}>
                 {displayScoreToggle()}
                 <div
@@ -953,9 +958,10 @@ const GameofTheDayContent = () => {
                     </ThemedElements>
                   )}
 
-                  <FilterAccordion
-                    label={
-                      isSmallDevice && !dateAccordionExpanded ? (
+                  <ThemedElements>
+                    <FilterAccordion
+                      label={
+                        isSmallDevice && !dateAccordionExpanded ? (
                         <span>
                           {translateFilterLabel('date')} :{' '}
                           <i>
@@ -976,19 +982,37 @@ const GameofTheDayContent = () => {
                     isSmallDevice={isSmallDevice}
                     onExpandedChange={setDateAccordionExpanded}
                   >
-                    <div style={{ paddingLeft: 15, paddingRight: 15 }}>
+                    <div>
                       <SliderDatePicker
                         onDateChange={(date) => handleDateChange(date, date)}
                         selectDate={selectDate}
                         disabled={isLoading}
                         minDate={minDate}
                         maxDate={maxDate}
+                        onSearch={() => dateRangePickerRef.current?.open()}
                       />
+                      {/*
+                        Hidden date-range picker in single-date mode. It is opened
+                        imperatively by the SliderDatePicker magnifier (onSearch) and
+                        writes the selected date back to `selectDate` via
+                        `handleDateChange`. `showInput={false}` avoids a duplicate
+                        input box since the selected date is already displayed in the
+                        accordion header above.
+                      */}
+                      <div style={{ position: 'relative', height: 0 }}>
+                        <DateRangePicker
+                          ref={dateRangePickerRef}
+                          selectDate={selectDate}
+                          onDateChange={handleDateChange}
+                          showInput={false}
+                        />
+                      </div>
                     </div>
                     <div style={{ paddingTop: 10, paddingBottom: 10 }}>
                       <Separator />
                     </div>
-                  </FilterAccordion>
+                    </FilterAccordion>
+                  </ThemedElements>
                 </div>
               </div>
             </ThemedView>

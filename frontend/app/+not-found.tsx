@@ -4,11 +4,14 @@ import { StyleSheet } from 'react-native';
 import AppLogo from '@/components/AppLogo';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { translateWord } from '@/utils/utils';
 
 export default function NotFoundScreen() {
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
+
   return (
-    <ThemedView style={{ flex: 1 }}>
+    <ThemedView style={{ flex: 1, backgroundColor }}>
       <div
         style={{
           display: 'flex',

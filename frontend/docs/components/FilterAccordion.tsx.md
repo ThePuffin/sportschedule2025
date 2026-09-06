@@ -11,6 +11,7 @@ The **FilterAccordion** component provides a collapsible section for filter cont
 - **Expanded state callback** — notifies parent when expanded state changes
 - **Theme-aware** — colors adapt to light/dark mode
 - **Label animation** — the label (including the dynamic filter value after the colon) fades in and slides down whenever the accordion is opened or closed, via a CSS keyframe animation
+- **Unified background** — both mobile and desktop modes wrap the accordion/separator in `ThemedElements` so the filter band shares the same background (`#F0F0F0`/`#121212`) as the filter content below it
 
 ## Props
 

@@ -2,6 +2,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { ListItem } from '@rneui/themed';
 import React, { ReactNode, useEffect, useState } from 'react';
 import Separator from './Separator';
+import { ThemedElements } from './ThemedElements';
 
 interface FilterAccordionProps {
   readonly label: string | ReactNode;
@@ -30,14 +31,17 @@ export default function FilterAccordion({
   if (!isSmallDevice) {
     return (
       <>
-        <Separator label={label} />
+        {/* The label separator must sit on the same background as the filter content below it (ThemedElements), not the page background */}
+        <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 }}>
+          <Separator label={label} />
+        </ThemedElements>
         {children}
       </>
     );
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <ThemedElements style={{ width: '100%' }}>
       <ListItem.Accordion
         content={
           <ListItem.Content
@@ -97,6 +101,6 @@ export default function FilterAccordion({
       >
         <div style={{ width: '100%', paddingTop: 10, paddingBottom: 10 }}>{children}</div>
       </ListItem.Accordion>
-    </div>
+    </ThemedElements>
   );
 }

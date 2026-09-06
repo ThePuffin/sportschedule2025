@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { syncToFirestore } from '@/utils/syncService';
 import {
   getFilterAccordionLabel,
@@ -71,6 +72,7 @@ export default function Schedule() {
   const { width } = useWindowDimensions();
   const colorScheme = useColorScheme();
   const { backgroundColor: selectedBackgroundColor } = useFavoriteColor('#000');
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   const isSmallDevice = width <= 768;
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
@@ -717,7 +719,7 @@ export default function Schedule() {
               zIndex: 10,
             }}
           >
-            <ThemedView>
+            <ThemedView style={{ backgroundColor }}>
               <PageHeader
                 rightElement={
                   <PreviousScoreToggle value={showPreviousScores} onValueChange={handlePreviousScoreToggle} />
@@ -738,9 +740,9 @@ export default function Schedule() {
                         availableLeagues={leagues}
                       />
                     </ThemedElements>
-                    <div style={{ marginTop: 10, marginBottom: 10 }}>
+                    <ThemedElements style={{ marginTop: 10, marginBottom: 10 }}>
                       <Separator />
-                    </div>
+                    </ThemedElements>
                     <div style={{ width: '100%' }}>
                       <TeamFilter
                         icon={<Ionicons name="search" size={24} color="white" />}
@@ -863,6 +865,7 @@ export default function Schedule() {
                     isSmallDevice={isSmallDevice}
                     onExpandedChange={setIsDateAccordionOpen}
                   >
+                    <ThemedElements style={{ width: '100%' }}>
                     <FilterSlider
                       disableSort={true}
                       selectedFilter={monthFilter.length > 0 ? monthFilter[0] : 'ALL'}
@@ -892,12 +895,13 @@ export default function Schedule() {
                         fontWeight: 'bold',
                       }}
                     />
+                    </ThemedElements>
                   </FilterAccordion>
                 )}
                 {!isSmallDevice || (visibleGamesByMonth.length > 1 ? isDateAccordionOpen : isTeamAccordionOpen) ? (
-                  <div style={{ paddingTop: 10, paddingBottom: 10 }}>
+                  <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 }}>
                     <Separator />
-                  </div>
+                  </ThemedElements>
                 ) : null}
               </div>
             </ThemedView>

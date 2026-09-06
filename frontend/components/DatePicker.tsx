@@ -3,11 +3,28 @@ import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { getDateRangeLimits } from '@/utils/dateRange';
 import { DateRangePickerProps } from '@/utils/types';
-import { brightenColor } from '@/utils/utils';
+import { brightenColor, translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
+
+/**
+ * Imperative handle exposed via `ref` so parent components (e.g. the
+ * magnifier button in `SliderDatePicker`) can open / close the calendar
+ * dropdown of a `DateRangePicker` instance.
+ */
+export interface DatePickerHandle {
+  open: () => void;
+  close: () => void;
+}
 
 // Helper to format date to YYYY-MM-DD (local time)
 const toDateString = (date: Date) => {
@@ -23,21 +40,37 @@ const parseDateString = (dateStr: string) => {
   return new Date(y, m - 1, d);
 };
 
-export default function DateRangePicker({
-  onDateChange,
-  dateRange = { startDate: new Date(), endDate: new Date() },
-  selectDate,
-  readonly = false,
-}: Readonly<DateRangePickerProps>) {
-  const [isOpen, setIsOpen] = useState(false);
+const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerProps>>(
+  (
+    {
+      onDateChange,
+      dateRange = { startDate: new Date(), endDate: new Date() },
+      selectDate,
+      readonly = false,
+      showInput = true,
+    },
+    ref,
+  ) => {
+    const [isOpen, setIsOpen] = useState(false);
   const [locale, setLocale] = useState('en-US');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textColor = useThemeColor({}, 'text');
-  const backgroundColor = useThemeColor({}, 'background');
+  // Same palette as ThemedElements so the date picker matches the filter sections' background
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const borderColor = useThemeColor({}, 'text');
   const textDisabledColor = useThemeColor({ light: '#d9e1e8', dark: '#444444' }, 'text');
   const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#000');
   const todayBrightColor = useMemo(() => brightenColor(selectedBackgroundColor, 90), [selectedBackgroundColor]);
+
+  // Imperative handle so parents can open/close the calendar (e.g. the magnifier
+  // button in SliderDatePicker opens this picker in single-date mode).
+  useImperativeHandle(
+    ref,
+    (): DatePickerHandle => ({
+      open: () => setIsOpen(true),
+      close: () => setIsOpen(false),
+    }),
+  );
 
   // Use date limits from the API/cache instead of hardcoded today
   const dateLimits = useMemo(() => getDateRangeLimits(), []);
@@ -54,7 +87,7 @@ export default function DateRangePicker({
     }
   }, []);
 
-  // Synchronize with props
+  // Synchronize with props (range mode)
   useEffect(() => {
     if (!selectDate) {
       setTempRange({
@@ -116,6 +149,14 @@ export default function DateRangePicker({
     }
   };
 
+  const goToToday = () => {
+    const today = new Date();
+    const date = new Date(today);
+    date.setHours(23, 59, 59, 999);
+    onDateChange(date, date);
+    setIsOpen(false);
+  };
+
   const getMarkedDates = () => {
     const marked: any = {};
     const color = selectedBackgroundColor;
@@ -123,7 +164,7 @@ export default function DateRangePicker({
 
     if (selectDate) {
       const dateStr = toDateString(selectDate);
-      marked[dateStr] = { selected: true, color, textColor };
+      marked[dateStr] = { selected: true, color, textColor, startingDay: true, endingDay: true };
     } else {
       const { start, end } = tempRange;
       if (start) {
@@ -164,37 +205,39 @@ export default function DateRangePicker({
   const minDate = dateLimits.minDate;
   const maxDate = dateLimits.maxDate;
 
-  return (
+    return (
     <div ref={wrapperRef} style={{ position: 'relative', zIndex: 100, width: '100%' }}>
-      <TouchableOpacity
-        onPress={() => !readonly && setIsOpen(!isOpen)}
-        disabled={readonly}
-        style={[styles.inputContainer, { borderColor, backgroundColor }, readonly && styles.readonly]}
-      >
-        <Icon
-          name="calendar"
-          type="font-awesome"
-          size={20}
-          color={readonly ? 'gray' : textColor}
-          style={{ marginRight: 10 }}
-        />
-        <ThemedText style={[styles.inputText, readonly && { color: 'gray' }]}>{displayText()}</ThemedText>
-        {!readonly && (
+      {showInput && (
+        <TouchableOpacity
+          onPress={() => !readonly && setIsOpen(!isOpen)}
+          disabled={readonly}
+          style={[styles.inputContainer, { borderColor, backgroundColor }, readonly && styles.readonly]}
+        >
           <Icon
-            name={isOpen ? 'chevron-up' : 'chevron-down'}
+            name="calendar"
             type="font-awesome"
-            size={12}
-            color={textColor}
-            style={{ marginLeft: 10 }}
+            size={20}
+            color={readonly ? 'gray' : textColor}
+            style={{ marginRight: 10 }}
           />
-        )}
-      </TouchableOpacity>
+          <ThemedText style={[styles.inputText, readonly && { color: 'gray' }]}>{displayText()}</ThemedText>
+          {!readonly && (
+            <Icon
+              name={isOpen ? 'chevron-up' : 'chevron-down'}
+              type="font-awesome"
+              size={12}
+              color={textColor}
+              style={{ marginLeft: 10 }}
+            />
+          )}
+        </TouchableOpacity>
+      )}
 
       {isOpen && (
         <div
           style={{
             position: 'absolute',
-            top: '110%',
+            top: showInput ? '110%' : '0',
             left: 0,
             right: 0,
             display: 'flex',
@@ -205,7 +248,11 @@ export default function DateRangePicker({
           <View
             style={[
               styles.calendarContainer,
-              { backgroundColor, width: Platform.select({ web: '90%', default: 350 }) as any, maxWidth: 350 },
+              {
+                backgroundColor,
+                width: Platform.OS === 'web' ? '90%' : 350,
+                maxWidth: 350,
+              },
             ]}
           >
             <Calendar
@@ -231,12 +278,38 @@ export default function DateRangePicker({
                 textDayHeaderFontWeight: 'bold',
               }}
             />
+            {selectDate && (
+              <TouchableOpacity
+                onPress={goToToday}
+                style={{
+                  marginTop: 8,
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                  backgroundColor: selectedBackgroundColor,
+                  borderRadius: 8,
+                  alignSelf: 'center',
+                }}
+              >
+                <ThemedText
+                  style={{
+                    color: selectedTextColor,
+                    fontWeight: 'bold',
+                    fontSize: 13,
+                    textAlign: 'center',
+                  }}
+                >
+                  {translateWord('today')}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
           </View>
         </div>
       )}
     </div>
   );
-}
+});
+
+export default DateRangePicker;
 
 const styles = StyleSheet.create({
   inputContainer: {

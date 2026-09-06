@@ -2,6 +2,7 @@ import AppLogo from '@/components/AppLogo';
 import NoResults from '@/components/NoResults';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import { leagueLogos } from '@/constants/enum';
 import {
   fetchLeagues,
@@ -110,8 +111,10 @@ export default function GameofTheDay() {
     return displayNoContent();
   }
 
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
+
   return (
-    <ThemedView style={{ flex: 1 }}>
+    <ThemedView style={{ flex: 1, backgroundColor }}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView ref={scrollViewRef} scrollEventThrottle={16}>
         <div

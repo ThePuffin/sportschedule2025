@@ -2,6 +2,224 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Fix: Mobile filter accordion background now matches desktop
+
+### Symptom
+
+On mobile, the filter accordion (team/league and date/month) did not have the same background color as the filter content below it. On desktop, the separator band correctly used the `#F0F0F0` (light) / `#121212` (dark) background via `ThemedElements`, but on mobile the accordion wrapper was a plain `<div>` with no background, causing a visual inconsistency.
+
+### Root cause
+
+In `FilterAccordion.tsx`:
+- Desktop mode: the `Separator` was wrapped in `<ThemedElements>` (correct)
+- Mobile mode: the `ListItem.Accordion` was wrapped in a plain `<div style={{ width: '100%' }}>` (missing background)
+
+### Solution
+
+Modified file: `frontend/components/FilterAccordion.tsx`
+
+Wrapped the mobile accordion in `<ThemedElements>` so both mobile and desktop modes share the same background color:
+
+```tsx
+return (
+  <ThemedElements style={{ width: '100%' }}>
+    <ListItem.Accordion ...>
+      ...
+    </ListItem.Accordion>
+  </ThemedElements>
+);
+```
+
+---
+
+## Fix: Page background color now matches filter background
+
+### Symptom
+
+The page background had a visible color difference with the filter sections (`#F0F0F0`/`#121212`), creating a hard edge between the filter area and the rest of the page.
+
+### Solution
+
+Applied the filter background color (`#F0F0F0`/`#121212`) to the main container of each page:
+
+- `frontend/app/(tabs)/index.tsx` - Added `backgroundColor` to root `ThemedView`
+- `frontend/app/(tabs)/schedule.tsx` - Added `backgroundColor` to root `ThemedView`
+- `frontend/app/(tabs)/calendar.tsx` - Added `backgroundColor` to root `ThemedView`
+
+---
+
+## Change: Smoother drag-to-scroll on the filter sliders (teams bar on schedule)
+
+The drag listeners for `mousemove`/`mouseup` were attached to the slider element itself, so as soon as the cursor left the bar during a drag (very frequent on the teams bar, where chips fill the whole row) `mouseleave` cancelled the drag. `mousemove`/`mouseup` are now listened on `window` while dragging (drag continues outside the bar and ends wherever the button is released), text selection is disabled during the drag, and a click following a drag of more than 5px is swallowed so releasing over a chip no longer changes the filter. Applies to all `FilterSlider` instances (leagues, teams, VS, months).
+
+
+## Change: Team filter fade now matches the date sliders (loupe & VS)
+
+The fade was invisible on the teams slider because it was applied to the slider's outer container while the `ScrollView` (offset by the `paddingLeft: 50` compensation) hard-clipped its content right at the button's edge — there was nothing left to fade. The mask now lives **on the ScrollView itself**, exactly like `SliderDatePicker`: the ScrollView extends under the button via a negative margin, the compensating padding moved to `contentContainerStyle` (`scrollPaddingLeft`/`scrollPaddingRight` props), and the gradient runs from the ScrollView's left edge (under the button) to full opacity ~15px past it — the same progressive look as the dates, for the loupe, the VS button and the calendar teams row.
+
+
+## Change: Edge fades repositioned into the visible area (they were hidden under the opaque buttons)
+
+The dynamic fades were drawn in the zone covered by the opaque loupe/VS buttons, making them invisible. `FilterSlider` now takes `fadeLeftInset`/`fadeRightInset` (px) that shift each fade zone so the gradient is drawn **just outside** the button: `TeamFilter` passes `fadeLeftInset={40}`, the calendar teams row `fadeLeftInset={40}` / `fadeRightInset={50}`, and the `SliderDatePicker` days row uses a 40px left inset. Chips remain fully transparent while sliding under the buttons (no text peeking through), and the fade is clearly visible next to the button as soon as the slider is scrolled away from its start.
+
+## Change: Edge fades are always applied from the initial render (left fade no longer waits for a first scroll)
+
+The left edge fade used to wait until the slider was scrolled before appearing — meaning chips started abruptly and the fade felt "stuck" on the teams bar. The left fade is now **always** applied from the initial render; only the right fade remains conditional (shown while the end of the list is not yet reached). `FilterSlider` tracks a single `atEnd` boolean; `SliderDatePicker` tracks `monthAtEnd` / `dayAtEnd` independently for each row.
+
+- `FilterSlider` now takes `fadeLeftInset`, `fadeRightInset`, `scrollPaddingLeft`, `scrollPaddingRight` props (see docs) and the mask lives on the ScrollView.
+
+## Change: Chips fade under the loupe/VS buttons — buttons never masked, uniform right spacing
+
+The edge-fade mask previously sat on the whole filter row, so the gradient visually bled onto the loupe/VS button and chips faded ~40px *before* reaching it (inconsistent spacing). Now the fade is applied to the slider wrapper only, and the slider extends 50px underneath the button (`marginLeft: -50`, compensated by `paddingLeft: 50` on `FilterSlider`), so chips fade out **beneath** the opaque button and are fully visible immediately after its 10px gap. The buttons get `zIndex: 20` so they stay above the slider.
+
+- `frontend/components/TeamFilter.tsx` (loupe & "VS" buttons — all tabs): mask moved from the row to the slider wrapper; wrapper `marginLeft: -50`; `FilterSlider style={{ paddingLeft: 50 }}`; icon button `zIndex: 20`.
+- `frontend/app/(tabs)/calendar.tsx` (teams row: playlist-add + bookmarks buttons): same pattern with `marginLeft/Right: -50` and `FilterSlider style={{ paddingLeft: 50, paddingRight: 50 }}`; both buttons `zIndex: 20`.
+- `frontend/components/SliderDatePicker.tsx` (magnifier over months/days): fade zone widened to `black 55px → calc(100% - 55px)` so chips fade under the loupe on both edges.
+
+## Change: Date filter sections match the team filter background (calendar & schedule)
+
+- `frontend/components/DatePicker.tsx` — the input/calendar background used `useThemeColor({}, 'background')` (default theme palette: `#ffffff` / `#151718`), which differed from the `ThemedElements` sections (`#F0F0F0` / `#121212`); it now uses the same explicit palette, so the "filter by period" accordion on the Calendar tab and the date-range picker everywhere match the surrounding filter sections.
+- `frontend/app/(tabs)/schedule.tsx` — the month `FilterSlider` inside the "filter by date" accordion is now wrapped in `<ThemedElements style={{ width: '100%' }}>` (its own background stays transparent), so this section has the same background as the league/team filter sections instead of the page background.
+
+---
+
+## Change: Separator bands now match the filter sections' background (all tabs)
+
+The padded `<div>` wrappers around `<Separator />` between filter sections (and the desktop label separator inside `FilterAccordion`) had **no background**, so the ~20px band around the line showed the page background while the filter section below it uses the `ThemedElements` background (`#F0F0F0` light / `#121212` dark). All these wrappers now use `ThemedElements`:
+
+- `frontend/components/FilterAccordion.tsx` — desktop branch: the `Separator label` is wrapped in `ThemedElements` (padding 10 vertical), matching the filter content rendered under it (affects every tab using `FilterAccordion` on desktop).
+- `frontend/app/(tabs)/schedule.tsx` — the separator between the league slider and `TeamFilter` (mobile accordion) and the trailing separator after the last filter accordion are wrapped in `ThemedElements`.
+- `frontend/app/(tabs)/calendar.tsx` — the trailing separator after the date accordion is wrapped in `ThemedElements`.
+- `frontend/app/(tabs)/index.tsx` — already correct from the previous change (its separators are inside the date/team `ThemedElements` wrappers).
+
+---
+
+## Change: Date filter section background + uniform month spacing
+
+Three visual fixes on the Game of the Day tab filter stack:
+
+- **Section background** — in `index.tsx` the "filter by date" `FilterAccordion` was the only one of the three filter sections **not** wrapped in `<ThemedElements>`, so its header ("FILTRER PAR DATE") and trailing `Separator` sat on the page background (visibly darker). It is now wrapped like the league/team sections.
+- **Loupe alignment** — a consequence of the same missing wrapper: the whole date band (including the `SliderDatePicker` magnifier) now sits on the same `ThemedElements` background and left edge (`left: 15`, same 40px circle) as the `TeamFilter` loupe above.
+- **Uniform month spacing** — month chips previously had a fixed `width: 150` with centered labels, so the visible gaps between labels varied with label length ("Juin 2026" vs "Septembre 2026"). Chips are now auto-width (`paddingHorizontal: 12`) with a uniform `marginHorizontal: 12`, so the gap between consecutive months is constant. The auto-centering scroll no longer uses `index * 150`: each chip's `{ x, width }` is measured via `onLayout` into a `monthLayouts` state array (reset whenever the `months` list changes) and the scroll target is `layout.x + layout.width / 2 - windowWidth / 2`.
+
+### Files changed
+- `frontend/app/(tabs)/index.tsx` — date `FilterAccordion` wrapped in `<ThemedElements>`.
+- `frontend/components/SliderDatePicker.tsx` — auto-width month chips with uniform margins; `monthLayouts` measurement + scroll math update; `MONTH_ITEM_WIDTH` removed.
+- `frontend/docs/components/SliderDatePicker.tsx.md` — month row and auto-centering behaviour updated.
+
+---
+
+## Change: SliderDatePicker — magnifier moved to a left-edge overlay aligned with the month row
+
+The search (magnifier) button is an **overlay on the left edge, aligned with the month row** (not vertically centered on the whole component). Months start to the right of the button and are vertically centered on it; the day row spans the full width and scrolls underneath the button.
+
+- `searchButton` is `position: 'absolute'` (`left: 15`, `top: 10`, `zIndex: 10`) — still a 40×40 circular button, visually identical to the `TeamFilter` magnifier. `top: 10` matches the container's `paddingVertical: 10`, so the 40px button is exactly centered on the 40px month row.
+- `monthContainer` gained `paddingLeft: 55` (15 left offset + 40 button width) so month chips start right of the button.
+- The rows wrapper is `flex: 1` with `paddingLeft: 15` / `paddingRight: 15` and keeps the web-only edge-fade mask; the day row is not padded, so days scroll under the button.
+- The external wrapper in `index.tsx` no longer adds horizontal padding (it previously stacked `paddingLeft: 15` on top of the component's internal offsets, shifting the loupe to ~30px instead of 15px). `monthContainer` uses `paddingLeft: 40` (button 15 + 40 wide; the scroll content's 10px padding provides the gap), so months start at ~65px — the same column where `TeamFilter` chips start after its loupe.
+- The component background now uses the same themed color as `TeamFilter`/`ThemedElements` (`useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background')`) instead of the default `Colors.tsx` background (`#151718` in dark mode), which made the date strip visibly darker than the sections above.
+- `container` keeps `position: 'relative'` to anchor the absolutely-positioned button.
+
+### Files changed
+- `frontend/components/SliderDatePicker.tsx` — rows wrapper padding adjusted; magnifier stays the last child (right-edge overlay → left-edge overlay).
+- `frontend/components/styles/SliderDatePicker.styles.ts` — `searchButton` repositioned (`left: 15`, `top: 10`); `monthContainer` `paddingLeft: 40`.
+- `frontend/app/(tabs)/index.tsx` — removed the duplicate horizontal padding on the wrapper around `SliderDatePicker`.
+- `frontend/docs/components/SliderDatePicker.tsx.md` — purpose and search-button feature updated.
+
+---
+
+## Change: SliderDatePicker — magnifier moved to a right-edge overlay, rows span full width
+
+The search (magnifier) button is no longer a left column: it now **floats on the right edge** of the slider while the month and day rows occupy the full available width and scroll **underneath** it.
+
+- `searchButton` is now `position: 'absolute'` (`right: 15`, `top: '50%'` + `transform: translateY(-20)`, `zIndex: 10`) — still a 40×40 circular button, visually identical to the `TeamFilter` magnifier.
+- `container` gained `position: 'relative'` to anchor the absolutely-positioned button.
+- The rows wrapper uses `flex: 1` with `paddingLeft: 15` and `paddingRight: 55` (space reserved so content remains scrollable past the button) and keeps the web-only edge-fade mask.
+- The button is rendered as the last child of the component root, so it overlays both the month row and the day row.
+
+### Files changed
+- `frontend/components/SliderDatePicker.tsx` — left column removed; rows wrapper is now `flex: 1` + horizontal padding; magnifier rendered last as a right-edge overlay.
+- `frontend/components/styles/SliderDatePicker.styles.ts` — `searchButton` converted to absolute overlay positioning; `container` set `position: 'relative'`.
+- `frontend/docs/components/SliderDatePicker.tsx.md` — purpose and search-button feature updated.
+
+---
+
+## Change: SliderDatePicker — remove "today" button, center magnifier
+## Change: SliderDatePicker — remove "today" button, center magnifier
+
+The date slider no longer has a dedicated "today" (current date) button. The left column now contains **only** the search (magnifier) button, vertically and horizontally centered, sized exactly like the team-filter magnifier in `TeamFilter`.
+
+- Removed the "today" button (`todayButton`, `todayDateText`, `todayYearText` styles and their JSX) — day selection back to today is still possible via the magnifier → `DateRangePicker` "Aujourd'hui" button.
+- The magnifier is now a circular button (`styles.searchButton`, 40×40, `borderRadius: 20`, `borderWidth: 1`) with the themed `#F0F0F0`/`#121212` background and text-colored border, matching `TeamFilter`.
+- Left column uses `justifyContent: 'center'` + `alignItems: 'center'` so the loupe is vertically centered spanning both date rows.
+
+### Files changed
+- `frontend/components/SliderDatePicker.tsx` — left column simplified, "today" button removed, magnifier centered/styled.
+- `frontend/components/styles/SliderDatePicker.styles.ts` — removed `todayButton`/`todayDateText`/`todayYearText`, `searchButton` now circular 40×40.
+- `frontend/docs/components/SliderDatePicker.tsx.md` — updated purpose/features/props and removed stale "today" button references.
+
+---
+
+## Change: DateRangePicker — "Aujourd'hui" quick-return button (single-date mode)
+
+The `DateRangePicker` calendar includes a quick-return-to-today button **only in single-date mode** (`selectDate`, used by the magnifier). The date-range (`dateRange`) mode does not show it.
+
+- Button labeled with the translated `today` word appears at the bottom of the calendar; tapping selects today (end-of-day) and closes.
+- Removed the non-functional month-tracking (`currentVisibleDate` / `onVisibleMonthsChange`) logic that made the button appear/disappear and had no effect on navigation.
+
+### Files changed
+- `frontend/components/DatePicker.tsx` — simplified `goToToday`, always visible in `selectDate` mode, removed `currentVisibleDate`/`isCurrentMonthToday`/`handleVisibleMonthsChange`.
+- `frontend/docs/components/DatePicker.tsx.md` — updated feature/state/function docs.
+
+---
+
+Added an optional search button to the `SliderDatePicker` date slider (Game of the Day tab):
+
+- A magnifier button (`MaterialCommunityIcons 'magnify'`) is rendered **above the "today" button** when the new optional `onSearch` prop is provided; hidden otherwise (no behavior wired yet — the action is left to the caller).
+- **Alignment**: the search button has the same height as the month/year chips row (`40px`, `styles.monthContainer`) with the same `10px` bottom gap, and the "today" button is now `flex: 1` in the left column — so the "today" button height matches exactly the day buttons row.
+- Same visual style as the "today" button (background, border, radius 12, icon size 20, theme-aware colors).
+
+### Files changed
+
+- `frontend/components/SliderDatePicker.tsx` — left column wrapped in a `View`, new `onSearch` prop, search button always rendered (no-op until `onSearch` is provided), weekday text removed from the "today" button, static styles moved to a dedicated file.
+- `frontend/components/styles/SliderDatePicker.styles.ts` — new file exporting `SliderDatePickerStyles` (all static `StyleSheet.create` styles of the component).
+- `frontend/docs/components/SliderDatePicker.tsx.md` — new documentation file.
+
+---
+
+## Change: Magnifier button opens the date picker (single-date)
+
+The search (magnifier) button rendered by `SliderDatePicker` (Game of the Day tab) is now wired. Clicking it opens the `DateRangePicker` calendar in **single-date mode** and writes the picked date back to `selectDate`.
+
+- `DateRangePicker` (`frontend/components/DatePicker.tsx`) is converted to a `forwardRef` component exposing `open()` / `close()` via a new `DatePickerHandle` interface; a new `showInput` prop (default `true`) hides the input box so the calendar can be opened imperatively while keeping the selected date displayed in the accordion header.
+- `frontend/app/(tabs)/index.tsx` renders a hidden `DateRangePicker` (ref + `selectDate` + `showInput={false}`) and passes `onSearch={() => dateRangePickerRef.current?.open()}` to `SliderDatePicker`. The selected date flows back through the existing `handleDateChange(start, end)`.
+
+### Files changed
+- `frontend/components/DatePicker.tsx` — `forwardRef`, `useImperativeHandle`, `showInput` prop.
+- `frontend/utils/types.tsx` — `showInput?: boolean` added to `DateRangePickerProps`.
+- `frontend/app/(tabs)/index.tsx` — import + ref + `onSearch` wiring + hidden picker instance.
+- `frontend/docs/components/DatePicker.tsx.md` — imperative handle + `showInput` docs.
+- `frontend/docs/components/SliderDatePicker.tsx.md` — `onSearch` now wired.
+- `frontend/docs/index.tsx.md` — calendar-picker feature note.
+
+---
+
+## Change: "Aujourd'hui" quick-return button in `DateRangePicker`
+
+The `DateRangePicker` calendar now includes a quick-return-to-today button:
+
+- A button labeled **"Aujourd'hui"** appears below the calendar when the displayed month is **not** the current month. It is hidden when already viewing today's month.
+- Tapping it jumps the calendar back to today's month. In single-date mode, it also selects today's date (end-of-day) and closes the picker.
+- New state: `currentVisibleDate` (YYYY-MM-DD) tracks the visible month via `onVisibleMonthsChange`. New functions: `handleVisibleMonthsChange`, `goToToday`, and memo `isCurrentMonthToday`.
+
+### Files changed
+- `frontend/components/DatePicker.tsx` — `currentVisibleDate` state, `handleVisibleMonthsChange`, `goToToday`, `isCurrentMonthToday` memo, "Aujourd'hui" button in calendar container.
+- `frontend/docs/components/DatePicker.tsx.md` — new state, functions, and feature note.
+
+
+---
+
+
 ---
 
 ## Change: Invert bottom logo and date/time position in stacked (vertical) game cards

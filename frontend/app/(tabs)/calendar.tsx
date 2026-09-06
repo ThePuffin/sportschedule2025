@@ -638,7 +638,7 @@ export default function Calendar() {
         scrollEventThrottle={16}
       >
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-          <ThemedView>
+          <ThemedView style={{ backgroundColor }}>
             <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
               <FilterAccordion
                 label={teamAccordionLabel}
@@ -674,23 +674,17 @@ export default function Calendar() {
                         borderStyle: 'solid',
                         borderRadius: 20,
                         flexShrink: 0,
+                        zIndex: 20, // stays above the slider, which extends underneath it
                       }}
                     >
                       <MaterialIcons name="playlist-add" size={24} color={iconColor} />
                     </TouchableOpacity>
-                    <View
-                      style={
-                        {
-                          flex: 1,
-                          overflow: 'hidden',
-                          maskImage:
-                            'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
-                          WebkitMaskImage:
-                            'linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%)',
-                        } as any
-                      }
-                    >
+                    <View style={{ flex: 1, marginLeft: -50, marginRight: -50 }}>
                       <FilterSlider
+                        scrollPaddingLeft={50} // compensates the negative margins: chips rest at the same position
+                        scrollPaddingRight={50}
+                        fadeLeftInset={40} // playlist button spans the first 40px of the ScrollView
+                        fadeRightInset={50} // bookmark button spans the last 50px of the ScrollView
                         multipleSelection={true}
                         disableSort={true}
                         data={filteredTeamsSelected
@@ -723,6 +717,7 @@ export default function Calendar() {
                         borderStyle: 'solid',
                         borderRadius: 20,
                         flexShrink: 0,
+                        zIndex: 20, // stays above the slider, which extends underneath it
                       }}
                     >
                       <Ionicons
@@ -747,9 +742,9 @@ export default function Calendar() {
                 </ThemedElements>
               </FilterAccordion>
               {!isSmallDevice || isDateAccordionOpen ? (
-                <div style={{ paddingTop: 10, paddingBottom: 10 }}>
+                <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 }}>
                   <Separator />
-                </div>
+                </ThemedElements>
               ) : null}
             </div>
           </ThemedView>
