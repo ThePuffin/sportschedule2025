@@ -101,6 +101,12 @@ Fetches live scores for a batch of game IDs (POST, 15s timeout).
 
 Fetches min/max date limits. Cached for 24 hours.
 
+### `fetchClosestDates({ league?, teamSelectedId?, date? })`
+
+Calls `GET /games/dates/closest` with `leagues` and/or `teamSelectedIds` query params.
+Returns `{ previousDate, nextDate }` (nullable). No cache — used when the Schedule
+screen has no upcoming games to decide whether to offer the "Enable history" button.
+
 ## Team Games Cache
 
 ```typescript

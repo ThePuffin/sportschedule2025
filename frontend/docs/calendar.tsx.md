@@ -31,6 +31,7 @@ The **Calendar** tab (also called "Agenda") displays games for multiple selected
 | `gamesModalVisible`   | `boolean`                | Bookmarked games modal visibility |
 | `isTeamAccordionOpen` | `boolean`                | Team filter accordion state       |
 | `isDateAccordionOpen` | `boolean`                | Date range accordion state        |
+| `datepickerOpen`      | `boolean`                | Whether the calendar datepicker modal is open |
 
 ## Key Functions
 

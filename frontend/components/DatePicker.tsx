@@ -13,7 +13,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 
 /**
@@ -48,10 +48,19 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
       selectDate,
       readonly = false,
       showInput = true,
+      onOpenChange,
+      title,
     },
     ref,
   ) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [showModal, setShowModal] = useState(false);
+  // Month currently displayed in the calendar. `current` is a controlled prop on
+  // react-native-calendars: without tracking it here, tapping the month arrows
+  // snaps the calendar back to the initial month.
+  const [visibleMonth, setVisibleMonth] = useState<string>(
+    toDateString(selectDate ?? dateRange.startDate),
+  );
   const [locale, setLocale] = useState('en-US');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textColor = useThemeColor({}, 'text');
@@ -61,6 +70,13 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
   const textDisabledColor = useThemeColor({ light: '#d9e1e8', dark: '#444444' }, 'text');
   const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#000');
   const todayBrightColor = useMemo(() => brightenColor(selectedBackgroundColor, 90), [selectedBackgroundColor]);
+
+  // Modal title: use the explicit `title` prop when provided (so the modal matches
+  // the accordion/filter label on the parent page), otherwise derive it from the mode:
+  // single-date → "Filter by period", range → "Filter by interval".
+  const modalTitle = title ?? (selectDate
+    ? translateWord('selectYourDates')
+    : translateWord('filterInterval'));
 
   // Imperative handle so parents can open/close the calendar (e.g. the magnifier
   // button in SliderDatePicker opens this picker in single-date mode).
@@ -72,6 +88,39 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
     }),
   );
 
+// Notify the parent whenever the calendar opens/closes so it can sync its UI
+  // (e.g. switch the magnifier button to a close icon), including when the calendar
+  // is closed by selecting a date or clicking outside.
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
+
+  // Delay the visual appearance of the modal so the parent has time to hide
+  // the separator (or any other UI sync) before the modal fades in.
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => setShowModal(true), 150);
+      return () => clearTimeout(timer);
+    } else {
+      setShowModal(false);
+    }
+  }, [isOpen]);
+
+  // When the calendar opens, start on the month of the selected date / range start
+  // and re-sync the staged range from the committed props: any previous unvalidated
+  // staging is discarded, so closing without validating keeps the old selection.
+  useEffect(() => {
+    if (isOpen) {
+      setVisibleMonth(toDateString(selectDate ?? dateRange.startDate));
+      if (!selectDate) {
+        setTempRange({
+          start: toDateString(dateRange.startDate),
+          end: toDateString(dateRange.endDate),
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
   // Use date limits from the API/cache instead of hardcoded today
   const dateLimits = useMemo(() => getDateRangeLimits(), []);
 
@@ -122,7 +171,10 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
       onDateChange(date, date);
       setIsOpen(false);
     } else {
-      // Date range mode
+      // Date range mode — selection is only *staged* in tempRange. It is committed
+      // to the parent via onDateChange when the user presses the "Validate" button.
+      // Closing the modal any other way (backdrop, X, outside click) keeps the
+      // previous selection (tempRange is re-synced from props on next open).
       if (!tempRange.start || (tempRange.start && tempRange.end)) {
         // New selection (first click)
         setTempRange({ start: dateStr, end: null });
@@ -137,15 +189,21 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
         }
 
         setTempRange({ start, end });
-
-        const startDate = parseDateString(start);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = parseDateString(end);
-        endDate.setHours(23, 59, 59, 999);
-
-        onDateChange(startDate, endDate);
-        setIsOpen(false);
       }
+    }
+  };
+
+  // Commit the staged range selection and close the modal. Only reachable in
+  // range mode (the "Validate" footer button), and only once both bounds exist.
+  const handleValidateRange = () => {
+    if (tempRange.start && tempRange.end) {
+      const startDate = parseDateString(tempRange.start);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = parseDateString(tempRange.end);
+      endDate.setHours(23, 59, 59, 999);
+
+      onDateChange(startDate, endDate);
+      setIsOpen(false);
     }
   };
 
@@ -205,7 +263,120 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
   const minDate = dateLimits.minDate;
   const maxDate = dateLimits.maxDate;
 
-    return (
+  // Calendar card reused by both the web overlay and the native Modal
+  const calendarCard = (
+    <View
+      style={[
+        styles.modalContent,
+        {
+          backgroundColor,
+          width: Platform.OS === 'web' ? '90%' : '90%',
+          maxWidth: 400,
+        },
+      ]}
+    >
+      {/* Header: title + close button, same pattern as Selector modal */}
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: textColor }]}>{modalTitle}</Text>
+        <TouchableOpacity
+          style={{ padding: 5 } as any}
+          onPress={() => setIsOpen(false)}
+        >
+          <Icon name="close" type="font-awesome" size={20} color={textColor} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Scrollable calendar content with fixed max height */}
+      <ScrollView
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <Calendar
+          style={{ width: '100%' }}
+          onDayPress={handleDayPress}
+          markingType={'period'}
+          markedDates={getMarkedDates()}
+          current={visibleMonth}
+          onMonthChange={(month: DateData) => setVisibleMonth(toDateString(new Date(month.year, month.month - 1, 1)))}
+          minDate={toDateString(minDate)}
+          maxDate={toDateString(maxDate)}
+          theme={{
+            calendarBackground: backgroundColor,
+            selectedDayBackgroundColor: selectedBackgroundColor,
+            selectedDayTextColor: selectedTextColor,
+            todayTextColor: textColor,
+            todayBackgroundColor: todayBrightColor,
+            dayTextColor: textColor,
+            textDisabledColor,
+            monthTextColor: textColor,
+            arrowColor: textColor,
+            textDayFontWeight: '500',
+            textMonthFontWeight: 'bold',
+            textDayHeaderFontWeight: 'bold',
+          }}
+        />
+      </ScrollView>
+
+      {/* Footer — always rendered so there's a little breathing room at the bottom
+          (10px empty buffer in range mode, e.g. schedule tab). In single-date mode it
+          also holds the "Aujourd'hui" quick-return button. Kept OUTSIDE the scroll
+          area so it never disappears when the calendar is taller than the scroll height. */}
+      <View style={styles.footer}>
+        {selectDate ? (
+          <TouchableOpacity
+            onPress={goToToday}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              backgroundColor: selectedBackgroundColor,
+              borderRadius: 8,
+              alignSelf: 'center',
+            }}
+          >
+            <ThemedText
+              style={{
+                color: selectedTextColor,
+                fontWeight: 'bold',
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              {translateWord('today')}
+            </ThemedText>
+          </TouchableOpacity>
+        ) : (
+          // Range mode: staged selection is only committed when the user presses
+          // "Validate". Disabled until both bounds of the range are picked.
+          <TouchableOpacity
+            onPress={handleValidateRange}
+            disabled={!tempRange.start || !tempRange.end}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              backgroundColor: tempRange.start && tempRange.end ? selectedBackgroundColor : textDisabledColor,
+              borderRadius: 8,
+              alignSelf: 'center',
+              opacity: tempRange.start && tempRange.end ? 1 : 0.5,
+            }}
+          >
+            <ThemedText
+              style={{
+                color: selectedTextColor,
+                fontWeight: 'bold',
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              {translateWord('validate')}
+            </ThemedText>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  return (
     <div ref={wrapperRef} style={{ position: 'relative', zIndex: 100, width: '100%' }}>
       {showInput && (
         <TouchableOpacity
@@ -233,77 +404,65 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
         </TouchableOpacity>
       )}
 
-      {isOpen && (
-        <div
+      {/* WEB: position:fixed overlay (Modal is unreliable on react-native-web).
+          The dimmed backdrop is a SIBLING layer *behind* the card (not its parent),
+          so taps inside the calendar (days, month arrows) can never bubble up to
+          the backdrop and accidentally close the modal. */}
+      {showModal && Platform.OS === 'web' && (
+        <View
           style={{
-            position: 'absolute',
-            top: showInput ? '110%' : '0',
+            position: 'fixed',
+            top: 0,
             left: 0,
             right: 0,
-            display: 'flex',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
+            bottom: 0,
+            zIndex: 10000,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            paddingTop: 60,
+            animation: 'datepickerFadeIn 200ms ease-in-out',
+          } as any}
+        >
+          {/* Backdrop press-catcher (behind the card) */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setIsOpen(false)}
+            style={StyleSheet.absoluteFill as any}
+          />
+          {/* Card — separate layer above the backdrop (relative + zIndex so it
+              paints above the absolutely-positioned backdrop on web too) */}
+          <View style={{ position: 'relative', zIndex: 1, width: '100%', alignItems: 'center' }}>{calendarCard}</View>
+        </View>
+      )}
+      {/* NATIVE: transparent Modal — top-aligned so content is always visible.
+          Same sibling-backdrop structure as web (see above). */}
+      {Platform.OS !== 'web' && (
+        <Modal
+          transparent
+          animationType="fade"
+          visible={showModal}
+          onRequestClose={() => setIsOpen(false)}
         >
           <View
-            style={[
-              styles.calendarContainer,
-              {
-                backgroundColor,
-                width: Platform.OS === 'web' ? '90%' : 350,
-                maxWidth: 350,
-              },
-            ]}
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              paddingTop: 80,
+            }}
           >
-            <Calendar
-              style={{ width: '100%' }}
-              onDayPress={handleDayPress}
-              markingType={'period'}
-              markedDates={getMarkedDates()}
-              current={selectDate ? toDateString(selectDate) : toDateString(dateRange.startDate)}
-              minDate={toDateString(minDate)}
-              maxDate={toDateString(maxDate)}
-              theme={{
-                calendarBackground: backgroundColor,
-                selectedDayBackgroundColor: selectedBackgroundColor,
-                selectedDayTextColor: selectedTextColor,
-                todayTextColor: textColor,
-                todayBackgroundColor: todayBrightColor,
-                dayTextColor: textColor,
-                textDisabledColor,
-                monthTextColor: textColor,
-                arrowColor: textColor,
-                textDayFontWeight: '500',
-                textMonthFontWeight: 'bold',
-                textDayHeaderFontWeight: 'bold',
-              }}
+            {/* Backdrop press-catcher (behind the card) */}
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => setIsOpen(false)}
+              style={StyleSheet.absoluteFill as any}
             />
-            {selectDate && (
-              <TouchableOpacity
-                onPress={goToToday}
-                style={{
-                  marginTop: 8,
-                  paddingVertical: 8,
-                  paddingHorizontal: 16,
-                  backgroundColor: selectedBackgroundColor,
-                  borderRadius: 8,
-                  alignSelf: 'center',
-                }}
-              >
-                <ThemedText
-                  style={{
-                    color: selectedTextColor,
-                    fontWeight: 'bold',
-                    fontSize: 13,
-                    textAlign: 'center',
-                  }}
-                >
-                  {translateWord('today')}
-                </ThemedText>
-              </TouchableOpacity>
-            )}
+            {/* Card — separate layer above the backdrop */}
+            <View style={{ position: 'relative', zIndex: 1, width: '100%', alignItems: 'center' }}>{calendarCard}</View>
           </View>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -343,7 +502,9 @@ const styles = StyleSheet.create({
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
     textTransform: 'capitalize',
   },
-  calendarContainer: {
+  // Datepicker modal card container — matches the Selector (team/league filter) modal
+  // so the same modal pattern is used on the index page.
+  modalContent: {
     backgroundColor: 'white',
     borderRadius: 10,
     ...Platform.select({
@@ -356,6 +517,36 @@ const styles = StyleSheet.create({
       android: { elevation: 8 },
       web: { boxShadow: '0px 4px 4.65px rgba(0,0,0,0.3)' },
     }),
-    padding: 10,
+  },
+  // Header row: title (left) + close (X) button (right)
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingHorizontal: 15,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  // Scrollable calendar area with a bounded height so it stays on screen regardless
+  // of the page height (mirrors the Selector's fixed-height scroll).
+  scrollContent: {
+    maxHeight: 400,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: 10,
+    paddingTop: 4,
+  },
+  // Footer shown below the scroll area. Always rendered: in single-date mode it hosts
+  // the "Aujourd'hui" button; in range mode it acts as an empty ~10px bottom buffer.
+  // Kept outside the ScrollView so it stays visible even when the calendar fills the
+  // scroll height, and so the modal always has a little border/breathing room at the bottom.
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 10,
   },
 });

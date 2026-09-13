@@ -24,7 +24,7 @@ export const SliderDatePickerStyles = StyleSheet.create({
   },
   monthContainer: {
     marginBottom: 10,
-    height: 40,
+    height: 24,
     paddingLeft: 50, // 10px gap after the floating search button (button ends at x=55) — matches TeamFilter's marginRight:10 on its loupe
   },
   monthItem: {

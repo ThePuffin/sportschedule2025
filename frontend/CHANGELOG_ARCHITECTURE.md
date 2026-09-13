@@ -2,6 +2,345 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Change: FilterSlider — pinned selection outside the scroll (league / team / VS bars)
+
+On the Game of the Day (index) and Schedule tabs, the filter bars no longer scroll the selected chip:
+
+- **Pinned selection** — in single-selection sorted mode, `FilterSlider` renders the selected chip and its separator **outside** the ScrollView, pinned at the left. The scrollable area starts after them.
+- **Label truncation (mobile)** — on mobile, a pinned chip whose label exceeds 12 characters is truncated in JS starting at the 9th character (first 9 chars + `…`) instead of CSS `text-overflow`, which react-native-web doesn't apply reliably on `Text`.
+- **Left fade on the first scrollable chip** — the left edge fade is now a simple 40px ramp from the ScrollView's own left edge, so the first scrollable chip fades — the selection never fades and never scrolls.
+- **TeamFilter simplified** — the ScrollView no longer extends under the loupe/VS button: `marginLeft: -50`, `scrollPaddingLeft={50}` and `fadeLeftInset={50}` were removed; the pinned chip takes that space.
+- **Unchanged** — multi-selection bars (calendar team filter) and `disableSort` bars (month filter) keep the previous in-scroll behavior.
+
+### Files
+- `frontend/components/FilterSlider.tsx` — added `pinnedItem`/`scrollItems` memos; `renderChip` helper (chip + separator); pinned chip + separator rendered before the ScrollView (which gets `flex: 1` when pinned); `edgeMask` left ramp switches to `transparent 0px → black 40px` when pinned.
+- `frontend/components/TeamFilter.tsx` — removed the negative-margin overlay (`marginLeft: -50`, `scrollPaddingLeft`, `fadeLeftInset`).
+- `frontend/docs/components/FilterSlider.tsx.md`, `frontend/docs/components/TeamFilter.tsx.md` — documented the pinned-selection behavior.
+
+## Change: Datepicker modal — title matching the filter accordion + fixed height + top-aligned position
+## Change: Datepicker modal — title matching the filter accordion + fixed height + top-aligned position
+
+The `DateRangePicker` modal is now aligned with the team/league filter (`Selector`) modal pattern:
+
+- **Title header** — the modal card gained a header row (`styles.header`) with the **title on the left** (`styles.headerTitle`, `modalTitle`) and the **close (X) button on the right**. The title is taken from the new optional `title` prop, so each parent passes the **same label as its date filter accordion**: `index.tsx` passes `translateFilterLabel('date')` ("Filtrer par date"), `calendar.tsx` passes `translateWord('selectYourDates')` ("Filtrer par période"). When omitted, `modalTitle` auto-derives from the mode: single-date → `translateWord('selectYourDates')`, range → `translateWord('filterInterval')`.
+- **Fixed / bounded height** — the calendar is wrapped in a `ScrollView` (`styles.scrollContent`, `maxHeight: 400`) so the content is always scrollable and never clipped, regardless of the page/viewport height.
+- **Top-aligned position** — the modal backdrop now uses `justifyContent: 'flex-start'` with a `paddingTop` margin (web 60px, native 80px) instead of being vertically centered, so the whole card is always visible on the screen.
+
+### Files
+- `frontend/components/DatePicker.tsx` — added `title` prop; `modalTitle` computed from `title ?? (selectDate ? selectYourDates : filterInterval)`; `calendarCard` now renders a `styles.header` (title + ✕) and a `ScrollView` (`styles.scrollContent` / `scrollContentContainer`, maxHeight 400) around the calendar; the "Aujourd'hui" button moved into a **footer** (`styles.footer`) **always rendered below** the ScrollView — in single-date mode it hosts the button, in range mode it acts as an **empty ~10px bottom buffer** — so it never disappears when the calendar fills the scroll height; removed `calendarContainer` style (replaced by `modalContent`/`header`/`headerTitle`/`scrollContent`/`scrollContentContainer`/`footer`); modal backdrop top-aligned.
+- `frontend/utils/types.tsx` — `DateRangePickerProps` gained `title?: string`.
+- `frontend/utils/utils.tsx` — added `filterInterval` translation key across all languages.
+- `frontend/app/(tabs)/index.tsx` — passes `title={translateFilterLabel('date')}` to the hidden `DateRangePicker`.
+- `frontend/app/(tabs)/calendar.tsx` — passes `title={translateWord('selectYourDates')}` to the `DateRangePicker`.
+- `frontend/docs/components/DatePicker.tsx.md` — documented the title header, `title` prop, bounded height, and top-aligned position.
+
+## Change: Datepicker range mode — explicit "Valider" button (deferred commit)
+
+In range mode (schedule tab), the datepicker no longer commits the selection and closes automatically after the second tap:
+
+- **Staged selection** — picking days only updates the local `tempRange`; the parent's `dateRange` is untouched.
+- **"Valider" footer button** — the selection is committed via `onDateChange` only when the user presses the new **"Valider" button** in the modal footer (same spot as the "Aujourd'hui" button on index). The button is disabled (greyed) until both bounds are picked.
+- **Revert on dismiss** — closing the modal any other way (backdrop, ✕, outside click) keeps the previous selection: on next open, the `isOpen` effect re-syncs `tempRange` from the committed `dateRange` props.
+- Single-date mode (index) is unchanged: tapping a day selects and closes immediately.
+
+### Files
+- `frontend/components/DatePicker.tsx` — `handleDayPress` (range mode) no longer commits/closes; new `handleValidateRange`; footer renders the "Valider" button in range mode; `isOpen` effect re-syncs `tempRange` from props on open.
+- `frontend/utils/utils.tsx` — added `validate` translation key across all 11 languages.
+- `frontend/docs/components/DatePicker.tsx.md` — documented the validation flow.
+
+## Fix: Modal closed when picking the range end in another month
+
+Presses inside the calendar (day cells, month-navigation arrows) bubbled up to the **parent** backdrop `TouchableOpacity` (RN-web propagation), closing the modal during the staged range selection. The dimmed backdrop is now a **sibling layer behind the card** (an `absoluteFill` TouchableOpacity underneath a `position: 'relative', zIndex: 1` card wrapper) on both web and native, so taps on the card can never reach the backdrop. Tapping outside the card still closes the picker.
+
+### Files
+- `frontend/components/DatePicker.tsx` — restructured the web overlay and native Modal: backdrop press-catcher as sibling `absoluteFill` layer, card in a `position: 'relative', zIndex: 1` wrapper above it.
+- `frontend/docs/components/DatePicker.tsx.md` — documented the sibling-backdrop structure.
+
+---
+
+## Feature: Game of the Day — `closest` date navigation in `NoResults` when a day is empty
+
+When the index tab shows `NoResults` for the displayed day, the screen now calls `GET /games/dates/closest` with only the displayed date as boundary plus the selected team when set (`teamSelectedIds`, no league filter), and renders navigation buttons inside `NoResults` above the text ("Date précédente disponible (12 mai 2026)" with `history` icon, "Date suivante disponible (...)" with `update` icon — dates localized to the browser locale). Tapping a button navigates to that day via `handleDateChange`. Requests are deduped per date+team via `closestRequestRef`.
+
+**Fix** (team filter resolution) : the slider sends a **label** (ex. "New Jersey Devils"), not a uniqueId. Resolution from `games` failed on empty days (games empty). Fix : resolve label → uniqueId **at selection time** via `getCache<Team[]>('teams')` (24h cache, day-independent) and store in `selectedTeamUniqueId` state. The modal sends the uniqueId directly. The `closest` effect now uses `selectedTeamUniqueId` (works even on empty days). `handleTeamFilterChange` no longer calls `handleTeamSelectionChange` (which would overwrite the uniqueId with the label). **Fallback** in the effect: if `selectedTeamUniqueId` is empty but `teamSelectedId` is a label (contains a space), resolve via `fetchTeams()` before the call — covers the case where the cache was not loaded at click time. **Preload**: `fetchTeams()` called on mount to guarantee the cache is available before any user interaction.
+
+### Files
+
+- `frontend/app/(tabs)/index.tsx` — `closestDates` state + `selectedTeamUniqueId` state + `closest` effect (uses `selectedTeamUniqueId`) + `goToClosestDate` + `handleTeamFilterChange`/`handleTeamSelectionChange` updated + props vers `NoResults`, `fetchClosestDates`/`fetchTeams` imports.
+- `frontend/components/NoResults.tsx` — nouvelles props `previousAvailableDate`/`nextAvailableDate`/`onGoToDate`, boutons de navigation au-dessus du texte.
+- `frontend/utils/utils.tsx` — nouvelles clés `previousAvailableDate`/`nextAvailableDate` traduites en 11 langues.
+- `frontend/docs/index.tsx.md`, `frontend/docs/components/NoResults.tsx.md` — documentation mise à jour.
+
+---
+
+## Feature: Schedule — "Enable history" button via `closest` route when no upcoming games
+
+When the Schedule tab has no upcoming games (`visibleGamesByMonth` empty) and history is not already enabled, the screen now calls `GET /games/dates/closest` — with `teamSelectedIds=<team>` (or `leagues=<league>` when team selection is `all`) — and if the response contains a `previousDate`, renders an "Activer l'historique" button (label `translateWord('enableHistory')`, `MaterialIcons` `history` icon, matching the provided image) above the "Pas de résultat" (`NoResults`) text. Clicking it enables `showPreviousScores` via `handlePreviousScoreToggle(true)`. The button is hidden while loading or once history is enabled, and requests are deduped per selection via `closestRequestRef`.
+
+### Files
+
+- `frontend/app/(tabs)/schedule.tsx` — `hasPreviousHistory` state + `closest` effect + passe `showHistoryButton`/`onEnableHistory` à `NoResults`.
+- `frontend/components/NoResults.tsx` — nouvelles props `showHistoryButton`/`onEnableHistory`, bouton "Enable history" (`MaterialIcons` `history`) au-dessus du texte.
+- `frontend/utils/fetchData.ts` — new `fetchClosestDates({ league?, teamSelectedId?, date? })` helper (`GET /games/dates/closest`).
+- `frontend/utils/utils.tsx` — new `enableHistory` translation key (FR "Activer l'historique"; EN fallback "Enable history").
+- `frontend/docs/schedule.tsx.md`, `frontend/docs/fetchData.ts.md` — documentation updated.
+
+---
+
+## Fix: Separator hidden before datepicker modal appears (Calendar tab)
+
+The `<Separator />` below the date range filter accordion is now hidden **before** the calendar modal fades in. The `DateRangePicker` now has a `showModal` state that delays the visual rendering of the modal by 150ms after `isOpen` becomes true, giving the parent time to hide the separator (via `onOpenChange`) first. A 200ms fade animation plays on both web (CSS keyframes) and native (Modal `animationType="fade"`).
+
+### Files
+
+- `frontend/components/DatePicker.tsx` — added `showModal` state with 150ms delay, fade animation on modal appearance/disappearance.
+- `frontend/components/css/DatePicker.css` — added `@keyframes datepickerFadeIn` for web fade-in.
+- `frontend/app/(tabs)/calendar.tsx` — added `datepickerOpen` state, wired `DateRangePicker` `onOpenChange={setDatepickerOpen}`, and updated the separator condition to `!isSmallDevice || (isDateAccordionOpen && !datepickerOpen)`.
+- `frontend/docs/calendar.tsx.md` — state variable documented.
+- `frontend/docs/components/DatePicker.tsx.md` — `showModal` state and fade animation documented.
+- `frontend/components/Separator.tsx` — added `opacity` prop with CSS transition for smooth opacity changes.
+- `frontend/docs/components/Separator.tsx.md` — documentation created.
+
+---
+
+## Fix: Event count badge and divider hidden in the favorites modal (mobile)
+
+In the FAVORIS modal (`frontend/app/(tabs)/calendar.tsx`), the mobile single-game branch renders an `Accordion` that now passes `hideEventCount={true}`, so the "1 EVENEMENTS" badge and the divider bar under the title are not shown. This is opt-in via a new `hideEventCount` prop on `Accordion` (`frontend/components/Accordion.tsx`, type added in `frontend/utils/types.tsx`); all other accordions (schedule, index, calendar page) keep the badge and bar in every breakpoint.
+
+## Fix: Month navigation in the datepicker modal (calendar page)
+
+The `Calendar`'s `current` prop is **controlled**: it was always recomputed from `selectDate` / `dateRange.startDate`, so tapping the month-navigation arrows snapped the calendar back to the initial month (visible on the calendar page in range mode, where no day is pressed to update the props). The component now keeps the visible month in internal state (`visibleMonth`), updates it via `onMonthChange`, and resets it to the selected date's month each time the dropdown opens.
+
+### Files
+
+- `frontend/components/DatePicker.tsx` — `visibleMonth` state + `onMonthChange` handler + reset on open.
+- `frontend/docs/components/DatePicker.tsx.md` — state documentation updated.
+
+---
+
+
+
+Since the datepicker now renders in a centered modal (outside the page layout), it no longer needs extra vertical space: `openCalendarDatepicker` in `frontend/app/(tabs)/index.tsx` only calls `dateRangePickerRef.current?.open()` and the league/team accordion keeps its current state (open or closed).
+
+## Fix: Datepicker opens in a centered modal (mobile clipping fixed)
+
+### Symptom
+
+On mobile (Game of the Day tab), the calendar dropdown was clipped by the page's `ScrollView` / sticky header / `height: 0` wrapper, and the close (X) button stayed partially hidden regardless of z-index.
+
+### Solution
+
+The datepicker no longer renders as an in-page absolutely-positioned dropdown. When opened, it renders in a **transparent `Modal` centered vertically and horizontally** over a dimmed backdrop (`rgba(0,0,0,0.5)`), completely outside the page layout, so nothing can clip it.
+
+- Tapping the dimmed backdrop closes the picker; taps on the card do not propagate.
+- Android back button (`onRequestClose`) closes the picker.
+- **Web support:** the RN `Modal` is unreliable on react-native-web, so on web the same card renders inside a `position: fixed` full-screen overlay (dimmed backdrop, `zIndex: 10000`, centered both axes). The card markup is shared (`calendarCard` variable) to avoid duplication.
+- The circular close (X) button is back at the **top of the modal card** (its own header row above the calendar), where it cannot overlap the month-navigation arrows. It then adopts `GameModal`'s `closeButton` style: a plain 20px `close` icon at the top-right (`alignSelf: 'flex-end', padding: 5`, no border).
+
+### Files
+
+- `frontend/components/DatePicker.tsx` — dropdown replaced by a centered `Modal`.
+- `frontend/docs/components/DatePicker.tsx.md` — documentation updated.
+
+---
+
+## Fix (superseded): Close (X) button of the datepicker was partially hidden
+
+> **Superseded** by the centered-modal fix above: the close button no longer sits at the bottom of an in-page dropdown.
+
+### Symptom
+
+On the Game of the Day tab, the circular close (X) button of the calendar dropdown was partially masked — first by the `react-native-calendars` month-navigation header (it was absolutely positioned at `top: 4 / right: 4`), then even after moving it into a dedicated top bar it remained clipped.
+
+### Root cause
+
+In `showInput={false}` mode (`index.tsx`), the `DateRangePicker` sits inside a `position: relative; height: 0` wrapper inside the screen's `ScrollView`, below a `position: sticky` header. The top edge of the opened dropdown can therefore be clipped by the scroll container / sticky area, hiding whatever is rendered at the very top of the card (z-index alone cannot fix clipping).
+
+### Solution
+
+The close (X) button now lives **at the bottom of the calendar card**, centered under the "Aujourd'hui" button. The bottom of the dropdown is always within the visible area, so the button is guaranteed to be tappable.
+
+### Files
+
+- `frontend/components/DatePicker.tsx` — close button moved to the bottom of the dropdown card.
+- `frontend/docs/components/DatePicker.tsx.md` — documentation updated.
+
+---
+
+
+## Fix: Open the date selector collapses the league/team filter (mobile height)
+
+### Symptom
+
+On mobile, opening the **calendar datepicker** (via the `SliderDatePicker` magnifier) could sometimes leave insufficient vertical space to fully see the calendar and the "Today" button.
+
+### Solution
+
+`FilterAccordion` initially kept its expanded state **internally**, so setting the parent's `leagueAccordionExpanded` had no visual effect. To allow forcing a collapse from the parent:
+
+1. `frontend/components/FilterAccordion.tsx` — added an optional **controlled** `expanded` prop. When provided, the accordion renders from that value and calls `onExpandedChange` on toggle (previous behavior is preserved when the prop is omitted).
+2. `frontend/app/(tabs)/index.tsx` — the league/team accordion now passes `expanded={leagueAccordionExpanded}` and is therefore parent-controlled. The collapse is triggered only when the **calendar datepicker actually displays** (the magnifier `onSearch` → `openCalendarDatepicker`), **not** when the date filter accordion is merely toggled open. `handleDateAccordionExpanded` (date accordion `onExpandedChange`) only updates `dateAccordionExpanded`. Closing the calendar does not change league accordion state.
+
+### Files
+
+- `frontend/components/FilterAccordion.tsx` — `expanded` controlled prop.
+- `frontend/app/(tabs)/index.tsx` — league accordion controlled by `leagueAccordionExpanded`; `openCalendarDatepicker` (wired to `SliderDatePicker` `onSearch`) collapses the league accordion when the calendar displays.
+- `frontend/docs/components/FilterAccordion.tsx.md`, `frontend/docs/index.tsx.md` — docs updated.
+
+## Feature: Close (X) button on the calendar datepicker (loupe kept on index)
+
+### Goal
+
+Let the user close the calendar datepicker on the Game of the Day tab, while keeping the magnifier (loupe) button. The loupe **opens** the calendar; a close (X) button rendered **inside the calendar dropdown** closes it.
+
+### Changes
+
+- `frontend/components/SliderDatePicker.tsx` — keeps the `Ionicons` `search` (loupe) icon; pressing it calls `onSearch` (which opens the calendar).
+- `frontend/components/DatePicker.tsx` — added a circular close (X) button in the top-right corner of the calendar dropdown (rendered while `isOpen`); tapping it calls `setIsOpen(false)`, which also fires `onOpenChange(false)`.
+- `frontend/utils/types.tsx` — `DateRangePickerProps` gained optional `onOpenChange?: (open: boolean) => void` (kept for future parent-driven sync).
+- `frontend/app/(tabs)/index.tsx` — reverted to `openCalendarDatepicker` (opens the calendar and collapses the league/team filter); removed the `calendarOpen` toggle state and the `onOpenChange` wiring (closing is handled by the X inside the calendar).
+
+---
+## Feature: Always-visible close (X) button for the calendar datepicker (Game of the Day)
+
+### Goal
+
+Provide a way to close the calendar datepicker on the Game of the Day tab. Instead of a magnifier only, the floating button always shows a **close (X)** icon and toggles the calendar open/close.
+
+### Changes
+
+- `frontend/components/SliderDatePicker.tsx` — the floating overlay button now always renders an `Ionicons` `close` icon (X). It still calls `onSearch` on press.
+- `frontend/utils/types.tsx` — added `onOpenChange?: (open: boolean) => void` to `DateRangePickerProps`.
+- `frontend/components/DatePicker.tsx` — added an `onOpenChange` effect that notifies the parent whenever the calendar opens/closes (imperatively, on date selection, or on click-outside).
+- `frontend/app/(tabs)/index.tsx` — tracks the calendar state with `calendarOpen`, wired `DateRangePicker` `onOpenChange={setCalendarOpen}`, and replaced `openCalendarDatepicker` with `toggleCalendarDatepicker` (opens if closed, closes if open) bound to `SliderDatePicker` `onSearch`. When opened, it still collapses the league/team filter to free height.
+
+### Files
+
+- `frontend/components/SliderDatePicker.tsx`, `frontend/components/DatePicker.tsx`, `frontend/utils/types.tsx`, `frontend/app/(tabs)/index.tsx` — implementation.
+- `frontend/docs/components/SliderDatePicker.tsx.md`, `frontend/docs/components/DatePicker.tsx.md`, `frontend/docs/types.tsx.md`, `frontend/docs/index.tsx.md` — docs updated.
+
+---
+## Fix: Selector loses selected teams on parent re-render (off-season API update)
+
+### Symptom
+
+When the teams data was updated (for example after `getTeamsFromApi` in `schedule.tsx` or a live-score refresh in `index.tsx`), an open team `Selector` could lose the user's selected/chosen teams. The selection was reset to an empty/unvalidated state at the moment of interaction, causing a click to miss its target.
+
+### Root cause
+
+`Selector` synchronizes its draft state when it becomes `visible` via:
+
+```js
+useEffect(() => {
+  if (visible) {
+    setTempSelectedIds(itemsSelectedIds || []);
+    ...
+  }
+}, [visible, itemsSelectedIds, itemSelectedId]);
+```
+
+`itemsSelectedIds` is passed as a new `[]`-array literal on every render in the parent `display()` functions. Because of referential inequality, the effect re-ran whenever the parent re-rendered (e.g. after teams were loaded), resetting the draft selection to `[]`.
+
+The earlier `randomNumber(999999)` value used in the `i` field was a red herring for this specific symptom: it generated a new `i` per render, but `i` is only read on validation, not used as a re-init dependency.
+
+### Solution
+
+Compare incoming selected IDs by content rather than by array reference:
+
+1. `Selector.tsx` — serialize `itemsSelectedIds` (`JSON.stringify`) and use it as the effect dependency, so a parent render that passes an equal-but-new `[]`-array no longer re-initializes the draft:
+```js
+const selectedIdsKey = JSON.stringify(itemsSelectedIds);
+useEffect(() => {
+  if (visible) {
+    setTempSelectedIds(JSON.parse(selectedIdsKey) as string[]);
+    setTempSelectedId(itemSelectedId || '');
+  }
+}, [visible, selectedIdsKey, itemSelectedId]);
+```
+
+2. `schedule.tsx`, `index.tsx` — replaced `randomNumber(999999)` for the `i` field with stable callback identifiers (`'teams'`, `'teamsFilter'`, `'teamsOfDay'`) so the parent can identify which selector is reporting a change across re-renders.
+
+3. Documentation updated: `frontend/docs/components/Selector.tsx.md`, `frontend/docs/schedule.tsx.md`, and `frontend/docs/index.tsx.md`.
+
+
+
+## Fix: Infinite API call loop when no results (off-season with single league/team)
+
+### Symptom
+
+When selecting a single league in off-season with a single team selected, the site crashes with continuous `games/hour` API calls (7 calls per iteration: 1 for today + 6 for prefetch).
+
+### Root cause
+
+In `NoResults.tsx`, an auto-retry mechanism called `onRetry()` on mount. In `index.tsx` (Game of the Day), the `displayContent()` function shows `LoadingView` when `isLoading` is true, and `NoResults` when `isLoading` is false and there are no games. The sequence created an infinite loop:
+
+1. `getGamesFromApi()` → `isLoading = true` → renders `LoadingView`
+2. API returns empty (off-season) → `isLoading = false` → renders `NoResults`
+3. `NoResults` auto-retry → `getGamesFromApi()` → `isLoading = true` → `NoResults` is **unmounted**
+4. API returns empty → `isLoading = false` → `NoResults` is **remounted** (new instance, `hasRetried` ref reset to `false`)
+5. Back to step 3 → infinite loop with 7 `games/hour` calls per cycle
+
+The `hasRetried` ref was local to each component instance, so unmounting/remounting reset it.
+
+### Solution
+
+Modified file: `frontend/components/NoResults.tsx`
+
+Removed the auto-retry `useEffect` and the `hasRetried` ref. The retry mechanism in `index.tsx` already handles retries with proper intervals. The manual retry button remains available for users.
+
+```diff
+- const hasRetried = useRef(false);
+-
+- useEffect(() => {
+-   if (onRetry && !hasRetried.current) {
+-     onRetry();
+-     hasRetried.current = true;
+-   }
+-   ...
+- }, [onRetry]);
++ useEffect(() => {
++   ...
++ }, []);
+```
+
+---
+
+## Fix: Team selection missed due to debounce re-render
+
+### Symptom
+
+When typing in the search input and quickly clicking on a team, sometimes the selection doesn't register. The list re-renders (due to debounce firing) at the same time as the click, causing the tap to miss the target.
+
+### Root cause
+
+In `Selector.tsx`, the debounce timer (700ms) that filters the list was not cancelled when an item was selected. If the timer fired during the click, the FlatList would re-render and the tapped item could move or disappear before the press was registered.
+
+### Solution
+
+Modified file: `frontend/components/Selector.tsx`
+
+1. Store the debounce timer in a ref (`debounceTimerRef`) so it can be cancelled
+2. Cancel the pending debounce and immediately apply the current search value in `handleSelect()`
+3. Changed `keyboardShouldPersistTaps` from `"handled"` to `"always"` on the FlatList to ensure taps are always processed even with keyboard open
+
+```typescript
+const cancelDebounce = () => {
+  if (debounceTimerRef.current) {
+    clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = null;
+  }
+};
+
+const handleSelect = (id: string) => {
+  // Cancel any pending debounce to prevent list re-render during selection
+  cancelDebounce();
+  setDebouncedSearch(search);
+  // ... rest of selection logic
+};
+```
+
+---
+
 ## Fix: Mobile filter accordion background now matches desktop
 
 ### Symptom

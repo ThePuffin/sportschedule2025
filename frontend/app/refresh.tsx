@@ -107,11 +107,11 @@ export default function GameofTheDay() {
     }
     getLeagues();
   }, []);
+  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
+
   if (leaguesAvailable.length === 0) {
     return displayNoContent();
   }
-
-  const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
 
   return (
     <ThemedView style={{ flex: 1, backgroundColor }}>

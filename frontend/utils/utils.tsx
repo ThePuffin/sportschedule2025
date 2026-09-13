@@ -286,8 +286,12 @@ export const translateWord = (word: string) => {
         profile: 'Mon Profil',
         changePreferences: 'Changer mes préférences',
         selectYourDates: 'Filtrer par période',
+        filterInterval: 'Filtrer par intervalle',
+        validate: 'Valider',
         showAllResults: 'Afficher tous les résultats',
-
+        enableHistory: "Activer l'historique",
+        previousAvailableDate: 'Date précédente disponible',
+        nextAvailableDate: 'Date suivante disponible',
         today: 'Aujourd\'hui',
       };
       break;
@@ -370,7 +374,12 @@ export const translateWord = (word: string) => {
         profile: 'Mein Profil',
         changePreferences: 'Präferenzen ändern',
         selectYourDates: 'Nach Zeitraum filtern',
+        filterInterval: 'Nach Zeitintervall filtern',
+        validate: 'Bestätigen',
         showAllResults: 'Alle Ergebnisse anzeigen',
+        enableHistory: 'Verlauf aktivieren',
+        previousAvailableDate: 'Vorheriges verfügbares Datum',
+        nextAvailableDate: 'Nächstes verfügbares Datum',
         today: 'Heute',
       };
       break;
@@ -453,7 +462,12 @@ export const translateWord = (word: string) => {
         profile: 'Mi Perfil',
         changePreferences: 'Cambiar mis preferencias',
         selectYourDates: 'Filtrar por período',
+        filterInterval: 'Filtrar por intervalo',
+        validate: 'Validar',
         showAllResults: 'Mostrar todos los resultados',
+        enableHistory: 'Activar el historial',
+        previousAvailableDate: 'Fecha anterior disponible',
+        nextAvailableDate: 'Fecha siguiente disponible',
         today: 'Hoy',
       };
       break;
@@ -535,7 +549,12 @@ export const translateWord = (word: string) => {
         profile: 'Il mio Profilo',
         changePreferences: 'Cambia le mie preferenze',
         selectYourDates: 'Filtrar por período',
+        filterInterval: 'Filtrar por intervalo',
+        validate: 'Validar',
         showAllResults: 'Mostra tutti i risultati',
+        enableHistory: 'Attiva la cronologia',
+        previousAvailableDate: 'Data precedente disponibile',
+        nextAvailableDate: 'Data successiva disponibile',
         today: 'Oggi',
       };
       break;
@@ -617,7 +636,12 @@ export const translateWord = (word: string) => {
         profile: 'マイプロフィール',
         changePreferences: '設定を変更する',
         selectYourDates: '期間でフィルター',
+        filterInterval: '期間インターバルでフィルター',
+        validate: '決定',
         showAllResults: 'すべての結果を表示',
+        enableHistory: '履歴を有効にする',
+        previousAvailableDate: '前の利用可能な日付',
+        nextAvailableDate: '次の利用可能な日付',
         today: '今日',
       };
       break;
@@ -698,7 +722,12 @@ export const translateWord = (word: string) => {
         profile: '내 프로필',
         changePreferences: '기본 설정 변경',
         selectYourDates: '기간별 필터링',
+        filterInterval: '기간 인터벌 필터링',
+        validate: '확인',
         showAllResults: '모든 결과 표시',
+        enableHistory: '히스토리 활성화',
+        previousAvailableDate: '이전 가능한 날짜',
+        nextAvailableDate: '다음 가능한 날짜',
         today: '오늘',
       };
       break;
@@ -780,7 +809,12 @@ export const translateWord = (word: string) => {
         profile: 'Mijn Profiel',
         changePreferences: 'Voorkeuren wijzigen',
         selectYourDates: 'Filteren op periode',
+        filterInterval: 'Filteren op tijdsinterval',
+        validate: 'Bevestigen',
         showAllResults: 'Alle resultaten tonen',
+        enableHistory: 'Geschiedenis inschakelen',
+        previousAvailableDate: 'Vorige beschikbare datum',
+        nextAvailableDate: 'Volgende beschikbare datum',
         today: 'Vandaag',
       };
       break;
@@ -862,7 +896,12 @@ export const translateWord = (word: string) => {
         profile: 'Meu Perfil',
         changePreferences: 'Alterar preferências',
         selectYourDates: 'Filtrar por período',
+        filterInterval: 'Filtrar por intervalo',
+        validate: 'Conferma',
         showAllResults: 'Mostrar todos os resultados',
+        enableHistory: 'Ativar o histórico',
+        previousAvailableDate: 'Data anterior disponível',
+        nextAvailableDate: 'Próxima data disponível',
         today: 'Hoje',
       };
       break;
@@ -944,7 +983,12 @@ export const translateWord = (word: string) => {
         profile: 'Мой профиль',
         changePreferences: 'Изменить настройки',
         selectYourDates: 'Filtrar por período',
+        filterInterval: 'Фильтровать по интервалу',
+        validate: 'Применить',
         showAllResults: 'Показать все результаты',
+        enableHistory: 'Включить историю',
+        previousAvailableDate: 'Предыдущая доступная дата',
+        nextAvailableDate: 'Следующая доступная дата',
         today: 'Сегодня',
       };
       break;
@@ -1025,7 +1069,12 @@ export const translateWord = (word: string) => {
         profile: '我的资料',
         changePreferences: '更改偏好',
         selectYourDates: '按时间段筛选',
+        filterInterval: '按区间筛选',
+        validate: '确认',
         showAllResults: '显示所有结果',
+        enableHistory: '启用历史记录',
+        previousAvailableDate: '上一个有比赛的日期',
+        nextAvailableDate: '下一个有比赛的日期',
         today: '今天',
       };
       break;
@@ -1106,7 +1155,13 @@ export const translateWord = (word: string) => {
         profile: 'My Profile',
         changePreferences: 'Change my preferences',
         selectYourDates: 'Filter by period',
+        filterInterval: 'Filter by interval',
+        validate: 'Validate',
         showAllResults: 'Show all results',
+        enableHistory: 'Enable history',
+        previousAvailableDate: 'Previous available date',
+        nextAvailableDate: 'Next available date',
+        today: 'Today',
       };
       break;
   }

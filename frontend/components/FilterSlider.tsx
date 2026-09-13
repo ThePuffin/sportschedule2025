@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
   ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 
 interface FilterSliderProps {
@@ -63,6 +64,8 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
   } = props;
 
   const themeTextColor = useThemeColor({}, 'text');
+  const { width: windowWidth } = useWindowDimensions();
+  const isSmallDevice = windowWidth < 768;
   const unselectedBackgroundColor = useThemeColor({ light: '#e0e0e0', dark: '#333333' }, 'background');
   const { backgroundColor: selectedBackgroundColor, textColor: selectedTextColor } = useFavoriteColor('#000');
   const { setIsScrollingHorizontally } = useHorizontalScroll();
@@ -85,17 +88,6 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
     metrics.current.visibleWidth = e.nativeEvent.layoutMeasurement.width;
     recomputeEdges();
   };
-  const edgeMask = useMemo(() => {
-    // fadeLeftInset/fadeRightInset = width (px) covered by the opaque button at the ScrollView's
-    // edges. The gradient ramp sits ENTIRELY in the visible area (like the date sliders):
-    // hidden under the button (0..inset), then a 40px visible fade starting at the button's edge.
-    // The left fade is ALWAYS applied — no need to wait for a first scroll.
-    const left = `transparent ${fadeLeftInset}px, black ${fadeLeftInset + 40}px`;
-    const right = atEnd
-      ? 'black 100%'
-      : `black calc(100% - ${fadeRightInset + 40}px), transparent calc(100% - ${fadeRightInset}px)`;
-    return `linear-gradient(to right, ${left}, ${right})`;
-  }, [atEnd, fadeLeftInset, fadeRightInset]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && scrollViewRef.current) {
@@ -243,6 +235,36 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
     return items;
   }, [data, availableLeagues, multipleSelection, selectedFilter, favoriteValues, props.disableSort, disabledValues]);
 
+  // In single-selection sorted mode, the selected chip is PINNED outside the ScrollView
+  // (followed by the separator), so the scrollable area starts after it and the left
+  // edge-fade applies to the first scrollable chip instead of the selection.
+  const pinnedItem = useMemo(() => {
+    if (multipleSelection || props.disableSort) return undefined;
+    return sortedItems.find((item) => item.value === selectedFilter);
+  }, [sortedItems, selectedFilter, multipleSelection, props.disableSort]);
+
+  const scrollItems = useMemo(() => {
+    if (!pinnedItem) return sortedItems;
+    return sortedItems.filter((item) => item !== pinnedItem);
+  }, [sortedItems, pinnedItem]);
+
+  const edgeMask = useMemo(() => {
+    // fadeLeftInset/fadeRightInset = width (px) covered by the opaque button at the ScrollView's
+    // edges. The gradient ramp sits ENTIRELY in the visible area (like the date sliders):
+    // hidden under the button (0..inset), then a 40px visible fade starting at the button's edge.
+    // The left fade is ALWAYS applied — no need to wait for a first scroll.
+    // When a chip is pinned outside the ScrollView (single-selection mode), the ScrollView starts
+    // AFTER the pinned chip + separator: a simple 40px fade ramps from the ScrollView's own left
+    // edge, so the first scrollable chip is the one that fades — the pinned selection never does.
+    const left = pinnedItem
+      ? `transparent 0px, black 40px`
+      : `transparent ${fadeLeftInset}px, black ${fadeLeftInset + 40}px`;
+    const right = atEnd
+      ? 'black 100%'
+      : `black calc(100% - ${fadeRightInset + 40}px), transparent calc(100% - ${fadeRightInset}px)`;
+    return `linear-gradient(to right, ${left}, ${right})`;
+  }, [atEnd, fadeLeftInset, fadeRightInset, pinnedItem]);
+
   const sortedValuesKey = useMemo(() => {
     return sortedItems.map((item) => item.value).join('|');
   }, [sortedItems]);
@@ -252,14 +274,76 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
     setAtEnd(false);
   }, [sortedValuesKey]);
 
+  const renderChip = (item: { label: string; value: string; icon?: React.ReactNode }, isPinned: boolean) => {
+    const isSelected = selectedFilters ? selectedFilters.includes(item.value) : selectedFilter === item.value;
+    const isDisabled = disabledValues?.includes(item.value);
+    // Pinned selection on mobile: labels longer than 12 characters are truncated IN JS starting
+    // at the 9th character (first 9 chars + '…') rather than via CSS text-overflow —
+    // react-native-web renders Text inline and applies neither maxWidth nor text-overflow
+    // reliably. JS truncation is deterministic on web and native.
+    const displayLabel =
+      isPinned && isSmallDevice && !item.icon && item.label.length > 12
+        ? `${item.label.slice(0, 9).trimEnd()}…`
+        : item.label;
+    return (
+      <React.Fragment key={item.value}>
+        <TouchableOpacity
+          style={[
+            styles.chip,
+            { backgroundColor: unselectedBackgroundColor },
+            itemStyle,
+            isSelected ? { backgroundColor: selectedBackgroundColor } : {},
+            isSelected ? selectedItemStyle : {},
+            isDisabled && styles.disabledChip,
+            Platform.OS === 'web' && ({ cursor: isDisabled ? 'default' : 'pointer' } as any),
+          ]}
+          onPress={() => !isDisabled && onFilterChange?.(item.value)}
+          disabled={isDisabled}
+        >
+          {item.icon ? (
+            item.icon
+          ) : (
+            <Text
+              style={[
+                styles.chipText,
+                { color: themeTextColor },
+                textStyle,
+                isSelected ? { color: selectedTextColor } : {},
+                isSelected ? selectedTextStyle : {},
+                isDisabled && styles.disabledChipText,
+              ]}
+            >
+              {displayLabel}
+            </Text>
+          )}
+        </TouchableOpacity>
+        {/* Separator: pinned right after the selection when the selection is pinned outside the
+            ScrollView, or (legacy non-pinned mode) inside the scroll right after a first chip */}
+        {(isPinned || (!multipleSelection && sortedItems[0] === item && item === sortedItems.find((i) => i.value === selectedFilter))) &&
+          (isPinned ? scrollItems.length > 0 : sortedItems.length > 1) && (
+            <View
+              style={{
+                width: 1,
+                height: 20,
+                backgroundColor: themeTextColor,
+                opacity: 0.2,
+                marginHorizontal: 5,
+              }}
+            />
+          )}
+      </React.Fragment>
+    );
+  };
+
   return (
     <View style={[styles.container, style]}>
+      {pinnedItem && renderChip(pinnedItem, true)}
       <ScrollView
         ref={scrollViewRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingLeft: 5 + scrollPaddingLeft, paddingRight: 15 + scrollPaddingRight }]}
-        style={[{ maskImage: edgeMask, WebkitMaskImage: edgeMask } as any]}
+        style={[pinnedItem ? { flex: 1 } : null, { maskImage: edgeMask, WebkitMaskImage: edgeMask } as any]}
         onScroll={handleScroll}
         onLayout={(e) => {
           metrics.current.visibleWidth = e.nativeEvent.layout.width;
@@ -271,55 +355,7 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
         }}
         scrollEventThrottle={16}
       >
-        {sortedItems.map((item, index) => {
-          const isSelected = selectedFilters ? selectedFilters.includes(item.value) : selectedFilter === item.value;
-          const isDisabled = disabledValues?.includes(item.value);
-          return (
-            <React.Fragment key={item.value}>
-              <TouchableOpacity
-                style={[
-                  styles.chip,
-                  { backgroundColor: unselectedBackgroundColor },
-                  itemStyle,
-                  isSelected ? { backgroundColor: selectedBackgroundColor } : {},
-                  isSelected ? selectedItemStyle : {},
-                  isDisabled && styles.disabledChip,
-                  Platform.OS === 'web' && ({ cursor: isDisabled ? 'default' : 'pointer' } as any),
-                ]}
-                onPress={() => !isDisabled && onFilterChange?.(item.value)}
-                disabled={isDisabled}
-              >
-                {item.icon ? (
-                  item.icon
-                ) : (
-                  <Text
-                    style={[
-                      styles.chipText,
-                      { color: themeTextColor },
-                      textStyle,
-                      isSelected ? { color: selectedTextColor } : {},
-                      isSelected ? selectedTextStyle : {},
-                      isDisabled && styles.disabledChipText,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                )}
-              </TouchableOpacity>
-              {!multipleSelection && index === 0 && isSelected && sortedItems.length > 1 && (
-                <View
-                  style={{
-                    width: 1,
-                    height: 20,
-                    backgroundColor: themeTextColor,
-                    opacity: 0.2,
-                    marginHorizontal: 5,
-                  }}
-                />
-              )}
-            </React.Fragment>
-          );
-        })}
+        {scrollItems.map((item) => renderChip(item, false))}
       </ScrollView>
     </View>
   );

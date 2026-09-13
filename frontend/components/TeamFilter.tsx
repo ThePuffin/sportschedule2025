@@ -60,7 +60,7 @@ export default function TeamFilter({
             border: `1px solid ${iconColor}`,
             borderRadius: '50%',
             flexShrink: 0,
-            zIndex: 20, // stays above the slider, which extends underneath it
+            zIndex: 20, // stays above any overlapping content
           }}
         >
           {themedIcon}
@@ -85,13 +85,11 @@ export default function TeamFilter({
             />
           </div>
         </div>
-        {/* The slider's ScrollView extends UNDER the loupe/VS button (negative margin) and carries the
-            dynamic edge fade itself (inside FilterSlider), exactly like the date sliders: chips fade
-            out progressively beneath the button — same visual for loupe and VS */}
-        <View style={{ flex: 1, marginLeft: -50 }}>
+        {/* The selected chip is pinned by FilterSlider right after this button, followed by the
+            separator; the ScrollView starts AFTER them, so it no longer extends under the button
+            and the left edge fade applies to the first scrollable chip (inside FilterSlider) */}
+        <View style={{ flex: 1 }}>
           <FilterSlider
-            scrollPaddingLeft={50} // compensates the negative margin: chips rest at the same position as before
-            fadeLeftInset={50} // button (40px) + its 10px margin cover the first 50px of the ScrollView → 40px fade visible right of the button
             selectedFilter={selectedFilter}
             onFilterChange={onFilterChange}
             data={filterData}

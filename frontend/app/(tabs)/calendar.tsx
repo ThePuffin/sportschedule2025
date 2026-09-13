@@ -62,6 +62,7 @@ export default function Calendar() {
   const isRestoringSelectionRef = useRef(false);
   const [isTeamAccordionOpen, setIsTeamAccordionOpen] = useState(true);
   const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(false);
+  const [datepickerOpen, setDatepickerOpen] = useState(false);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -737,13 +738,13 @@ export default function Calendar() {
               >
                 <ThemedElements style={{ zIndex: 20 }}>
                   <div style={{ position: 'relative' }}>
-                    <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} />
+                    <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} onOpenChange={setDatepickerOpen} title={translateWord('selectYourDates')} />
                   </div>
                 </ThemedElements>
               </FilterAccordion>
               {!isSmallDevice || isDateAccordionOpen ? (
-                <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 }}>
-                  <Separator />
+                <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 , zIndex: 50, opacity: datepickerOpen ? 0 : 1, transition: 'opacity 200ms ease-in-out' } as any}>
+                  <Separator opacity={datepickerOpen ? 0 : undefined} />
                 </ThemedElements>
               ) : null}
             </div>
@@ -838,6 +839,7 @@ export default function Calendar() {
                   gamesSelected={filteredGamesSelected}
                   onSelection={handleGamesSelection}
                   disableToggle={true}
+                  hideEventCount={true}
                 />
               ) : (
                 <GamesSelected

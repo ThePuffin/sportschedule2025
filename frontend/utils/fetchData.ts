@@ -395,6 +395,32 @@ export const fetchLiveScores = async (gameIds: string[]): Promise<GameFormatted[
   }
 };
 
+export const fetchClosestDates = async (params: {
+  league?: string;
+  teamSelectedId?: string;
+  date?: string;
+}): Promise<{ previousDate: string | null; nextDate: string | null }> => {
+  const query = new URLSearchParams();
+  if (params.league) {
+    query.append('leagues', params.league);
+  }
+  if (params.teamSelectedId) {
+    query.append('teamSelectedIds', params.teamSelectedId);
+  }
+  if (params.date) {
+    query.append('date', params.date);
+  }
+  const qs = query.toString();
+  return fetchWithCacheStrategy<{ previousDate: string | null; nextDate: string | null }>(
+    `${EXPO_PUBLIC_API_BASE_URL}/games/dates/closest${qs ? `?${qs}` : ''}`,
+    null,
+    { previousDate: null, nextDate: null },
+    undefined,
+    undefined,
+    10000,
+  );
+};
+
 export const fetchDateRangeFromApi = async () => {
   try {
     const cacheKey = 'date_range_limits';

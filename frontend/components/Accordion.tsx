@@ -25,6 +25,7 @@ export default function Accordion({
   forceShowScores = false,
   filtersHeaderHeight = 0,
   homeGameVisibility = false,
+  hideEventCount = false,
 }: Readonly<
   AccordionProps & {
     onRetry?: () => void;
@@ -112,7 +113,7 @@ export default function Accordion({
               alignItems: 'center',
               justifyContent: 'space-between',
               paddingBottom: 8,
-              borderBottomWidth: 1,
+              borderBottomWidth: hideEventCount ? 0 : 1,
               borderBottomColor: borderColor,
               marginHorizontal: 10,
             }}
@@ -128,25 +129,28 @@ export default function Accordion({
               {filter.toLocaleUpperCase()}
             </ListItem.Title>
 
-            <div
-              style={{
-                backgroundColor: badgeBackgroundColor,
-                padding: '2px 8px',
-                borderRadius: '4px',
-              }}
-            >
-              <span
+            {/* Event count badge — hidden when hideEventCount is set (e.g. favorites modal) */}
+            {!hideEventCount && (
+              <div
                 style={{
-                  color: badgeTextColor,
-                  fontSize: 10,
-                  fontWeight: '800',
-                  letterSpacing: 0.5,
-                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                  backgroundColor: badgeBackgroundColor,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
                 }}
               >
-                {(gamesFiltred || []).length} {translateWord('events').toUpperCase()}
-              </span>
-            </div>
+                <span
+                  style={{
+                    color: badgeTextColor,
+                    fontSize: 10,
+                    fontWeight: '800',
+                    letterSpacing: 0.5,
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                  }}
+                >
+                  {(gamesFiltred || []).length} {translateWord('events').toUpperCase()}
+                </span>
+              </div>
+            )}
           </ListItem.Content>
         }
         isExpanded={expanded}

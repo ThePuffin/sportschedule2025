@@ -4,6 +4,11 @@
 
 The **Schedule** tab (also called "Focus Team" / "Suivre une équipe") displays the remaining games of a selected team, grouped by month. It allows filtering by league, team, opponent (VS), and month.
 
+## Selection stability
+
+Team selectors use stable callback identifiers (`teams` and `teamsFilter`). `Selector` compares incoming selected IDs by content, so a parent render after fetching teams or games does not reset an unvalidated selection when the committed selection is unchanged.
+
+
 ## Key Features
 
 - **League selection** via `FilterSlider` (horizontal chips)
@@ -29,6 +34,8 @@ The **Schedule** tab (also called "Focus Team" / "Suivre une équipe") displays 
 | `leaguesAvailable`     | `string[]`    | Available leagues                           |
 | `leagueOfSelectedTeam` | `string`      | League of the selected team                 |
 | `showPreviousScores`   | `boolean`     | Whether to show past results                |
+| `hasPreviousHistory`   | `boolean`     | Whether the `closest` route reported a `previousDate` for the current selection |
+| `closestRequestRef`    | `Ref<string>` | Dedupe key (`team:<id>` or `league:<code>`) of the last `closest` request |
 | `isTeamAccordionOpen`  | `boolean`     | Mobile accordion state for team filter      |
 | `isDateAccordionOpen`  | `boolean`     | Mobile accordion state for date filter      |
 | `teamAccordionLabel`   | `string`      | Dynamic label for team/league accordion     |
@@ -68,6 +75,20 @@ Fetches games from the API:
 - Otherwise: fetches remaining games for the specific team
 - If `showPreviousScores`: also fetches results
 - Caches data in localStorage via `saveCache('scheduleData', ...)`
+
+### Empty schedule → `closest` history button
+
+When `visibleGamesByMonth` is empty (no upcoming games) and history is not already
+enabled (`showPreviousScores === false`), the screen calls `fetchClosestDates`:
+
+- If `teamSelected === 'all'`: sends `{ league: leagueOfSelectedTeam }`
+- Otherwise: sends `{ teamSelectedId: teamSelected }`
+
+If the response contains a `previousDate`, an "Enable history" button
+(`translateWord('enableHistory')`, `MaterialIcons` `history` icon) is rendered
+**inside** the `NoResults` component, above the "No results" text
+(via props `showHistoryButton` + `onEnableHistory`). Clicking it calls `handlePreviousScoreToggle(true)`
+to enable the history. Hidden while loading or once history is enabled.
 
 ## Key Memoized Values
 

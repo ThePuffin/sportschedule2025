@@ -4,9 +4,10 @@ import React from 'react';
 interface SeparatorProps {
   readonly height?: number;
   readonly label?: string;
+  readonly opacity?: number;
 }
 
-export default function Separator({ height = 1, label }: Readonly<SeparatorProps>) {
+export default function Separator({ height = 1, label, opacity = 0.2 }: Readonly<SeparatorProps>) {
   const themeColor = useThemeColor({}, 'text');
 
   return (
@@ -19,7 +20,7 @@ export default function Separator({ height = 1, label }: Readonly<SeparatorProps
         margin: label ? '10px 0' : `${height}px 0`,
       }}
     >
-      <div style={{ flex: 1, height, backgroundColor: themeColor, opacity: 0.2 }} />
+      <div style={{ flex: 1, height, backgroundColor: themeColor, opacity, transition: 'opacity 200ms ease-in-out' }} />
       {label ? (
         <span
           style={{
@@ -35,7 +36,7 @@ export default function Separator({ height = 1, label }: Readonly<SeparatorProps
           {label}
         </span>
       ) : null}
-      <div style={{ flex: 1, height, backgroundColor: themeColor, opacity: 0.2 }} />
+      <div style={{ flex: 1, height, backgroundColor: themeColor, opacity, transition: 'opacity 200ms ease-in-out' }} />
     </div>
   );
 }

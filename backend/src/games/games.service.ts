@@ -32,14 +32,13 @@ export class GameService {
   private manualRefreshInProgress: { [league: string]: boolean } = {};
   private isFetchingScores: boolean = false;
   private isCheckingAvailability: boolean = false;
-  private refreshChain: Promise<any> = Promise.resolve();
   constructor(
     @InjectModel(Game.name) public gameModel: Model<Game>,
     private readonly teamService: TeamService,
     private readonly refreshTimestampService: RefreshTimestampService,
   ) {}
 
-  maxYearBeforeDelete = 15;
+  maxYearBeforeDelete = 10;
   // Purge games that are still active/resolved-less several months after their start
   // (e.g. a PWHL game stuck on 2026-05-11 whose final result can never be fetched).
   staleGameMaxAgeDays = 90;
@@ -621,6 +620,7 @@ export class GameService {
           console.info(
             `[Oldies] ${normalizedLeague} ${season ? `(season ${season})` : ''}: added ${added}, skipped (existing identical) ${skippedExisting}, skipped (missing team/score data) ${skippedMissingTeamData}.`,
           );
+          return { added, skippedExisting, skippedMissingTeamData };
         }
       }
 
@@ -693,8 +693,15 @@ export class GameService {
       .lean()
       .exec();
     if (Object.keys(allGames).length === 0 || allGames?.length === 0) {
-      console.info('No games found in DB. Fetching all games...');
-      return this.getAllGames();
+      // Read-only on empty DB: never trigger the heavy getAllGames() chain
+      // from a read route (GET /games). It fetched ALL leagues with no season
+      // gate and blocked the server (sequential third-party fetches under the
+      // 460 MB heap budget → restarts). The cron jobs (monthly getAllGames,
+      // daily per-league refreshes, checkLeagueGamesAvailability) fill the
+      // DB; a manual one-league refresh stays available via
+      // POST /games/refresh/:league.
+      console.info('No games found in DB. Returning [] — cron jobs will fill the DB.');
+      return [];
     }
 
     const teams = await this.teamService.findAll();
@@ -711,13 +718,27 @@ export class GameService {
     return game;
   }
 
-  async getDateRange() {
+  async getDateRange(leagues?: string) {
+    const match: any = {
+      isActive: true,
+      $expr: { $eq: ['$homeTeamId', '$teamSelectedId'] },
+    };
+
+    // Optionally scope the min/max dates to a specific set of leagues
+    // (comma/space/plus separated, same convention as `findByDateHour`).
+    if (leagues) {
+      const leaguesList = leagues
+        .split(/[ ,+]+/)
+        .filter((l) => l.trim().length > 0)
+        .map((l) => l.trim().toUpperCase());
+      if (leaguesList.length > 0) {
+        match.league = { $in: leaguesList };
+      }
+    }
+
     const result = await this.gameModel.aggregate([
       {
-        $match: {
-          isActive: true,
-          $expr: { $eq: ['$homeTeamId', '$teamSelectedId'] },
-        },
+        $match: match,
       },
       {
         $group: {
@@ -732,6 +753,93 @@ export class GameService {
       return { minDate: result[0].minDate, maxDate: result[0].maxDate };
     }
     return { minDate: null, maxDate: null };
+  }
+
+  /**
+   * Returns the closest past and future game dates, optionally scoped to one or
+   * several leagues and/or teams.
+   *
+   * Flow (dedicated helpers make each step easy to follow):
+   *   1. `_buildClosestDatesFilter` — turn the raw query params into a Mongo filter.
+   *   2. `_findClosestGameDate` is called twice — once for the past (largest
+   *      `gameDate` strictly before today) and once for the upcoming (smallest
+   *      `gameDate` from today onwards).
+   *
+   * @returns `{ previousDate, nextDate }` as `YYYY-MM-DD` strings (or `null` when
+   *          no active game matches).
+   */
+  async getClosestDates({
+    leagues,
+    teamSelectedIds,
+    date,
+  }: {
+    leagues?: string;
+    teamSelectedIds?: string;
+    /** Reference date (`YYYY-MM-DD`). When omitted, `today` is used as the boundary. */
+    date?: string;
+  }) {
+    const baseFilter = this._buildClosestDatesFilter(leagues, teamSelectedIds);
+    const boundary = (date ?? '').trim() || readableDate(new Date());
+
+    const previousDate = await this._findClosestGameDate(
+      { ...baseFilter, gameDate: { $lt: boundary } },
+      '$max',
+    );
+    const nextDate = await this._findClosestGameDate(
+      { ...baseFilter, gameDate: { $gte: boundary } },
+      '$min',
+    );
+
+    return { previousDate, nextDate };
+  }
+
+  /**
+   * Builds the base Mongo filter for `getClosestDates`.
+   * - `leagues`: comma/space/plus separated, uppercased → `league: { $in: [...] }`
+   *   (same convention as `findByDateHour`).
+   * - `teamSelectedIds`: comma separated → `teamSelectedId: { $in: [...] }`
+   *   (same convention as `filterGames`).
+   */
+  _buildClosestDatesFilter(leagues?: string, teamSelectedIds?: string) {
+    const filter: any = { isActive: true };
+
+    if (leagues && leagues.length > 0) {
+      const leaguesList = leagues
+        .split(/[ ,+]+/)
+        .filter((l) => l.trim().length > 0)
+        .map((l) => l.trim().toUpperCase());
+      if (leaguesList.length > 0) {
+        filter.league = { $in: leaguesList };
+      }
+    }
+
+    if (teamSelectedIds && teamSelectedIds.length > 0) {
+      const teams = teamSelectedIds
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      if (teams.length > 0) {
+        filter.teamSelectedId = { $in: teams };
+      }
+    }
+
+    return filter;
+  }
+
+  /**
+   * Runs a single aggregation that returns the `_id`-less min/max `gameDate`
+   * matching `filter`. Returns the date string or `null` when nothing matches.
+   */
+  async _findClosestGameDate(
+    filter: Record<string, unknown>,
+    operator: '$min' | '$max',
+  ) {
+    const pipeline: any[] = [
+      { $match: filter },
+      { $group: { _id: null, date: { [operator]: '$gameDate' } } },
+    ];
+    const result = await this.gameModel.aggregate(pipeline);
+    return result.length > 0 ? result[0].date : null;
   }
 
   async findByTeam(
@@ -1068,74 +1176,36 @@ export class GameService {
       .exec();
 
     if (games.length === 0) {
-      const allGames = await this.findAll();
-      if (!allGames.length) {
-        // Pass the requested date so getAllGames only refreshes the leagues
-        // whose season or playoffs cover this specific date, instead of
-        // fetching every league's schedule from third-party APIs.
-        await this.getAllGames(false, new Date(gameDate));
-      }
+      // Read-only route: no refresh-on-empty. An empty day is a legitimate
+      // result (off-season, no games for the filters); the cron jobs (daily
+      // per-league refreshes + monthly getAllGames) keep the DB filled.
+      console.info(`No games found in DB for ${gameDate}. Returning [].`);
       return [];
-    } else {
-      const leaguesInGames = Array.from(
-        new Set(games.map((g) => g.league).filter(Boolean)),
-      );
-      if (gameDate >= yesterdayString) {
-        for (const currentLeague of leaguesInGames) {
-          const filteredGamesForLeague = games.filter(
-            ({ isActive, awayTeamId, league }) => {
-              return (
-                isActive === true &&
-                awayTeamId !== undefined &&
-                awayTeamId !== '' &&
-                league?.toUpperCase() === currentLeague?.toUpperCase()
-              );
-            },
-          );
-
-          if (filteredGamesForLeague.length === 0) {
-            continue;
-          }
-          if (
-            !(await needRefresh(currentLeague, {
-              data: filteredGamesForLeague,
-            }))
-          ) {
-            continue;
-          }
-
-          this.refreshChain = this.refreshChain.then(() =>
-            this.getLeagueGames({
-              league: currentLeague,
-              forceUpdate: false,
-              skipCascade: false,
-            }).catch((err) =>
-              console.error(`Error refreshing ${currentLeague}`, err),
-            ),
-          );
-        }
-      }
-
-      const teams = await this.teamService.findAll(
-        leaguesInGames.length > 0 ? leaguesInGames : undefined,
-      );
-      const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
-
-      // avoid dupplicate games
-      const filteredGames = games.filter(({ gameStatus, startTimeUTC }) => {
-        const now = new Date();
-        const isStartedForMoreThan12Hours =
-          new Date(startTimeUTC) <
-          new Date(now.getTime() - 12 * 60 * 60 * 1000);
-        return (
-          (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
-          gameStatus === 'FINISHED'
-        );
-      });
-      return filteredGames.map((game: any) =>
-        this._enrichGameWithTeamData(game, teamsMap),
-      );
     }
+
+    const leaguesInGames = Array.from(
+      new Set(games.map((g) => g.league).filter(Boolean)),
+    );
+
+    const teams = await this.teamService.findAll(
+      leaguesInGames.length > 0 ? leaguesInGames : undefined,
+    );
+    const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
+
+    // avoid dupplicate games
+    const filteredGames = games.filter(({ gameStatus, startTimeUTC }) => {
+      const now = new Date();
+      const isStartedForMoreThan12Hours =
+        new Date(startTimeUTC) <
+        new Date(now.getTime() - 12 * 60 * 60 * 1000);
+      return (
+        (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
+        gameStatus === 'FINISHED'
+      );
+    });
+    return filteredGames.map((game: any) =>
+      this._enrichGameWithTeamData(game, teamsMap),
+    );
   }
 
   async update(uniqueId: string, updateGameDto: Partial<UpdateGameDto>) {
@@ -1312,6 +1382,10 @@ export class GameService {
         ],
       })
       .exec();
+  }
+
+  get isScoreRecoveryRunning(): boolean {
+    return this.isFetchingScores;
   }
 
   async fetchGamesScores(): Promise<any[]> {
@@ -1876,96 +1950,57 @@ export class GameService {
 
     const games = await query.lean().exec();
     if (games.length === 0) {
-      if (!skip) {
-        const allGames = await this.findAll();
-        if (!allGames.length) {
-          if (leaguesList.length > 0) {
-            await this.getAllGames(false, gameDate, leaguesList);
-          } else {
-            await this.getAllGames(false, gameDate);
-          }
-        }
-      }
+      // Read-only route: no refresh-on-empty. An empty day is a legitimate
+      // result (off-season, no games for the selected leagues/filters); the
+      // cron jobs (daily per-league refreshes + monthly getAllGames +
+      // checkLeagueGamesAvailability) fill and keep the DB fresh. Refreshing
+      // from this read path was blocking the server during third-party
+      // schedule fetches (event-loop + memory pressure → restarts).
+      console.info(`[findByDateHour] No games found for ${gameDate}. Returning {}.`);
       return {};
-    } else {
-      if (gameDate === today) {
-        const leaguesInGames = Array.from(
-          new Set(games.map((g) => g.league).filter(Boolean)),
-        );
-
-        for (const currentLeague of leaguesInGames) {
-          const filteredGamesForLeague = games.filter(
-            ({ isActive, awayTeamId, league }) => {
-              return (
-                isActive === true &&
-                awayTeamId !== undefined &&
-                awayTeamId !== '' &&
-                league?.toUpperCase() === currentLeague?.toUpperCase()
-              );
-            },
-          );
-
-          if (
-            !(await needRefresh(currentLeague, {
-              data: filteredGamesForLeague,
-            }))
-          ) {
-            continue;
-          }
-          this.refreshChain = this.refreshChain.then(() =>
-            this.getLeagueGames({
-              league: currentLeague,
-              forceUpdate: false,
-              skipCascade: true,
-            }).catch((err) =>
-              console.error(`Error refreshing ${currentLeague}`, err),
-            ),
-          );
-        }
-      }
-
-      const leaguesInGames = Array.from(
-        new Set(games.map((g) => g.league).filter(Boolean)),
-      );
-
-      const teams = await this.teamService.findAll(
-        leaguesList.length > 0
-          ? leaguesList
-          : leaguesInGames.length > 0
-            ? leaguesInGames
-            : undefined,
-      );
-      const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
-
-      // avoid dupplicate games
-      const filteredGames = games.filter(({ gameStatus, startTimeUTC }) => {
-        const now = new Date();
-        const isStartedForMoreThan12Hours =
-          new Date(startTimeUTC) <
-          new Date(now.getTime() - 12 * 60 * 60 * 1000);
-        return (
-          (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
-          gameStatus === 'FINISHED'
-        );
-      });
-
-      const gamesByTimeSlot: { [key: string]: any[] } = {};
-      filteredGames.forEach((game: any) => {
-        const enrichedGame = this._enrichGameWithTeamData(game, teamsMap);
-        const date = new Date(enrichedGame.startTimeUTC);
-        const hours = date.getUTCHours().toString().padStart(2, '0');
-        const minutes = date.getUTCMinutes();
-        const minutesStr = minutes < 30 ? '00' : '30';
-        const timeSlot = `${hours}:${minutesStr}`;
-
-        if (!gamesByTimeSlot[timeSlot]) {
-          gamesByTimeSlot[timeSlot] = [];
-        }
-        gamesByTimeSlot[timeSlot].push(enrichedGame);
-      });
-
-      return gamesByTimeSlot;
     }
+
+    const leaguesInGames = Array.from(
+      new Set(games.map((g) => g.league).filter(Boolean)),
+    );
+
+    const teams = await this.teamService.findAll(
+      leaguesList.length > 0
+        ? leaguesList
+        : leaguesInGames.length > 0
+          ? leaguesInGames
+          : undefined,
+    );
+    const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
+
+    // avoid dupplicate games
+    const filteredGames = games.filter(({ gameStatus, startTimeUTC }) => {
+      const now = new Date();
+      const isStartedForMoreThan12Hours =
+        new Date(startTimeUTC) <
+        new Date(now.getTime() - 12 * 60 * 60 * 1000);
+      return (
+        (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
+        gameStatus === 'FINISHED'
+      );
+    });
+
+    const gamesByTimeSlot: { [key: string]: any[] } = {};
+    filteredGames.forEach((game: any) => {
+      const enrichedGame = this._enrichGameWithTeamData(game, teamsMap);
+      const date = new Date(enrichedGame.startTimeUTC);
+      const hours = date.getUTCHours().toString().padStart(2, '0');
+      const minutes = date.getUTCMinutes();
+      const minutesStr = minutes < 30 ? '00' : '30';
+      const timeSlot = `${hours}:${minutesStr}`;
+
+      if (!gamesByTimeSlot[timeSlot]) {
+        gamesByTimeSlot[timeSlot] = [];
+      }
+      gamesByTimeSlot[timeSlot].push(enrichedGame);
+    });
+
+    return gamesByTimeSlot;
   }
 
   private _resolveStatus(score: any): string {
@@ -2568,6 +2603,8 @@ export class GameService {
     );
 
     // 2. Loop through the leagues and the requested years
+    // Track years where games were actually added (added > 0) for the response message
+    const yearsWithAdditions: number[] = [];
     for (const league of leagues) {
       for (const year of years) {
         console.info(
@@ -2577,13 +2614,17 @@ export class GameService {
         try {
           // Call getLeagueGames passing the specific season parameter.
           // addMissingOnly ensures we never overwrite existing matches (only insert missing ones..
-          await this.getLeagueGames({
+          const result = await this.getLeagueGames({
             league,
             forceUpdate: true,
             skipCascade: true, // true to avoid concurrent refresh conflicts
             season: year,
             addMissingOnly: true, // Oldies: do not overwrite, only add missing games.
           });
+          // Track years where at least one game was actually added
+          if (result && typeof result === 'object' && 'added' in result && result.added > 0) {
+            yearsWithAdditions.push(year);
+          }
         } catch (error) {
           console.error(`[Oldies] Error for ${league} in ${year}:`, error);
         }
@@ -2591,8 +2632,22 @@ export class GameService {
     }
 
     console.info('[Oldies] History data recovery completed!');
+
+    // Build the response message: only list years where games were actually added
+    const addedYearsLabel =
+      yearsWithAdditions.length > 1
+        ? `years ${yearsWithAdditions.join(', ')}`
+        : yearsWithAdditions.length === 1
+          ? `the year ${yearsWithAdditions[0]}`
+          : null;
+
+    const message = addedYearsLabel
+      ? `History recovery for ${addedYearsLabel} ${leagueParam ? `for league ${leagueParam}` : ''} started successfully.`
+      : `History recovery ${leagueParam ? `for league ${leagueParam}` : ''} completed — no new games were added (all years already up to date).`;
+
     return {
-      message: `History recovery for ${yearsLabel} ${leagueParam ? `for league ${leagueParam}` : ''} started successfully.`,
+      message,
+      yearsWithAdditions,
     };
   }
 }

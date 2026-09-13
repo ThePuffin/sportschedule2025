@@ -29,6 +29,7 @@ import LoadingView from '../../components/LoadingView';
 import PreviousScoreToggle from '../../components/PreviousScoreToggle';
 import Separator from '../../components/Separator';
 import {
+  fetchClosestDates,
   fetchLeagues,
   fetchRemainingGamesByLeague,
   fetchRemainingGamesByTeam,
@@ -78,6 +79,8 @@ export default function Schedule() {
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [leagueOfSelectedTeam, setleagueOfSelectedTeam] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasPreviousHistory, setHasPreviousHistory] = useState(false);
+  const closestRequestRef = useRef('');
   const [showPreviousScores, setShowPreviousScores] = useState<boolean>(
     () => getCache<boolean>('showPreviousScores') || false,
   );
@@ -554,6 +557,55 @@ export default function Schedule() {
     }
   }, [scrollTargetId, isLoading, monthFilter.length, focusCount, teamFilter, showPreviousScores]);
 
+  useEffect(() => {
+    // Sur schedule : si aucun match à venir, interroger la route 'closest'
+    // (équipe sélectionnée, ou league si sélection 'all') pour proposer l'historique.
+    if (isLoading || showPreviousScores || !teamSelected) {
+      return;
+    }
+    if (visibleGamesByMonth.length > 0) {
+      closestRequestRef.current = '';
+      setHasPreviousHistory(false);
+      return;
+    }
+    const isAll = teamSelected === 'all';
+    const leagueParamValue = leagueOfSelectedTeam || leaguesAvailable[0];
+    if (isAll && !leagueParamValue) {
+      return;
+    }
+    const requestKey = isAll ? `league:${leagueParamValue}` : `team:${teamSelected}`;
+    if (closestRequestRef.current === requestKey) {
+      return;
+    }
+    closestRequestRef.current = requestKey;
+    let cancelled = false;
+    let completed = false;
+    (async () => {
+      try {
+        const closest = isAll
+          ? await fetchClosestDates({ league: leagueParamValue })
+          : await fetchClosestDates({ teamSelectedId: teamSelected });
+        completed = true;
+        if (!cancelled) {
+          setHasPreviousHistory(!!closest?.previousDate);
+        }
+      } catch {
+        completed = true;
+        if (!cancelled) {
+          setHasPreviousHistory(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      // En dev (StrictMode), l'effet est démonté/remonté aussitôt : si la requête
+      // n'a pas abouti, on libère la clé pour que le second passage relance l'appel.
+      if (!completed) {
+        closestRequestRef.current = '';
+      }
+    };
+  }, [isLoading, showPreviousScores, visibleGamesByMonth.length, teamSelected, leagueOfSelectedTeam, leaguesAvailable]);
+
   const stickyFiltersHeight = useMemo(() => {
     if (!isSmallDevice) return 0;
 
@@ -670,14 +722,14 @@ export default function Schedule() {
     const leagues = leaguesAvailable || [];
 
     const dataTeams = {
-      i: randomNumber(999999),
+      i: 'teams',
       items: teamsForSelector,
       itemsSelectedIds: [],
       itemSelectedId: teamSelected,
     };
 
     const dataTeamsFilter = {
-      i: randomNumber(999999),
+      i: 'teamsFilter',
       items: [{ ...allOption, label: translateWord('all'), uniqueId: '' }, ...uniqueTeamsFromGames],
       itemsSelectedIds: [],
       itemSelectedId: teamFilter,
@@ -928,6 +980,13 @@ export default function Schedule() {
       // switch back to the "All" option when the retry cooldown is active.
       const isFiltered = teamSelected !== 'all' && teamSelected !== '';
       const showAllHandler = isFiltered ? () => handleTeamSelectionChange('all') : undefined;
+      // Bouton "activer l'historique" affiché DANS NoResults (au-dessus du texte),
+      // une fois que la route 'closest' a confirmé un previousDate.
+      const showHistoryButton = hasPreviousHistory && !showPreviousScores && !isLoading;
+      const historyProps = {
+        showHistoryButton,
+        onEnableHistory: () => handlePreviousScoreToggle(true),
+      };
       if (
         !games ||
         (gameKeys2.length === 1 && gameKeys2[0] === today && (games[today]?.[0]?.updateDate ?? '') === '')
@@ -935,14 +994,14 @@ export default function Schedule() {
         return (
           <div style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
             <br />
-            <NoResults onShowAll={showAllHandler} />
+            <NoResults onShowAll={showAllHandler} {...historyProps} />
           </div>
         );
       }
       return (
         <div style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
           <br />
-          <NoResults onShowAll={showAllHandler} />
+          <NoResults onShowAll={showAllHandler} {...historyProps} />
         </div>
       );
     }

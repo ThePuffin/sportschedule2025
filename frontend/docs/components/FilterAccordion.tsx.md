@@ -21,6 +21,7 @@ The **FilterAccordion** component provides a collapsible section for filter cont
 | `children`         | `React.ReactNode`             | —       | Filter controls to render inside     |
 | `isSmallDevice`    | `boolean`                     | —       | Whether on mobile                    |
 | `defaultOpen`      | `boolean`                     | `false` | Initial expanded state               |
+| `expanded`         | `boolean`                     | `null`  | **Controlled** expanded value. When provided, the accordion uses this value (instead of internal state) and `onExpandedChange` is called on toggle, letting the parent force open/close. Omit for uncontrolled mode |
 | `onExpandedChange` | `(expanded: boolean) => void` | —       | Callback when expanded state changes |
 
 ## Key Functions
@@ -29,11 +30,13 @@ The **FilterAccordion** component provides a collapsible section for filter cont
 
 ```typescript
 useEffect(() => {
-  onExpandedChange?.(expanded);
-}, [expanded, onExpandedChange]);
+  if (!isControlled) {
+    onExpandedChange?.(internalExpanded);
+  }
+}, [internalExpanded, onExpandedChange, isControlled]);
 ```
 
-Notifies the parent whenever the expanded state changes. This is used by screens to calculate the sticky filter header height.
+Notifies the parent whenever the expanded state changes (**uncontrolled mode only**). When the `expanded` prop is provided (controlled mode), the parent is responsible for calling `onExpandedChange` on toggle, and the accordion simply reflects the passed value.
 
 ## Data Flow
 

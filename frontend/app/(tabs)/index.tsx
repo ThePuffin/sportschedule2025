@@ -1,3 +1,4 @@
+import DateRangePicker, { DatePickerHandle } from '@/components/DatePicker';
 import FilterAccordion from '@/components/FilterAccordion';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
@@ -6,7 +7,6 @@ import ScoreToggle from '@/components/ScoreToggle';
 import Separator from '@/components/Separator';
 import SliderDatePicker from '@/components/SliderDatePicker';
 import TeamFilter from '@/components/TeamFilter';
-import DateRangePicker, { DatePickerHandle } from '@/components/DatePicker';
 import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
 import { useAuth } from '@/context/AuthContext';
@@ -24,9 +24,17 @@ import { ActionButton, ActionButtonRef } from '../../components/ActionButton';
 import LoadingView from '../../components/LoadingView';
 import { GameStatus, League } from '../../constants/enum';
 import { fetchDateRangeLimits, getDateRangeLimits } from '../../utils/dateRange';
-import { fetchGamesByHour, fetchLeagues, fetchLiveScores, getCache, saveCache } from '../../utils/fetchData';
-import { GameFormatted } from '../../utils/types';
-import { getFilterAccordionLabel, randomNumber, translateFilterLabel, translateWord } from '../../utils/utils';
+import {
+  fetchClosestDates,
+  fetchGamesByHour,
+  fetchLeagues,
+  fetchLiveScores,
+  fetchTeams,
+  getCache,
+  saveCache,
+} from '../../utils/fetchData';
+import { GameFormatted, Team } from '../../utils/types';
+import { getFilterAccordionLabel, translateFilterLabel, translateWord } from '../../utils/utils';
 
 const formatDateLocal = (date: Date) => {
   const year = date.getFullYear();
@@ -108,11 +116,25 @@ const GameofTheDayContent = () => {
   const [isLoading, setIsLoading] = useState(true);
   const readonlyRef = useRef(false);
   const hasInitializedRef = useRef(false);
+  const [closestDates, setClosestDates] = useState<{ previousDate: string | null; nextDate: string | null }>({
+    previousDate: null,
+    nextDate: null,
+  });
+  const closestRequestRef = useRef('');
+  // Stocke l'uniqueId résolu de l'équipe sélectionnée (slider = label → résolu via cache teams ; modale = uniqueId direct).
+  // Permet à l'effet 'closest' de filtrer par équipe même quand le jour est vide (games vide → résolution impossible depuis games).
+  const [selectedTeamUniqueId, setSelectedTeamUniqueId] = useState('');
 
   const [dateLimits, setDateLimits] = useState(() => getDateRangeLimits());
 
   useEffect(() => {
     fetchDateRangeLimits().then(setDateLimits);
+  }, []);
+
+  // Précharger le cache 'teams' (24h) au montage pour garantir que getCache<Team[]>('teams')
+  // est disponible quand l'utilisateur filtre par équipe via le slider (résolution label → uniqueId).
+  useEffect(() => {
+    fetchTeams().catch(() => {});
   }, []);
 
   const { minDate, maxDate } = dateLimits;
@@ -551,6 +573,18 @@ const GameofTheDayContent = () => {
   const handleTeamSelectionChange = useCallback((teamId: string | string[]) => {
     const finalTeamId = Array.isArray(teamId) ? teamId[0] : teamId;
     setTeamSelectedId(finalTeamId);
+    // La modale envoie directement l'uniqueId : le stocker pour l'effet 'closest'.
+    setSelectedTeamUniqueId(finalTeamId);
+  }, []);
+const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
+    setDateAccordionExpanded(expanded);
+  }, []);
+
+  // Open the calendar datepicker (loupe button). The league/team filter accordion
+  // is left in its current state (open or closed) — the calendar now renders in a
+  // centered modal, so it no longer needs extra vertical space in the page.
+  const openCalendarDatepicker = useCallback(() => {
+    dateRangePickerRef.current?.open();
   }, []);
 
   // Retry mechanism when no games are found (NoResults is visible)
@@ -569,6 +603,92 @@ const GameofTheDayContent = () => {
   useEffect(() => {
     setRetryCount(0);
   }, [selectDate, selectLeagues, teamSelectedId, activeFilter]);
+
+  // Quand aucun match n'est visible pour le jour + filtre courant, interroger
+  // la route 'closest' avec la date affichée comme borne :
+  // - équipe spécifique sélectionnée → teamSelectedIds (uniqueId déjà résolu dans selectedTeamUniqueId) ;
+  // - sinon ("TOUS") → leagues (la league filtrée, ex. MLB).
+  useEffect(() => {
+    if (isLoading || visibleGamesByHour.length > 0) {
+      if (visibleGamesByHour.length > 0) {
+        closestRequestRef.current = '';
+        setClosestDates({ previousDate: null, nextDate: null });
+      }
+      return;
+    }
+    // Contrat index : date affichée (borne) + équipe spécifique si sélectionnée,
+    // sinon league filtrée quand le filtre équipe est sur "TOUS".
+    // selectedTeamUniqueId contient l'uniqueId résolu au moment de la sélection
+    // (slider : label → résolu via cache teams ; modale : uniqueId direct),
+    // donc utilisable même quand le jour est vide (games vide).
+    // Fallback de sécurité : si selectedTeamUniqueId est vide mais que teamSelectedId
+    // est un label (contient un espace), résoudre via fetchTeams() (cache 24h) avant l'appel.
+    // Cela couvre le cas où le cache 'teams' n'aurait pas été chargé au moment du clic.
+    // League effective : filtre league explicite (ex. MLB via handleFilterChange),
+    // en excluant les pseudo-filtres ALL / FAVORITES / BOOKMARKS.
+    const effectiveLeague =
+      activeFilter !== 'ALL' && activeFilter !== 'FAVORITES' && activeFilter !== 'BOOKMARKS'
+        ? activeFilter
+        : selectLeagues.length === 1 && selectLeagues[0] !== ('ALL' as League)
+          ? selectLeagues[0]
+          : '';
+    const requestKey = [
+      formatDateLocal(selectDate),
+      selectedTeamUniqueId
+        ? `team:${selectedTeamUniqueId}`
+        : teamSelectedId && teamSelectedId.includes(' ')
+          ? `team:${teamSelectedId}`
+          : `league:${effectiveLeague || '-'}`,
+    ].join('|');
+    if (closestRequestRef.current === requestKey) {
+      return;
+    }
+    closestRequestRef.current = requestKey;
+    let cancelled = false;
+    let completed = false;
+    (async () => {
+      try {
+        let resolvedTeamId = selectedTeamUniqueId;
+        if (!resolvedTeamId && teamSelectedId && teamSelectedId.includes(' ')) {
+          try {
+            const teams = await fetchTeams();
+            resolvedTeamId = teams?.find((t) => t.label === teamSelectedId)?.uniqueId ?? '';
+          } catch {
+            resolvedTeamId = '';
+          }
+        }
+        const useTeam = !!resolvedTeamId;
+        const closest = useTeam
+          ? await fetchClosestDates({
+              teamSelectedId: resolvedTeamId,
+              date: formatDateLocal(selectDate),
+            })
+          : await fetchClosestDates({
+              league: effectiveLeague || undefined,
+              date: formatDateLocal(selectDate),
+            });
+        completed = true;
+        if (!cancelled) {
+          setClosestDates({
+            previousDate: closest?.previousDate ?? null,
+            nextDate: closest?.nextDate ?? null,
+          });
+        }
+      } catch {
+        completed = true;
+        if (!cancelled) {
+          setClosestDates({ previousDate: null, nextDate: null });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (!completed) {
+        closestRequestRef.current = '';
+      }
+    };
+    // selectedTeamUniqueId remplace games pour la résolution équipe (indépendant du jour).
+  }, [isLoading, visibleGamesByHour.length, selectDate, selectedTeamUniqueId, teamSelectedId, selectLeagues, activeFilter]);
 
   const hasFavorites = useMemo(() => {
     return games.some((game) => favoriteTeams.includes(game.homeTeamId) || favoriteTeams.includes(game.awayTeamId));
@@ -659,9 +779,16 @@ const GameofTheDayContent = () => {
   const displayFilters = useCallback(() => {
     const handleTeamFilterChange = (val: string) => {
       if (val === 'ALL') {
-        handleTeamSelectionChange('');
+        setTeamSelectedId('');
+        setSelectedTeamUniqueId('');
       } else {
-        handleTeamSelectionChange(val);
+        // Le slider envoie un label (ex. "New Jersey Devils") : résoudre vers l'uniqueId
+        // via le cache 'teams' (24h) pour que l'effet 'closest' puisse filtrer par équipe
+        // même quand le jour affiché est vide (games vide → résolution impossible depuis games).
+        const cachedTeams = getCache<Team[]>('teams');
+        const resolved = cachedTeams?.find((t) => t.label === val)?.uniqueId ?? '';
+        setTeamSelectedId(val);
+        setSelectedTeamUniqueId(resolved);
       }
     };
 
@@ -698,7 +825,7 @@ const GameofTheDayContent = () => {
       <TeamFilter
         icon={<Ionicons name="search" size={24} color="white" />}
         selectorData={{
-          i: randomNumber(999999),
+          i: 'teamsOfDay',
           items: modalItems as any,
           itemSelectedId: modalItemSelectedId,
           itemsSelectedIds: [],
@@ -724,20 +851,45 @@ const GameofTheDayContent = () => {
     }
   }, [isLoading, getGamesFromApi, selectDate]);
 
+  const goToClosestDate = useCallback(
+    (dateStr: string) => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      if (!y || !m || !d) return;
+      handleDateChange(new Date(y, m - 1, d), new Date(y, m - 1, d));
+    },
+    [handleDateChange],
+  );
+
   const displayContent = useCallback(() => {
     if (!games || games.length === 0) {
       return displayNoContent();
     }
 
     if (visibleGamesByHour.length === 0) {
+      // Si la route 'closest' a trouvé des dates avec des matchs pour les
+      // filtres courants, proposer de naviguer vers la date en amont/aval.
+      const closestProps =
+        !isLoading && (closestDates.previousDate || closestDates.nextDate)
+          ? {
+              previousAvailableDate: closestDates.previousDate,
+              nextAvailableDate: closestDates.nextDate,
+              onGoToDate: goToClosestDate,
+            }
+          : {};
       // If the user has a filter active (not "All"), offer a way to switch back
       // to the "All" option when the retry cooldown is active.
       const isFiltered =
         activeFilter !== 'ALL' || teamSelectedId !== '' || selectLeagues.length !== allLeaguesList.length;
       if (isFiltered) {
-        return <NoResults onRetry={() => getGamesFromApi(selectDate)} onShowAll={() => handleFilterChange('ALL')} />;
+        return (
+          <NoResults
+            onRetry={() => getGamesFromApi(selectDate)}
+            onShowAll={() => handleFilterChange('ALL')}
+            {...closestProps}
+          />
+        );
       }
-      return <NoResults onRetry={() => getGamesFromApi(selectDate)} />;
+      return <NoResults onRetry={() => getGamesFromApi(selectDate)} {...closestProps} />;
     }
 
     return (
@@ -770,6 +922,8 @@ const GameofTheDayContent = () => {
     selectLeagues,
     allLeaguesList,
     handleFilterChange,
+    closestDates,
+    goToClosestDate,
   ]);
 
   useEffect(() => {
@@ -906,8 +1060,9 @@ const GameofTheDayContent = () => {
                       ? {
                           width: windowWidth < 1200 ? '95%' : '100%',
                           margin: '0 auto',
-                          padding: 10,
+                          padding: '0 10 10 10',
                           boxSizing: 'border-box',
+                          backgroundColor: backgroundColor,
                         }
                       : {}
                   }
@@ -917,6 +1072,7 @@ const GameofTheDayContent = () => {
                       label={leagueAccordionLabel}
                       defaultOpen={false}
                       isSmallDevice={isSmallDevice}
+                      expanded={leagueAccordionExpanded}
                       onExpandedChange={setLeagueAccordionExpanded}
                     >
                       <FilterSlider
@@ -962,55 +1118,56 @@ const GameofTheDayContent = () => {
                     <FilterAccordion
                       label={
                         isSmallDevice && !dateAccordionExpanded ? (
-                        <span>
-                          {translateFilterLabel('date')} :{' '}
-                          <i>
-                            <b>
-                              {new Date(selectDate).toLocaleDateString(undefined, {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })}
-                            </b>
-                          </i>
-                        </span>
-                      ) : (
-                        translateFilterLabel('date')
-                      )
-                    }
-                    defaultOpen={false}
-                    isSmallDevice={isSmallDevice}
-                    onExpandedChange={setDateAccordionExpanded}
-                  >
-                    <div>
-                      <SliderDatePicker
-                        onDateChange={(date) => handleDateChange(date, date)}
-                        selectDate={selectDate}
-                        disabled={isLoading}
-                        minDate={minDate}
-                        maxDate={maxDate}
-                        onSearch={() => dateRangePickerRef.current?.open()}
-                      />
-                      {/*
+                          <span>
+                            {translateFilterLabel('date')} :{' '}
+                            <i>
+                              <b>
+                                {new Date(selectDate).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </b>
+                            </i>
+                          </span>
+                        ) : (
+                          translateFilterLabel('date')
+                        )
+                      }
+                      defaultOpen={false}
+                      isSmallDevice={isSmallDevice}
+                      onExpandedChange={handleDateAccordionExpanded}
+                    >
+                      <div>
+                        <SliderDatePicker
+                          onDateChange={(date) => handleDateChange(date, date)}
+                          selectDate={selectDate}
+                          disabled={isLoading}
+                          minDate={minDate}
+                          maxDate={maxDate}
+                          onSearch={openCalendarDatepicker}
+                        />
+                        {/*
                         Hidden date-range picker in single-date mode. It is opened
-                        imperatively by the SliderDatePicker magnifier (onSearch) and
+                        imperatively by the SliderDatePicker loupe button (onSearch) and
                         writes the selected date back to `selectDate` via
                         `handleDateChange`. `showInput={false}` avoids a duplicate
-                        input box since the selected date is already displayed in the
-                        accordion header above.
+                        input box since the selected date is already displayed
+                        in the accordion header above.
                       */}
-                      <div style={{ position: 'relative', height: 0 }}>
-                        <DateRangePicker
-                          ref={dateRangePickerRef}
-                          selectDate={selectDate}
-                          onDateChange={handleDateChange}
-                          showInput={false}
-                        />
+                        <div style={{ position: 'relative', height: 0 }}>
+                          <DateRangePicker
+                            ref={dateRangePickerRef}
+                            selectDate={selectDate}
+                            onDateChange={handleDateChange}
+                            showInput={false}
+                            title={translateFilterLabel('date')}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div style={{ paddingTop: 10, paddingBottom: 10 }}>
-                      <Separator />
-                    </div>
+                      <div style={{ paddingTop: 10, paddingBottom: 10 }}>
+                        <Separator />
+                      </div>
                     </FilterAccordion>
                   </ThemedElements>
                 </div>

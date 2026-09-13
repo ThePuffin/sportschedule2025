@@ -7,7 +7,7 @@ The **Accordion** component displays a collapsible section with a title, an even
 ## Key Features
 
 - **Collapsible** — expand/collapse via chevron icon
-- **Event count badge** — shows the number of games
+- **Event count badge** — shows the number of games; can be hidden (along with the divider bar under the title) via the `hideEventCount` prop
 - **Responsive grid** — 3 columns on desktop, 1 column on mobile
 - **Game cards** — renders `CardLarge` for each game
 - **Scroll offset** — accounts for sticky filter header height
@@ -31,6 +31,7 @@ The **Accordion** component displays a collapsible section with a title, an even
 | `forceShowScores`     | `boolean`         | `false` | Always show scores                     |
 | `filtersHeaderHeight` | `number`          | `0`     | Sticky header height for scroll offset |
 | `homeGameVisibility`  | `HomeGameFilter`  | `false` | Home/away filter                       |
+| `hideEventCount`      | `boolean`         | `false` | Hide the count badge and divider bar   |
 
 ## Key Functions
 

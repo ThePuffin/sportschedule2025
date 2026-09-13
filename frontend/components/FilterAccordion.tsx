@@ -9,6 +9,8 @@ interface FilterAccordionProps {
   readonly children: React.ReactNode;
   readonly isSmallDevice: boolean;
   readonly defaultOpen?: boolean;
+  /** Controlled `expanded` value. When provided, the accordion uses this value instead of its internal state, and `onExpandedChange` is called on toggle (so the parent can force open/close). When omitted, the accordion is uncontrolled (`defaultOpen` + internal state). */
+  readonly expanded?: boolean;
   readonly onExpandedChange?: (expanded: boolean) => void;
 }
 
@@ -17,15 +19,28 @@ export default function FilterAccordion({
   children,
   isSmallDevice,
   defaultOpen = false,
+  expanded,
   onExpandedChange,
 }: Readonly<FilterAccordionProps>) {
-  const [expanded, setExpanded] = useState(defaultOpen);
+  const [internalExpanded, setInternalExpanded] = useState(defaultOpen);
+  const isControlled = expanded !== undefined;
+  const isExpanded = isControlled ? expanded : internalExpanded;
   const titleColor = useThemeColor({ light: '#48484A', dark: '#8E8E93' }, 'text');
   const borderColor = useThemeColor({ light: '#D1D1D6', dark: '#38383A' }, 'text');
 
   useEffect(() => {
-    onExpandedChange?.(expanded);
-  }, [expanded, onExpandedChange]);
+    if (!isControlled) {
+      onExpandedChange?.(internalExpanded);
+    }
+  }, [internalExpanded, onExpandedChange, isControlled]);
+
+  const toggle = () => {
+    if (isControlled) {
+      onExpandedChange?.(!expanded);
+    } else {
+      setInternalExpanded(!internalExpanded);
+    }
+  };
 
   // On mobile, use accordion. On desktop, show normally
   if (!isSmallDevice) {
@@ -65,7 +80,7 @@ export default function FilterAccordion({
               }}
             >
               <span
-                key={String(expanded)}
+                key={String(isExpanded)}
                 style={{
                   display: 'inline-block',
                   animation: 'filterLabelIn 0.25s ease-out',
@@ -88,9 +103,9 @@ export default function FilterAccordion({
             </ListItem.Title>
           </ListItem.Content>
         }
-        isExpanded={expanded}
+        isExpanded={isExpanded}
         icon={{ name: 'chevron-down', type: 'font-awesome', color: titleColor, size: 15 }}
-        onPress={() => setExpanded(!expanded)}
+        onPress={toggle}
         containerStyle={{
           backgroundColor: 'transparent',
           borderBottomWidth: 0,

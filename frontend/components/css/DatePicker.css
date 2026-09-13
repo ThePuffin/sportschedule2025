@@ -57,3 +57,13 @@
     /* Ensures natural HTML order (Left then Right) */
   }
 }
+
+/* DateRangePicker modal fade animation for web */
+@keyframes datepickerFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

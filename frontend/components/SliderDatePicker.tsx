@@ -5,7 +5,16 @@ import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 interface SliderDatePickerProps {
   selectDate: Date;
@@ -273,8 +282,7 @@ export default function SliderDatePicker({
   const [dayAtEnd, setDayAtEnd] = useState(false);
 
   const makeScrollHandler =
-    (setter: React.Dispatch<React.SetStateAction<boolean>>) =>
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    (setter: React.Dispatch<React.SetStateAction<boolean>>) => (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = e.nativeEvent.contentOffset.x;
       const contentWidth = e.nativeEvent.contentSize.width;
       const visibleWidth = e.nativeEvent.layoutMeasurement.width;
@@ -332,9 +340,7 @@ export default function SliderDatePicker({
                       borderColor: isCurrentMonth ? selectedBackgroundColor : 'transparent',
                       borderRadius: 15,
                     },
-                    Platform.OS === 'web'
-                      ? ({ cursor: disabled ? 'default' : 'pointer' } as any)
-                      : undefined,
+                    Platform.OS === 'web' ? ({ cursor: disabled ? 'default' : 'pointer' } as any) : undefined,
                   ]}
                   onPress={() => onMonthSelect(date)}
                 >
@@ -348,7 +354,7 @@ export default function SliderDatePicker({
                             : selected
                               ? textColor
                               : unselectedTextColor,
-                        fontWeight: selected || isCurrentMonth ? 'bold' : 'normal',
+                        fontWeight: selected ? 'bolder' : 'normal',
                       },
                     ]}
                   >
@@ -406,23 +412,17 @@ export default function SliderDatePicker({
         disabled={disabled}
         style={[
           styles.searchButton,
-          ({
+          {
             backgroundColor: useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background'),
             borderColor: useThemeColor({}, 'text'),
             borderWidth: 1,
             boxSizing: 'border-box',
             alignSelf: 'center', // vertically centered on the row (parent has alignItems: 'stretch')
-          } as any),
-          Platform.OS === 'web'
-            ? ({ cursor: disabled ? 'default' : 'pointer' } as any)
-            : undefined,
+          } as any,
+          Platform.OS === 'web' ? ({ cursor: disabled ? 'default' : 'pointer' } as any) : undefined,
         ]}
       >
-        <Ionicons
-          name="search"
-          size={24}
-          color={useThemeColor({}, 'text')}
-        />
+        <Ionicons name="search" size={24} color={useThemeColor({}, 'text')} />
       </TouchableOpacity>
     </View>
   );

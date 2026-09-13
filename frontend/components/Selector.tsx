@@ -60,6 +60,7 @@ export default function Selector({
   const [tempSelectedId, setTempSelectedId] = useState<string>('');
   const inputRef = useRef<TextInput>(null);
   const userClearedRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
@@ -105,21 +106,31 @@ export default function Selector({
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const handler = setTimeout(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
       setDebouncedSearch(search);
+      debounceTimerRef.current = null;
     }, 700);
 
     return () => {
-      clearTimeout(handler);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     };
   }, [search]);
 
+  const selectedIdsKey = JSON.stringify(itemsSelectedIds);
+
   useEffect(() => {
     if (visible) {
-      setTempSelectedIds(itemsSelectedIds || []);
+      setTempSelectedIds(JSON.parse(selectedIdsKey) as string[]);
       setTempSelectedId(itemSelectedId || '');
     }
-  }, [visible, itemsSelectedIds, itemSelectedId]);
+  }, [visible, selectedIdsKey, itemSelectedId]);
 
   const getOptions = () => {
     if (!items) return [];
@@ -212,7 +223,18 @@ export default function Selector({
         ]
       : filteredOptions;
 
+  const cancelDebounce = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  };
+
   const handleSelect = (id: string) => {
+    // Cancel any pending debounce to prevent list re-render during selection
+    cancelDebounce();
+    setDebouncedSearch(search);
+
     if (allowMultipleSelection) {
       if (id === 'SELECT_ALL') {
         const allIds = allOptions.map((o) => o.id);
@@ -416,7 +438,7 @@ export default function Selector({
                 data={listData}
                 keyExtractor={(item) => item.id}
                 style={styles.list}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 renderItem={({ item, index }) => {
                   const isSelected = allowMultipleSelection
                     ? item.id === 'SELECT_ALL'

@@ -108,7 +108,7 @@ Props for the buttons component.
 
 ### `DateRangePickerProps`
 
-Props for the date range picker.
+Props for the date range picker. `onOpenChange(open: boolean)` is an optional callback fired whenever the calendar dropdown opens or closes (imperatively, on date selection, or on click-outside).
 
 ### `IconButtonProps`
 
