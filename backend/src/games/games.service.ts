@@ -52,7 +52,15 @@ export class GameService {
   // Capacity-based purge configuration
   private readonly DISK_USAGE_THRESHOLD = 0.9; // 90%
   private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  private readonly DISK_USAGE_CACHE_TTL_MS = 60 * 1000; // 60 seconds cache for disk usage stats
+  private readonly CLUSTER_TOTAL_MB = 512; // Total cluster storage in MB (adjust to your Atlas plan)
   private lastDiskCheck = 0;
+
+  // In-memory cache for disk usage to avoid spamming dbStats on every call
+  private diskUsageCache: {
+    data: { usedMB: number; totalMB: number; percentage: number };
+    timestamp: number;
+  } | null = null;
 
   getTeams = (teamSelectedIds, games) => {
     if (teamSelectedIds) {
@@ -122,45 +130,50 @@ export class GameService {
   }
 
   async create(gameDto: CreateGameDto | UpdateGameDto): Promise<Game> {
-    const { uniqueId } = gameDto;
+    return this.executeWithCapacityGuard(
+      async () => {
+        const { uniqueId } = gameDto;
 
-    if (uniqueId) {
-      const existingGame = await this.findOne(uniqueId);
-      if (existingGame) {
-        if (
-          gameDto.homeTeamScore === null &&
-          existingGame.homeTeamScore !== null
-        ) {
-          delete gameDto.homeTeamScore;
-        }
+        if (uniqueId) {
+          const existingGame = await this.findOne(uniqueId);
+          if (existingGame) {
+            if (
+              gameDto.homeTeamScore === null &&
+              existingGame.homeTeamScore !== null
+            ) {
+              delete gameDto.homeTeamScore;
+            }
 
-        if (
-          gameDto.awayTeamScore === null &&
-          existingGame.awayTeamScore !== null
-        ) {
-          delete gameDto.awayTeamScore;
-        }
+            if (
+              gameDto.awayTeamScore === null &&
+              existingGame.awayTeamScore !== null
+            ) {
+              delete gameDto.awayTeamScore;
+            }
 
-        // Protect game status and live info from being overwritten by null/default values
-        const fieldsToProtect = ['gameStatus', 'gameClock', 'gamePeriod'];
+            // Protect game status and live info from being overwritten by null/default values
+            const fieldsToProtect = ['gameStatus', 'gameClock', 'gamePeriod'];
 
-        fieldsToProtect.forEach((field) => {
-          if (
-            (gameDto[field] === null || gameDto[field] === undefined) &&
-            existingGame[field] !== null
-          ) {
-            delete gameDto[field];
+            fieldsToProtect.forEach((field) => {
+              if (
+                (gameDto[field] === null || gameDto[field] === undefined) &&
+                existingGame[field] !== null
+              ) {
+                delete gameDto[field];
+              }
+            });
+
+            Object.assign(existingGame, gameDto);
+
+            return await existingGame.save();
           }
-        });
+        }
 
-        Object.assign(existingGame, gameDto);
-
-        return await existingGame.save();
-      }
-    }
-
-    const newGame = new this.gameModel(gameDto);
-    return await newGame.save();
+        const newGame = new this.gameModel(gameDto);
+        return await newGame.save();
+      },
+      'create',
+    );
   }
 
   /**
@@ -682,8 +695,14 @@ export class GameService {
         console.info(`[getAllGames] progress: ${pct}% (${i + 1}/${total}) — last: ${league}`);
       }
     }
-    console.info('[getAllGames] done');
-    return this.findAll();
+          console.info('[getAllGames] done');
+    // Read-only callers (GET /games) expect the in-memory active set, but the cron jobs
+    // (monthly getAllGames, daily per-league refreshes, checkLeagueGamesAvailability) must
+    // NOT materialise the entire historical collection here — that single `findAll()` scan
+    // was loading every old game (2017→today) into the 460 MB heap right after the loop,
+    // causing an OOM → Render restart → boot→recovery cycle. Cron callers only need to
+    // know the refresh succeeded, so they get an empty array instead.
+    return forceUpdate || date ? [] : this.findAll();
   }
 
   async findAll(): Promise<any[]> {
@@ -1209,8 +1228,13 @@ export class GameService {
   }
 
   async update(uniqueId: string, updateGameDto: Partial<UpdateGameDto>) {
-    const filter = { uniqueId: uniqueId };
-    return this.gameModel.updateOne(filter, updateGameDto);
+    return this.executeWithCapacityGuard(
+      async () => {
+        const filter = { uniqueId: uniqueId };
+        return this.gameModel.updateOne(filter, updateGameDto);
+      },
+      'update',
+    );
   }
   async remove(uniqueId: string) {
     const filter = { uniqueId: uniqueId };
@@ -1341,21 +1365,41 @@ export class GameService {
   }
 
   async fetchGamesForLiveScoreUpdate(hours = 2): Promise<Game[]> {
+    const now = new Date();
+
+    // Upper bound: started at least `hours` ago (default: 2 hours).
     const hoursAgo = new Date();
     hoursAgo.setHours(hoursAgo.getHours() - hours);
 
+    // --- Fix for restart loop / unbounded recovery ---
+    // `removeStaleUnresolvedGames` (runs at the end of every score cycle) purges games
+    // older than `staleGameMaxAgeDays` (default 90) that are still active / unresolved.
+    // Without a matching LOWER bound here, this query also matched 2017 games stuck in an
+    // active-but-never-resolved state (e.g. a PWHL game on 2026-05-11). The score cycle
+    // kept re-scoring them on every run because `removeStaleUnresolvedGames` could only
+    // purge them AFTER the loop, and the loop grew faster than the purge → net growth →
+    // heap OOM → Render restarts → boot recovery → repeat.
+    // Bounding the scan to `staleGameMaxAgeDays` makes the scan size predictable
+    // (≤ ~90 days of games) and lets the purge actually catch up between cycles,
+    // breaking the loop.
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - this.staleGameMaxAgeDays);
+
     // Fetch games that are:
     // 1. Active
-    // 2. Started at least `hours` ago
+    // 2. Started at least `hours` ago AND started within the last `staleGameMaxAgeDays`
     // 3. NOT in a final/cancelled/postponed state
     // This will include games with partial scores (e.g., 3-0) that are still in progress,
     // and games with null scores that are in progress or should have started.
     return await this.gameModel
       .find({
         isActive: true,
+        startTimeUTC: {
+          $gte: cutoff.toISOString(),          // NEW: lower bound (was unbounded)
+          $lte: hoursAgo.toISOString(),
+        },
         $or: [
           {
-            startTimeUTC: { $lte: hoursAgo.toISOString() },
             gameStatus: {
               $nin: ['FINISHED', 'FINAL', 'CANCELLED', 'POSTPONED'],
             },
@@ -1384,8 +1428,17 @@ export class GameService {
       .exec();
   }
 
-  get isScoreRecoveryRunning(): boolean {
+    get isScoreRecoveryRunning(): boolean {
     return this.isFetchingScores;
+  }
+
+  // --- Startup recovery timestamp helpers (delegated to RefreshTimestampService) ---
+  async getLastRecoveryTimestamp(): Promise<Date | null> {
+    return this.refreshTimestampService.getLastRecoveryTimestamp();
+  }
+
+  async addRecoveryTimestamp(): Promise<void> {
+    await this.refreshTimestampService.addRecoveryTimestamp();
   }
 
   async fetchGamesScores(): Promise<any[]> {
@@ -1897,7 +1950,10 @@ export class GameService {
       }
     }
 
-    await game.save();
+    await this.executeWithCapacityGuard(
+      async () => game.save(),
+      'syncGameWithScore.save',
+    );
     return resolvedStatus;
   }
 
@@ -2304,7 +2360,27 @@ export class GameService {
   }
 
   /**
-   * Calculates MongoDB disk usage inside Docker.
+   * Disk usage result type returned by getDiskUsage().
+   */
+  private diskUsageResult(usedMB: number, totalMB: number, percentage: number) {
+    return { usedMB, totalMB, percentage };
+  }
+
+  /**
+   * Calculates MongoDB disk usage via dbStats (Atlas-compatible).
+   *
+   * `df` only sees the local container filesystem — on Render this is
+   * ephemeral and does NOT reflect the remote Atlas cluster storage.
+   * `db.command({ dbStats: 1 })` returns the actual storage footprint
+   * of the database, matching what Atlas shows in its Metrics tab.
+   *
+   * `totalMB` is a hardcoded constant (CLUSTER_TOTAL_MB) set to match
+   * your Atlas cluster storage size (e.g. 512 for a 512MB cluster).
+   * Adjust this value if you upgrade your Atlas plan.
+   *
+   * Results are cached for DISK_USAGE_CACHE_TTL_MS (60s) to avoid
+   * overloading the Atlas cluster with frequent dbStats commands.
+   *
    * Returns { usedMB, totalMB, percentage (0-1) }
    */
   private async getDiskUsage(): Promise<{
@@ -2312,57 +2388,162 @@ export class GameService {
     totalMB: number;
     percentage: number;
   }> {
+    const now = Date.now();
+
+    // 1. Serve from cache if still valid
+    if (
+      this.diskUsageCache &&
+      now - this.diskUsageCache.timestamp < this.DISK_USAGE_CACHE_TTL_MS
+    ) {
+      return this.diskUsageCache.data;
+    }
+
     try {
-      // Try to get the disk space of the Docker volume
-      const { exec } = require('child_process');
-      const { promisify } = require('util');
-      const execAsync = promisify(exec);
+      // 2. Proper type-safe access to native MongoDB driver via Mongoose
+      const mongooseConnection = this.gameModel.db;
+      if (!mongooseConnection || mongooseConnection.readyState !== 1) {
+        throw new Error('Mongoose connection is not ready');
+      }
+
+      const db = mongooseConnection.db;
+      if (!db) {
+        throw new Error('Native MongoDB database instance is not available');
+      }
+
+      let usedBytes = 0;
+      let statsSource = 'unknown';
 
       try {
-        // For Docker/Linux: check the persistent volume
-        const { stdout } = await execAsync(
-          'df -B1M /data/db 2>/dev/null || df -B1M .',
-        );
-        const lines = stdout.trim().split('\n');
-        const row = lines[1].split(/\s+/);
-        const totalMB = parseInt(row[1], 10);
-        const usedMBTotal = parseInt(row[2], 10);
+        // Attempt dbStats (requires admin read privileges)
+        const dbStats = await db.command({ dbStats: 1 });
 
-        return {
-          usedMB: usedMBTotal,
-          totalMB,
-          percentage: usedMBTotal / totalMB,
-        };
-      } catch {
-        // Fallback: estimate usage via aggregate
-        const sizeInfo = await (this.gameModel.collection as any)
-          .aggregate([
-            {
-              $collStats: { storageStats: {} },
-            },
-          ])
-          .toArray()
-          .catch(() => []);
+        // Log actual dbStats response for debugging
+        console.info('[Capacity Manager] dbStats response:', JSON.stringify({
+          dataSize: dbStats.dataSize,
+          storageSize: dbStats.storageSize,
+          indexSize: dbStats.indexSize,
+          totalSize: dbStats.totalSize,
+          fileSize: dbStats.fileSize,
+          nsSizeMB: dbStats.nsSizeMB,
+        }));
 
-        if (sizeInfo && sizeInfo.length > 0) {
-          const sizeMB = (sizeInfo[0].storageStats?.size || 0) / (1024 * 1024);
-          return {
-            usedMB: Math.round(sizeMB),
-            totalMB: Math.round(sizeMB * 2), // Estimate
-            percentage: 0.5,
-          };
+        // Prioritize totalSize (data + indexes across all collections),
+        // then fall back to dataSize + indexSize (Atlas-compatible for all cluster types)
+        if (dbStats.totalSize && dbStats.totalSize > 0) {
+          usedBytes = dbStats.totalSize;
+          statsSource = 'dbStats.totalSize';
+        } else if (dbStats.dataSize || dbStats.indexSize) {
+          usedBytes = (dbStats.dataSize || 0) + (dbStats.indexSize || 0);
+          statsSource = 'dbStats.dataSize+indexSize';
+        } else {
+          usedBytes = dbStats.storageSize || 0;
+          statsSource = 'dbStats.storageSize';
         }
+      } catch (dbStatsError) {
+        // Fallback: aggregate $collStats across ALL collections
+        console.info('[Capacity Manager] dbStats failed, using collection aggregation fallback');
+        console.debug('[Capacity Manager] dbStats error:', dbStatsError instanceof Error ? dbStatsError.message : String(dbStatsError));
 
-        // Full fallback: return 0% (no purge if usage is uncertain)
-        return { usedMB: 0, totalMB: 1, percentage: 0 };
+        try {
+          // Get all collection names and sum their storage stats
+          const collections = await db.listCollections().toArray();
+          let totalStorageSize = 0;
+          let totalIndexSize = 0;
+          let totalDataSize = 0;
+
+          for (const collInfo of collections) {
+            const collName = collInfo.name;
+            // Skip system collections
+            if (collName.startsWith('system.')) continue;
+
+            try {
+              const collStats = await db.collection(collName).aggregate([
+                { $collStats: { storageStats: {} } }
+              ]).toArray();
+
+              if (collStats[0]?.storageStats) {
+                const ss = collStats[0].storageStats;
+                // $collStats returns: size (uncompressed data), storageSize (compressed), totalIndexSize
+                totalDataSize += ss.size || 0;
+                totalStorageSize += ss.storageSize || 0;
+                totalIndexSize += ss.totalIndexSize || 0;
+              }
+            } catch {
+              // Skip collections we can't read
+              console.debug(`[Capacity Manager] Could not get stats for collection: ${collName}`);
+            }
+          }
+
+          // Use dataSize + totalIndexSize to match Atlas "Total Data Size"
+          usedBytes = totalDataSize + totalIndexSize;
+          statsSource = 'aggregated $collStats (all collections)';
+
+          console.info('[Capacity Manager] Aggregated collection stats:', JSON.stringify({
+            totalDataSize,
+            totalStorageSize,
+            totalIndexSize,
+            usedBytes,
+          }));
+        } catch (aggError) {
+          // Last resort: just use the games collection stats
+          console.info('[Capacity Manager] Aggregation failed, using games collection only');
+
+          const sizeInfo = await this.gameModel
+            .aggregate<{
+              storageStats?: {
+                size?: number;
+                storageSize?: number;
+                totalIndexSize?: number;
+              };
+            }>([{ $collStats: { storageStats: {} } }])
+            .exec()
+            .catch(() => null);
+
+          if (sizeInfo?.length && sizeInfo[0]?.storageStats) {
+            const stats = sizeInfo[0].storageStats;
+            // $collStats returns "size" (not "totalSize") for uncompressed data size
+            usedBytes = (stats.size || 0) + (stats.totalIndexSize || 0);
+            statsSource = 'games collection $collStats only';
+          }
+        }
       }
+
+      // 3. Convert bytes → MiB
+      const usedMB = Math.round(usedBytes / (1024 * 1024));
+
+      // 4. Calculate total cluster quota (hardcoded constant)
+      const totalMB = this.CLUSTER_TOTAL_MB;
+
+      // 5. Calculate percentage, capped at 1.0 (100%)
+      const rawPercentage = totalMB > 0 ? usedMB / totalMB : 0;
+      const percentage = Number(Math.min(rawPercentage, 1).toFixed(4));
+
+      const result = this.diskUsageResult(usedMB, totalMB, percentage);
+
+      // Update cache
+      this.diskUsageCache = { data: result, timestamp: now };
+
+      // Log with source info for debugging
+      console.info(
+        `[Capacity Manager] Disk usage: ${usedMB}MB / ${totalMB}MB (${(percentage * 100).toFixed(1)}%) - source: ${statsSource}`,
+      );
+
+      // Critical threshold warning (> 85%)
+      if (percentage >= 0.85) {
+        console.warn(
+          `[Capacity Manager] Disk usage is CRITICAL: ${usedMB}MB / ${totalMB}MB (${(percentage * 100).toFixed(1)}%)`,
+        );
+      }
+
+      return result;
     } catch (error) {
       console.warn(
         '[Capacity Manager] Could not check disk usage:',
         error instanceof Error ? error.message : String(error),
       );
-      // Full fallback: return 0% (no purge if usage is uncertain)
-      return { usedMB: 0, totalMB: 1, percentage: 0 };
+
+      // Return last known cache on transient error, or safe fallback
+      return this.diskUsageCache?.data ?? this.diskUsageResult(0, 1, 0);
     }
   }
 
@@ -2383,6 +2564,72 @@ export class GameService {
       `[Capacity Manager] Deleted ${result.deletedCount} games from year ${year}`,
     );
     return result.deletedCount || 0;
+  }
+
+      /**
+   * READ-ONLY capacity report.
+   * Returns the current disk usage + a per-year breakdown (oldest → newest)
+   * plus the count of stored teams, WITHOUT performing any deletion.
+   * Intended for manual inspection / a GET endpoint so operators can decide
+   * whether to trigger `purgeOldestYearsIfNeeded()`.
+   */
+  async getCapacityStatus(): Promise<{
+    /** Used storage in MB */
+    usedMB: number;
+    /** Total storage in MB */
+    totalMB: number;
+    /** Occupancy rate (0–1) */
+    percentage: number;
+    /** Per-year game counts, oldest → newest */
+    years: { year: number; count: number; oldestDate: string; newestDate: string }[];
+    /** Total number of stored teams */
+    teamCount: number;
+    /** Total number of stored game documents */
+    gameCount: number;
+    /** Occupancy threshold above which a purge is triggered (default 0.9) */
+    threshold: number;
+    /** True when `percentage >= threshold` */
+    actionNeeded: boolean;
+    diskUsage: { usedMB: number; totalMB: number; percentage: number };
+  }> {
+    const defaults = {
+      diskUsage: { usedMB: 0, totalMB: 1, percentage: 0 },
+      years: [] as { year: number; count: number; oldestDate: string; newestDate: string }[],
+      teamCount: 0,
+      gameCount: 0,
+    };
+
+    try {
+      const [diskUsage, years, teamCount, gameCount] = await Promise.all([
+        this.getDiskUsage(),
+        this.getAvailableYears(),
+        this.teamService.countAllTeams?.() ?? 0,
+        this.gameModel.countDocuments({}),
+      ]);
+
+      return {
+        // Flattened at root for easy consumption: used / total / percentage
+        usedMB: diskUsage.usedMB,
+        totalMB: diskUsage.totalMB,
+        percentage: diskUsage.percentage,
+        years,
+        teamCount,
+        gameCount,
+        threshold: this.DISK_USAGE_THRESHOLD,
+        actionNeeded: diskUsage.percentage >= this.DISK_USAGE_THRESHOLD,
+        diskUsage,
+      };
+    } catch {
+      return {
+        ...defaults,
+        usedMB: 0,
+        totalMB: 1,
+        percentage: 0,
+        threshold: this.DISK_USAGE_THRESHOLD,
+        actionNeeded: false,
+        diskUsage: defaults.diskUsage,
+      };
+    }
   }
 
   /**
@@ -2470,6 +2717,177 @@ export class GameService {
       diskUsage,
       remainingYears,
     };
+  }
+
+  /**
+   * Checks if an error is a MongoDB "no space left" / disk full error.
+   * MongoDB error codes: 68 (NoSpaceLeft), 14 (DiskFull), or message patterns.
+   */
+  private isNoSpaceError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+
+    // Check MongoDB error code
+    const code = (error as any).code;
+    if (code === 68 || code === 14) return true;
+
+    // Check error message patterns
+    const message =
+      (error as any)?.message ??
+      (error as any)?.errmsg ??
+      String(error);
+    const lowerMsg = message.toLowerCase();
+    return (
+      lowerMsg.includes('no space left') ||
+      lowerMsg.includes('disk full') ||
+      lowerMsg.includes('out of disk space') ||
+      lowerMsg.includes('quota exceeded') ||
+      lowerMsg.includes('storage full')
+    );
+  }
+
+  /**
+   * Handles a "no space" error by purging the oldest month of games.
+   * Returns true if the error was a no-space error and purge was triggered.
+   */
+  private async handleNoSpaceError(error: unknown): Promise<boolean> {
+    if (!this.isNoSpaceError(error)) return false;
+
+    console.warn(
+      '[Capacity Manager] No space left error detected — triggering automatic purge of oldest month...',
+    );
+    try {
+      const result = await this.purgeOldestMonth();
+      if (result.action === 'purged') {
+        console.info(
+          `[Capacity Manager] Auto-purge completed: deleted ${result.deletedCount} games from ${result.purgedYear}-${result.purgedMonth?.toString().padStart(2, '0')}.`,
+        );
+      } else {
+        console.warn('[Capacity Manager] Auto-purge: no games to purge.');
+      }
+    } catch (purgeErr) {
+      console.error(
+        '[Capacity Manager] Auto-purge failed:',
+        purgeErr instanceof Error ? purgeErr.message : String(purgeErr),
+      );
+    }
+    return true;
+  }
+
+  /**
+   * Wraps an async operation with automatic capacity management.
+   * If the operation fails with a "no space left" error from MongoDB,
+   * triggers the oldest-month purge and re-throws the original error.
+   */
+  private async executeWithCapacityGuard<T>(
+    operation: () => Promise<T>,
+    context: string,
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      const wasNoSpace = await this.handleNoSpaceError(error);
+      if (wasNoSpace) {
+        console.warn(
+          `[Capacity Manager] ${context} failed due to no-space — purge triggered, re-throwing error.`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Purges the oldest month of games from the database.
+   * Finds the oldest year, then the oldest month within that year,
+   * and deletes all games from that month.
+   * Returns a report with the action taken.
+   */
+  async purgeOldestMonth(): Promise<{
+    action: 'none' | 'purged';
+    purgedYear?: number;
+    purgedMonth?: number;
+    deletedCount?: number;
+    remainingYears?: number[];
+  }> {
+    try {
+      const years = await this.getAvailableYears();
+
+      if (years.length === 0) {
+        console.info('[Capacity Manager] No games to purge.');
+        return { action: 'none' };
+      }
+
+      const oldestYear = years[0].year;
+
+      // Find the oldest month in that year using aggregation
+      const monthResult = await this.gameModel
+        .aggregate([
+          {
+            $match: {
+              gameDate: {
+                $gte: `${oldestYear}-01-01`,
+                $lte: `${oldestYear}-12-31`,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                $substr: ['$gameDate', 5, 2], // Extract MM from YYYY-MM-DD
+              },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 } }, // Sort months ascending (01, 02, ..., 12)
+          { $limit: 1 },
+        ])
+        .exec();
+
+      if (monthResult.length === 0) {
+        console.info(
+          `[Capacity Manager] No games found in oldest year ${oldestYear}.`,
+        );
+        return { action: 'none' };
+      }
+
+      const oldestMonth = monthResult[0]._id; // "01", "02", etc.
+      const gameCount = monthResult[0].count;
+
+      console.info(
+        `[Capacity Manager] Purging oldest month: ${oldestYear}-${oldestMonth} (${gameCount} games)...`,
+      );
+
+      // Delete all games from that month
+      const startDate = `${oldestYear}-${oldestMonth}-01`;
+      // Calculate last day of month
+      const lastDay = new Date(oldestYear, parseInt(oldestMonth, 10), 0).getDate();
+      const endDate = `${oldestYear}-${oldestMonth}-${lastDay.toString().padStart(2, '0')}`;
+
+      const deleteResult = await this.gameModel.deleteMany({
+        gameDate: { $gte: startDate, $lte: endDate },
+      });
+
+      const deletedCount = deleteResult.deletedCount || 0;
+      console.info(
+        `[Capacity Manager] Deleted ${deletedCount} games from ${oldestYear}-${oldestMonth}.`,
+      );
+
+      // Get remaining years for the report
+      const remainingYears = (await this.getAvailableYears()).map((y) => y.year);
+
+      return {
+        action: 'purged',
+        purgedYear: oldestYear,
+        purgedMonth: parseInt(oldestMonth, 10),
+        deletedCount,
+        remainingYears,
+      };
+    } catch (error) {
+      console.error(
+        '[Capacity Manager] Error purging oldest month:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return { action: 'none' };
+    }
   }
 
   async checkLeagueGamesAvailability() {
@@ -2590,7 +3008,8 @@ export class GameService {
     // Filter leagues if a specific league query parameter is provided
     if (leagueParam) {
       const normalizedLeague = leagueParam.toUpperCase().trim();
-      if (!leagues.includes(normalizedLeague)) {
+      // Validate against the League enum instead of checking if teams exist in DB
+      if (!Object.values(League).includes(normalizedLeague as League)) {
         throw new HttpException(`League ${normalizedLeague} not found`, 404);
       }
       leagues = [normalizedLeague];
