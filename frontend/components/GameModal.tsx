@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ThemedText';
 import { maxFavoritesNumber } from '@/constants/Constants';
-import { GameStatus, League, leagueLogos, leagueMapping } from '@/constants/enum';
+import { GameStatus, League, leagueMapping } from '@/constants/enum';
 import { getGamesStatus } from '@/utils/date';
 import { fetchLiveScores } from '@/utils/fetchData';
 import { GameFormatted } from '@/utils/types';
@@ -9,6 +9,13 @@ import { Icon } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
 
+/**
+ * Bundled placeholder shown when a team has no logo (same asset as the cards).
+ * It is a `require()` asset id, so it must be used directly as `source` and
+ * never through `{ uri: ... }`.
+ */
+const defaultLogo = require('../assets/images/default_logo.png');
+
 interface GameModalProps {
   visible: boolean;
   onClose: () => void;
@@ -16,6 +23,11 @@ interface GameModalProps {
   gradientStyle: any;
   favoriteTeams: string[];
   showScores?: boolean;
+  /**
+   * When provided (favorites modal), displays a "remove from favorites" button
+   * next to the `.ics` / "locate arena" actions and calls it on press.
+   */
+  onRemoveFromFavorites?: (game: GameFormatted) => void;
 }
 
 export default function GameModal({
@@ -25,6 +37,7 @@ export default function GameModal({
   gradientStyle,
   favoriteTeams,
   showScores = true,
+  onRemoveFromFavorites,
 }: Readonly<GameModalProps>) {
   const [liveGame, setLiveGame] = useState<GameFormatted | null>(null);
 
@@ -79,19 +92,23 @@ export default function GameModal({
   const diffHours = (new Date().getTime() - new Date(startTimeUTC).getTime()) / (1000 * 60 * 60);
   const isStarted3hAgo = diffHours > 3;
   const isLive =
-    status === GameStatus.IN_PROGRESS ||
-    (!!gameStatus &&
-      ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
-        gameStatus.includes(s),
-      ) &&
-      !gameStatus.toUpperCase().includes('FINAL') &&
-      !gameStatus.toUpperCase().includes('ENDED')) ||
-    (hasScore && isToday && status !== GameStatus.FINISHED && status !== GameStatus.FINAL);
+    (status as GameStatus) !== GameStatus.DELAYED &&
+    ((status as GameStatus) === GameStatus.IN_PROGRESS ||
+      (!!gameStatus &&
+        ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
+          gameStatus.includes(s),
+        ) &&
+        !gameStatus.toUpperCase().includes('FINAL') &&
+        !gameStatus.toUpperCase().includes('ENDED')) ||
+      (hasScore &&
+        isToday &&
+        (status as GameStatus) !== GameStatus.FINISHED &&
+        (status as GameStatus) !== GameStatus.FINAL));
   const isGameFinishedByStatus =
     gameStatus?.toUpperCase().includes('FINAL') ||
     gameStatus?.toUpperCase().includes('ENDED') ||
-    status === GameStatus.FINAL ||
-    status === GameStatus.FINISHED;
+    (status as GameStatus) === GameStatus.FINAL ||
+    (status as GameStatus) === GameStatus.FINISHED;
   const gameStatusAlreadyIncludesClock = (status?: string, clock?: string) => {
     if (!status || !clock) return false;
     const normalizedStatus = status.toLowerCase();
@@ -137,10 +154,10 @@ export default function GameModal({
   const iconColor = isDark ? 'white' : 'black';
   const buttonBackgroundColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)';
 
-  const displayHomeLogo =
-    isDark && homeTeamLogoDark ? homeTeamLogoDark || leagueLogos.DEFAULT : homeTeamLogo || leagueLogos.DEFAULT;
-  const displayAwayLogo =
-    isDark && awayTeamLogoDark ? awayTeamLogoDark || leagueLogos.DEFAULT : awayTeamLogo || leagueLogos.DEFAULT;
+  // Missing or empty logo strings must resolve to the bundled `defaultLogo`
+  // asset (a numeric `require()` id) when building the `<Image source>`.
+  const displayHomeLogo = isDark && homeTeamLogoDark ? homeTeamLogoDark : homeTeamLogo;
+  const displayAwayLogo = isDark && awayTeamLogoDark ? awayTeamLogoDark : awayTeamLogo;
 
   const getEspnStandingsUrl = (leagueKey: string) => {
     const baseUrl = 'https://www.espn.com';
@@ -175,8 +192,16 @@ export default function GameModal({
       );
     }
 
+    if ((status as GameStatus) === GameStatus.DELAYED) {
+      return (
+        <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+          {translateWord('delayedGame')}
+        </ThemedText>
+      );
+    }
+
     if (hasScore) {
-      if (status === GameStatus.FINAL || status === GameStatus.FINISHED) {
+      if ((status as GameStatus) === GameStatus.FINISHED) {
         return (
           <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
             {translateWord('score')}
@@ -184,7 +209,8 @@ export default function GameModal({
         );
       }
 
-      const statusText = status === GameStatus.FINAL ? translateWord('final') : translateWord('ended');
+      const statusText =
+        (status as GameStatus) === GameStatus.FINAL ? translateWord('final') : translateWord('ended');
       return (
         <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
           {statusText}
@@ -210,9 +236,11 @@ export default function GameModal({
           <View style={styles.modalContent}>
             <View style={styles.teamsContainer}>
               <View style={styles.teamColumn}>
-                {displayAwayLogo && (
-                  <Image source={{ uri: displayAwayLogo }} style={styles.logo} resizeMode="contain" />
-                )}
+                <Image
+                  source={displayAwayLogo ? { uri: displayAwayLogo } : defaultLogo}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {awayTeam ? awayTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
                   {(favoriteTeams.includes(awayTeamId) || favoriteTeams.length < maxFavoritesNumber) && (
@@ -252,9 +280,11 @@ export default function GameModal({
               )}
 
               <View style={styles.teamColumn}>
-                {displayHomeLogo && (
-                  <Image source={{ uri: displayHomeLogo }} style={styles.logo} resizeMode="contain" />
-                )}
+                <Image
+                  source={displayHomeLogo ? { uri: displayHomeLogo } : defaultLogo}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
                 <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.modalTeamName}>
                   {homeTeam ? homeTeam.replace(/ (?=[^ ]*$)/, '\n') : ''}
                   {(favoriteTeams.includes(homeTeamId) || favoriteTeams.length < maxFavoritesNumber) && (
@@ -332,6 +362,28 @@ export default function GameModal({
                       </View>
                     </a>
                   )}
+                  {onRemoveFromFavorites && (
+                    <View style={styles.buttonWrapper}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
+                        onPress={() => {
+                          onRemoveFromFavorites(data);
+                          onClose();
+                        }}
+                      >
+                        <Icon
+                          name="trash"
+                          type="font-awesome"
+                          size={18}
+                          color={iconColor}
+                          style={styles.buttonIcon}
+                        />
+                        <ThemedText style={styles.actionButtonText}>
+                          {translateWord('removeFromFavorites')}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </>
               ) : (
                 <>
@@ -354,26 +406,49 @@ export default function GameModal({
                     </TouchableOpacity>
                   </View>
 
-                  {arenaName && (
+                  {(arenaName || onRemoveFromFavorites) && (
                     <View style={styles.buttonWrapper}>
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${stadiumSearch}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ textDecoration: 'none' }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}>
+                      {onRemoveFromFavorites ? (
+                        // Favorites modal: the trash button replaces the
+                        // "locate arena" action.
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
+                          onPress={() => {
+                            onRemoveFromFavorites(data);
+                            onClose();
+                          }}
+                        >
                           <Icon
-                            name="map-marker"
+                            name="trash"
                             type="font-awesome"
                             size={18}
                             color={iconColor}
                             style={styles.buttonIcon}
                           />
-                          <ThemedText style={styles.actionButtonText}>{translateWord('localizeArena')}</ThemedText>
-                        </View>
-                      </a>
+                          <ThemedText style={styles.actionButtonText}>
+                            {translateWord('removeFromFavorites')}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      ) : (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${stadiumSearch}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ textDecoration: 'none' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}>
+                            <Icon
+                              name="map-marker"
+                              type="font-awesome"
+                              size={18}
+                              color={iconColor}
+                              style={styles.buttonIcon}
+                            />
+                            <ThemedText style={styles.actionButtonText}>{translateWord('localizeArena')}</ThemedText>
+                          </View>
+                        </a>
+                      )}
                     </View>
                   )}
                 </>
@@ -474,6 +549,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   buttonWrapper: {
     flex: 1,

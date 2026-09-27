@@ -510,9 +510,9 @@ export default function Schedule() {
               acc.push(...dayGames);
             }
           } else {
-            const gameOnDay = dayGames.find((game: GameFormatted) => game.teamSelectedId === gamesTeamId);
-            if (gameOnDay) {
-              acc.push(gameOnDay);
+            const gamesOnDay = dayGames.filter((game: GameFormatted) => game.teamSelectedId === gamesTeamId);
+            if (gamesOnDay.length) {
+              acc.push(...gamesOnDay);
             }
           }
           return acc;
@@ -558,8 +558,8 @@ export default function Schedule() {
   }, [scrollTargetId, isLoading, monthFilter.length, focusCount, teamFilter, showPreviousScores]);
 
   useEffect(() => {
-    // Sur schedule : si aucun match à venir, interroger la route 'closest'
-    // (équipe sélectionnée, ou league si sélection 'all') pour proposer l'historique.
+    // On schedule: when no upcoming game is left, query the 'closest' route
+    // (selected team, or league when the selection is 'all') to offer history.
     if (isLoading || showPreviousScores || !teamSelected) {
       return;
     }
@@ -598,8 +598,8 @@ export default function Schedule() {
     })();
     return () => {
       cancelled = true;
-      // En dev (StrictMode), l'effet est démonté/remonté aussitôt : si la requête
-      // n'a pas abouti, on libère la clé pour que le second passage relance l'appel.
+      // In dev (StrictMode) the effect is unmounted/remounted immediately: when the request
+      // did not complete, the key is released so the second pass relaunches the call.
       if (!completed) {
         closestRequestRef.current = '';
       }
@@ -980,8 +980,8 @@ export default function Schedule() {
       // switch back to the "All" option when the retry cooldown is active.
       const isFiltered = teamSelected !== 'all' && teamSelected !== '';
       const showAllHandler = isFiltered ? () => handleTeamSelectionChange('all') : undefined;
-      // Bouton "activer l'historique" affiché DANS NoResults (au-dessus du texte),
-      // une fois que la route 'closest' a confirmé un previousDate.
+      // "Enable history" button rendered INSIDE NoResults (above the text),
+      // once the 'closest' route has confirmed a previousDate.
       const showHistoryButton = hasPreviousHistory && !showPreviousScores && !isLoading;
       const historyProps = {
         showHistoryButton,

@@ -97,7 +97,9 @@ to enable the history. Hidden while loading or once history is enabled.
 Groups games by month (`"January 2026"` format). Applies:
 
 1. `teamFilter` (opponent filter) — filters games where home or away team matches
-2. `gamesTeamId` — filters to games involving the selected team
+2. `gamesTeamId` — filters to games involving the selected team (keeps ALL games
+   of the day for that team via `filter`, so doubleheaders with 2 games the same
+   day both display)
 3. Returns `[{ month, games }]` array, filtered to months with games
 
 ### `uniqueTeamsFromGames`

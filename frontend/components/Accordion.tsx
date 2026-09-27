@@ -21,6 +21,7 @@ export default function Accordion({
   showScores,
   gamesSelected,
   onSelection,
+  onRemoveFromFavorites,
   showTime = false,
   forceShowScores = false,
   filtersHeaderHeight = 0,
@@ -92,6 +93,7 @@ export default function Accordion({
             showScores={showScores}
             forceShowScores={forceShowScores}
             onSelection={onSelection}
+            onRemoveFromFavorites={onRemoveFromFavorites ? () => onRemoveFromFavorites(game) : undefined}
             isSelected={isSelected}
             showTime={showTime}
             animateEntry={true}

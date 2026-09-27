@@ -3,7 +3,12 @@ import { useWindowDimensions } from 'react-native';
 import { GameFormatted, GamesSelectedProps } from '../utils/types';
 import CardLarge from './CardLarge';
 
-export default function GamesSelected({ data = [], onAction, teamNumber = 1 }: Readonly<GamesSelectedProps>) {
+export default function GamesSelected({
+  data = [],
+  onAction,
+  onRemoveFromFavorites,
+  teamNumber = 1,
+}: Readonly<GamesSelectedProps>) {
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 768;
   const isMediumDevice = width >= 768 && width < 1200;
@@ -42,6 +47,9 @@ export default function GamesSelected({ data = [], onAction, teamNumber = 1 }: R
               showDate={true}
               showTime={true}
               onSelection={() => onAction(gameSelected)}
+              onRemoveFromFavorites={
+                onRemoveFromFavorites ? () => onRemoveFromFavorites(gameSelected) : undefined
+              }
               animateExit={true}
               animateEntry={true}
               verticalMode={verticalMode}

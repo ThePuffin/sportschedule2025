@@ -49,6 +49,8 @@ Represents a formatted game object returned by the API:
 | `gameStatus?`             | `string`         | Game status (e.g., "FINAL", "1st", "OT") |
 | `gameClock?`              | `string`         | Game clock                               |
 | `gamePeriod?`             | `number`         | Game period                              |
+| `seriesSummary?`          | `string`         | Series/doubleheader note (ESPN headline) |
+| `seriesStatus?`           | `string`         | Series status summary                    |
 
 ### `League`
 
@@ -100,7 +102,9 @@ interface FilterGames {
 
 ### `AccordionProps`
 
-Props for the `Accordion` component.
+Props for the `Accordion` component. `onRemoveFromFavorites?: (game: GameFormatted) => void` is
+forwarded to each `CardLarge` (bound to the current game) and switches the cards to
+favorites-details mode for the FAVORIS modal.
 
 ### `ButtonsProps`
 
@@ -116,7 +120,9 @@ Props for icon buttons (extends `ButtonProps`).
 
 ### `GamesSelectedProps`
 
-Props for the games selected component.
+Props for the games selected component. `onRemoveFromFavorites?: (game: GameFormatted) => void`
+puts every card in favorites-details mode (card press opens `GameModal`, which offers the
+removal button).
 
 ### `SelectorProps`
 
@@ -124,4 +130,6 @@ Props for the selector component.
 
 ### `CardsProps`
 
-Props for the card components.
+Props for the card components. `onRemoveFromFavorites?: (game: GameFormatted) => void` enables
+favorites-details mode: the card press opens `GameModal` instead of toggling the bookmark, and
+the game is removed through the modal's trash button.

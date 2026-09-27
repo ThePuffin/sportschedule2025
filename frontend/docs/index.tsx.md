@@ -96,24 +96,24 @@ Called when the user changes the team filter.
 
 When `visibleGamesByHour` is empty (no games for the displayed day) and loading is finished, the screen calls `fetchClosestDates` with the displayed date as boundary (`date: YYYY-MM-DD`):
 
-- équipe spécifique sélectionnée → `teamSelectedIds` = **uniqueId déjà résolu** dans `selectedTeamUniqueId` (slider : label → résolu via cache `teams` au moment de la sélection ; modale : uniqueId direct) — fonctionne même quand le jour est vide (`games` vide) ;
-- sinon (filtre équipe sur "TOUS") → `leagues` = la league filtrée (ex. MLB).
+- specific team selected → `teamSelectedIds` = **already resolved uniqueId** stored in `selectedTeamUniqueId` (slider: label → resolved through the `teams` cache at selection time; modal: uniqueId passed directly) — works even when the day is empty (`games` empty);
+- otherwise (team filter set to "ALL") → `leagues` = the filtered league (e.g. MLB).
 
-**Fallback dans l'effet** : si `selectedTeamUniqueId` est vide mais que `teamSelectedId` est un label (contient un espace), résout via `fetchTeams()` (cache 24h) avant l'appel. Couvre le cas où le cache `teams` n'aurait pas été chargé au moment du clic.
+**Fallback inside the effect**: when `selectedTeamUniqueId` is empty but `teamSelectedId` is a label (contains a space), it resolves through `fetchTeams()` (24h cache) before the call. Covers the case where the `teams` cache was not loaded yet at click time.
 
 If the response contains a `previousDate` and/or `nextDate`, navigation buttons are rendered **inside** `NoResults` above the text (props `previousAvailableDate` / `nextAvailableDate` / `onGoToDate`). Tapping a button calls `goToClosestDate`, which navigates via `handleDateChange` to that day.
 
 ### `selectedTeamUniqueId`
 
-State dédié stockant l'uniqueId résolu de l'équipe sélectionnée :
-- **Slider** (`handleTeamFilterChange`) : le slider envoie un label → résolu via `getCache<Team[]>('teams')` (cache 24h, indépendant du jour) → stocke l'uniqueId ;
-- **Modale** (`handleTeamSelectionChange`) : reçoit directement l'uniqueId → le stocke tel quel.
+Dedicated state holding the resolved uniqueId of the selected team:
+- **Slider** (`handleTeamFilterChange`): the slider sends a label → resolved via `getCache<Team[]>('teams')` (24h cache, day-independent) → stores the uniqueId;
+- **Modal** (`handleTeamSelectionChange`): receives the uniqueId directly → stores it as-is.
 
-Permet à l'effet `closest` de filtrer par équipe même quand le jour affiché est vide (où `games` et `teamsOfTheDay` sont vides → résolution impossible depuis ces sources).
+Lets the `closest` effect filter by team even when the displayed day is empty (where `games` and `teamsOfTheDay` are empty → no way to resolve from those sources).
 
 ### Cache `teams` preload
 
-Au montage, `fetchTeams()` est appelé pour garantir que le cache `teams` (24h) est disponible avant toute interaction utilisateur, afin que la résolution label → uniqueId dans `handleTeamFilterChange` réussisse toujours.
+On mount, `fetchTeams()` is called to guarantee the `teams` cache (24h) is available before any user interaction, so that the label → uniqueId resolution inside `handleTeamFilterChange` always succeeds.
 
 ## Key Memoized Values
 
@@ -131,9 +131,19 @@ Filters and groups games:
 
 Builds a unique list of teams from today's games, keyed by `uniqueId`.
 
+### `isAnyGameSelectedToday`
+
+`true` when at least one bookmarked game (`gamesSelected`) is scheduled for the **selected date**
+(compared through `gameDate`, falling back to the local date of `startTimeUTC`). It drives both the
+bookmark chip icon (`bookmark` when filled, `bookmark-o` when outlined) and its enabled state.
+
 ### `disabledFilters`
 
-Leagues with no active games today + `BOOKMARKS` if no games selected.
+Leagues with no active games today + `BOOKMARKS` while no bookmarked game is scheduled for the
+selected date (`!isAnyGameSelectedToday`). The bookmark chip is then dimmed and **not clickable**
+(`FilterSlider` `disabledValues`), so an empty bookmarks list can never be opened — the same
+condition as the outlined bookmark icon. Note it no longer keys off `gamesSelected.length === 0`
+only: bookmarks from other dates are invisible for the displayed day.
 
 ## Data Flow
 

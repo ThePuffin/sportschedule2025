@@ -29,6 +29,7 @@ export default function CardLarge({
   showScores: propShowScores,
   forceShowScores = false,
   onSelection,
+  onRemoveFromFavorites,
   isSelected: propIsSelected,
   animateExit = false,
   animateEntry = false,
@@ -192,6 +193,31 @@ export default function CardLarge({
   const isFavorite = favoriteTeams.includes(homeTeamId) || favoriteTeams.includes(awayTeamId);
   const isOneTeamInSelection = teamsSelectedIds.includes(homeTeamId) || teamsSelectedIds.includes(awayTeamId);
 
+  // Details mode: the card lives inside the favorites (bookmarks) modal. Tapping
+  // the card opens the game details modal — which offers a dedicated "remove
+  // from favorites" button — instead of removing the game from the favorites.
+  const detailsMode = !!onRemoveFromFavorites;
+
+  // Plays the exit animation (when enabled) and then runs the removal action.
+  const animateExitThen = (action: () => void) => {
+    if (animateExit) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => action());
+    } else {
+      action();
+    }
+  };
+
   const internalHandleSelection = async () => {
     const isMatch = (g: GameFormatted) => {
       const sameTeams = g.homeTeamId === data.homeTeamId && g.awayTeamId === data.awayTeamId;
@@ -277,6 +303,7 @@ export default function CardLarge({
   const isToday = now.toDateString() === start.toDateString();
   const diffHours = (now.getTime() - start.getTime()) / (1000 * 60 * 60);
   const isLive =
+    status !== GameStatus.DELAYED &&
     (status === GameStatus.IN_PROGRESS ||
       (!!gameStatus &&
         ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
@@ -351,6 +378,8 @@ export default function CardLarge({
     timeText = translateWord('final');
   } else if (gameStatus === GameStatus.POSTPONED) {
     timeText = translateWord('postponedGame');
+  } else if (status === GameStatus.DELAYED) {
+    timeText = translateWord('delayedGame');
   } else if ((status === GameStatus.FINISHED || status === GameStatus.FINAL) && hasScore) {
     if (showDate && startTimeUTC) {
       timeText = showTime
@@ -557,6 +586,23 @@ export default function CardLarge({
       </View>
   );
 
+  // Two-line date/time display (Schedule tab): when the card shows a scheduled
+  // date+time (`showDate + showTime`), the date and time are computed separately
+  // via Intl (locale-independent — no string splitting on commas, whose presence
+  // varies by browser/ICU version) so the time renders UNDER the date.
+  const showTwoLineDateTime =
+    showDate && showTime && !!startTimeUTC && status === GameStatus.SCHEDULED;
+  const dateTimeLocale =
+    typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
+  const startDateObj = showTwoLineDateTime ? new Date(startTimeUTC) : null;
+  const showYearLine = !!startDateObj && startDateObj.getFullYear() !== new Date().getFullYear();
+  const dateLine = showTwoLineDateTime && startDateObj
+    ? startDateObj.toLocaleDateString(dateTimeLocale, showYearLine ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' })
+    : '';
+  const timeLine = showTwoLineDateTime && startDateObj
+    ? startDateObj.toLocaleTimeString(dateTimeLocale, { hour: 'numeric', minute: '2-digit' })
+    : '';
+
   const centerTime = (
     <View
       style={[
@@ -576,6 +622,8 @@ export default function CardLarge({
             cursor: 'pointer',
             width: '100%',
             display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
             justifyContent: 'center',
           }}
           onClick={(e) => {
@@ -584,17 +632,33 @@ export default function CardLarge({
           }}
         >
           <ThemedText style={[styles.liveTimeText, isSmallCard && { fontSize: 10 }]}>
-            {timeText.split(',')[0].trim()}
+            {showTwoLineDateTime ? dateLine : timeText.split(',')[0].trim()}
           </ThemedText>
+          {(showTwoLineDateTime || (showDate && showTime && timeText.includes(','))) && (
+            <ThemedText style={[styles.liveTimeText, isSmallCard && { fontSize: 10 }]}>
+              {showTwoLineDateTime ? timeLine : timeText.split(',').slice(1).join(',').trim()}
+            </ThemedText>
+          )}
         </a>
       ) : (
-        <ThemedText
-          lightColor={isLive ? undefined : '#475569'}
-          darkColor={isLive ? undefined : '#94a3b8'}
-          style={[isLive ? styles.liveTimeText : styles.timeText, isSmallCard && { fontSize: 10 }]}
-        >
-          {timeText}
-        </ThemedText>
+        <View style={{ alignItems: 'center' }}>
+          <ThemedText
+            lightColor={isLive ? undefined : '#475569'}
+            darkColor={isLive ? undefined : '#94a3b8'}
+            style={[isLive ? styles.liveTimeText : styles.timeText, isSmallCard && { fontSize: 10 }]}
+          >
+            {showTwoLineDateTime ? dateLine : showDate && showTime && timeText.includes(',') ? timeText.split(',')[0].trim() : timeText}
+          </ThemedText>
+          {(showTwoLineDateTime || (showDate && showTime && timeText.includes(','))) && (
+            <ThemedText
+              lightColor={isLive ? undefined : '#475569'}
+              darkColor={isLive ? undefined : '#94a3b8'}
+              style={[isLive ? styles.liveTimeText : styles.timeText, isSmallCard && { fontSize: 10 }]}
+            >
+              {showTwoLineDateTime ? timeLine : timeText.split(',').slice(1).join(',').trim()}
+            </ThemedText>
+          )}
+        </View>
       )}
     </View>
   );
@@ -604,7 +668,10 @@ export default function CardLarge({
       <TouchableOpacity
         onPress={(e) => {
           e.stopPropagation();
-          if (onSelection) onSelection(data);
+          if (onRemoveFromFavorites) {
+            // Favorites modal: the filled bookmark explicitly removes the game.
+            animateExitThen(() => onRemoveFromFavorites(data));
+          } else if (onSelection) onSelection(data);
           else internalHandleSelection();
         }}
         style={{
@@ -663,24 +730,15 @@ export default function CardLarge({
       >
         <Pressable
           onPress={() => {
-            if (onSelection) {
+            if (detailsMode) {
+              // Favorites modal: show the game details instead of deleting it.
+              setModalVisible(true);
+              if (hasScore) {
+                setScoreRevealed(true);
+              }
+            } else if (onSelection) {
               if (data.homeTeamShort && data.awayTeamShort) {
-                if (animateExit) {
-                  Animated.parallel([
-                    Animated.timing(fadeAnim, {
-                      toValue: 0,
-                      duration: 300,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(scaleAnim, {
-                      toValue: 0.95,
-                      duration: 300,
-                      useNativeDriver: true,
-                    }),
-                  ]).start(() => onSelection(data));
-                } else {
-                  onSelection(data);
-                }
+                animateExitThen(() => onSelection(data));
               }
             } else {
               setModalVisible(true);
@@ -941,6 +999,7 @@ export default function CardLarge({
         gradientStyle={gradientStyle}
         favoriteTeams={favoriteTeams}
         showScores={showScores}
+        onRemoveFromFavorites={onRemoveFromFavorites}
       />
     </Animated.View>
   );
@@ -1042,7 +1101,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     marginTop: 0,
-    height: 44,
+    minHeight: 44,
+    height: 'auto',
     justifyContent: 'center',
     alignItems: 'center',
     minWidth: 80,

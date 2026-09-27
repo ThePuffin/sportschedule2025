@@ -27,6 +27,7 @@ The **Accordion** component displays a collapsible section with a title, an even
 | `showScores`          | `boolean`         | —       | Show scores on cards                   |
 | `gamesSelected`       | `GameFormatted[]` | —       | Bookmarked games                       |
 | `onSelection`         | `(game) => void`  | —       | Selection callback                     |
+| `onRemoveFromFavorites` | `(game) => void` | —      | Favorites modal: card press opens details |
 | `showTime`            | `boolean`         | `false` | Show time on cards                     |
 | `forceShowScores`     | `boolean`         | `false` | Always show scores                     |
 | `filtersHeaderHeight` | `number`          | `0`     | Sticky header height for scroll offset |
@@ -45,6 +46,8 @@ Renders the game cards grid:
   - `scrollMarginTop` based on sticky header height
   - Selection state detection (matches by teams + UTC date/time)
   - Entry animation with staggered delay
+  - `onRemoveFromFavorites` forwarded (wrapped with the current game) when provided, which
+    switches the card to favorites-details mode (press opens `GameModal`)
 
 ## Data Flow
 

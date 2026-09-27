@@ -6,6 +6,7 @@ import { ThemedElements } from '@/components/ThemedElements';
 import { ThemedView } from '@/components/ThemedView';
 import { maxTeamsNumber } from '@/constants/Constants';
 import { useAuth } from '@/context/AuthContext';
+import { useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { fetchDateRangeFromApi, fetchTeams, getCache, saveCache } from '@/utils/fetchData';
 import { syncToFirestore } from '@/utils/syncService';
@@ -37,8 +38,27 @@ import { getFilterAccordionLabel, translateFilterLabel, translateWord } from '..
 const EXPO_PUBLIC_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://sportschedule2025backend.onrender.com';
 
+/**
+ * Two games are considered identical when they share both teams AND the exact
+ * UTC kick-off hour — so doubleheader Game 1 / Game 2 stay distinguishable.
+ */
+const isSameGame = (a: GameFormatted, b: GameFormatted) => {
+  const sameTeams = a.homeTeamId === b.homeTeamId && a.awayTeamId === b.awayTeamId;
+  if (!sameTeams) return false;
+
+  const d1 = new Date(a.startTimeUTC);
+  const d2 = new Date(b.startTimeUTC);
+  return (
+    d1.getUTCFullYear() === d2.getUTCFullYear() &&
+    d1.getUTCMonth() === d2.getUTCMonth() &&
+    d1.getUTCDate() === d2.getUTCDate() &&
+    d1.getUTCHours() === d2.getUTCHours()
+  );
+};
+
 export default function Calendar() {
   const { user, firestoreReady } = useAuth();
+  const { isScrollingHorizontally } = useHorizontalScroll();
   const iconColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const modalBackgroundColor = useThemeColor({ light: '#ffffff', dark: '#000' }, 'background');
@@ -60,9 +80,14 @@ export default function Calendar() {
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
   const [gamesModalVisible, setGamesModalVisible] = useState(false);
   const isRestoringSelectionRef = useRef(false);
+  const isScrollingHorizontallyRef = useRef(isScrollingHorizontally);
   const [isTeamAccordionOpen, setIsTeamAccordionOpen] = useState(true);
   const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(false);
   const [datepickerOpen, setDatepickerOpen] = useState(false);
+
+  useEffect(() => {
+    isScrollingHorizontallyRef.current = isScrollingHorizontally;
+  }, [isScrollingHorizontally]);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -419,19 +444,7 @@ export default function Calendar() {
     async (game: GameFormatted) => {
       let newSelection = [...gamesSelected];
 
-      const isMatch = (g: GameFormatted) => {
-        const sameTeams = g.homeTeamId === game.homeTeamId && g.awayTeamId === game.awayTeamId;
-        if (!sameTeams) return false;
-
-        const d1 = new Date(g.startTimeUTC);
-        const d2 = new Date(game.startTimeUTC);
-        return (
-          d1.getUTCFullYear() === d2.getUTCFullYear() &&
-          d1.getUTCMonth() === d2.getUTCMonth() &&
-          d1.getUTCDate() === d2.getUTCDate() &&
-          d1.getUTCHours() === d2.getUTCHours()
-        );
-      };
+      const isMatch = (g: GameFormatted) => isSameGame(g, game);
 
       const wasAdded = gamesSelected.some(isMatch);
 
@@ -472,6 +485,25 @@ export default function Calendar() {
     storeTeamsSelected(tempTeams);
     setReorderModalVisible(false);
   };
+
+  const handleRemoveGameSelection = useCallback(
+    async (game: GameFormatted) => {
+      const newSelection = gamesSelected.filter((g) => !isSameGame(g, game));
+      if (newSelection.length === gamesSelected.length) return;
+
+      setGamesSelected(newSelection);
+      saveCache('gameSelected', newSelection);
+      if (globalThis.window !== undefined) {
+        globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
+      }
+
+      if (user) {
+        // Debounced replication to Firestore; errors are handled gracefully inside syncService
+        syncToFirestore(user.uid, { gameSelected: newSelection });
+      }
+    },
+    [gamesSelected, user],
+  );
 
   const handleClearGamesSelection = useCallback(async () => {
     setGamesSelected([]);
@@ -611,10 +643,18 @@ export default function Calendar() {
     }
   }, [teamsSelected, teams]);
 
-  // Swipe gesture to cycle through home / all / away filters
+  // Swipe gesture to cycle through home / all / away filters.
+  // IMPORTANT: panHandlers are attached ONLY to the games-cards container
+  // (see below), NOT to the root view — so swipes starting in the filter
+  // zone (league/month/team sliders, date picker, buttons) can never
+  // trigger a home/away filter change. Only swipes starting on the cards count.
   const swipePanResponder = useMemo(() => {
     return PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Don't capture horizontal swipes if we're scrolling horizontally (e.g., in FilterSlider)
+        if (isScrollingHorizontallyRef.current) {
+          return false;
+        }
         // Only capture horizontal swipes (ignore vertical scroll)
         return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
       },
@@ -631,7 +671,7 @@ export default function Calendar() {
   }, [homeGameVisibility, handleHomeGameToggle]);
 
   return (
-    <ThemedView style={{ flex: 1 }} {...swipePanResponder.panHandlers}>
+    <ThemedView style={{ flex: 1 }}>
       <PageHeader rightElement={<HomeGameToggle value={homeGameVisibility} onValueChange={handleHomeGameToggle} />} />
       <ScrollView
         ref={scrollViewRef}
@@ -751,7 +791,7 @@ export default function Calendar() {
           </ThemedView>
         </div>
         {!teamsSelected.length && <LoadingView />}
-        {displayAccordions()}
+        <View {...swipePanResponder.panHandlers}>{displayAccordions()}</View>
       </ScrollView>
       <Modal
         animationType="slide"
@@ -838,12 +878,14 @@ export default function Calendar() {
                   showDate={true}
                   gamesSelected={filteredGamesSelected}
                   onSelection={handleGamesSelection}
+                  onRemoveFromFavorites={handleRemoveGameSelection}
                   disableToggle={true}
                   hideEventCount={true}
                 />
               ) : (
                 <GamesSelected
                   onAction={handleGamesSelection}
+                  onRemoveFromFavorites={handleRemoveGameSelection}
                   data={filteredGamesSelected}
                   teamNumber={filteredGamesSelected.length}
                 />

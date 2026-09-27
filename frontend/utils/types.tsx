@@ -39,6 +39,8 @@ export interface GameFormatted {
   gameStatus?: string;
   gameClock?: string;
   gamePeriod?: number;
+  seriesSummary?: string;
+  seriesStatus?: string;
 }
 
 export interface League {
@@ -91,6 +93,12 @@ export type AccordionProps = {
   readonly filtersHeaderHeight?: number;
   readonly homeGameVisibility?: HomeGameFilter;
   readonly hideEventCount?: boolean;
+  /**
+   * When provided (favorites/bookmarks modal), tapping a card opens the game
+   * details modal instead of toggling the selection, and the details modal
+   * shows a "remove from favorites" button.
+   */
+  readonly onRemoveFromFavorites?: (game: GameFormatted) => void;
 };
 
 export interface ButtonsProps {
@@ -127,6 +135,11 @@ export interface GamesSelectedProps {
   readonly data?: GameFormatted[];
   readonly teamNumber?: number;
   readonly onAction: (game: GameFormatted) => void;
+  /**
+   * When provided, tapping a card opens the game details modal (with a
+   * "remove from favorites" button) instead of removing the card directly.
+   */
+  readonly onRemoveFromFavorites?: (game: GameFormatted) => void;
 }
 
 export interface SelectorProps {
@@ -154,4 +167,10 @@ export interface CardsProps {
   showTime?: boolean;
   forceShowScores?: boolean;
   homeGameVisibility?: HomeGameFilter;
+  /**
+   * When provided, tapping the card opens the game details modal instead of
+   * toggling the selection, and the details modal shows a "remove from
+   * favorites" button next to the `.ics` / "locate arena" actions.
+   */
+  onRemoveFromFavorites?: (game: GameFormatted) => void;
 }

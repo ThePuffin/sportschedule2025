@@ -2,8 +2,9 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { GameService } from '../games/games.service';
 import { TeamService } from '../teams/teams.service';
+import { readableDate } from '../utils/date';
 import { League } from '../utils/enum';
-import { isCurrentSeason, isPlayoffsPeriod } from '../utils/utils';
+import { needRefresh } from '../utils/utils';
 
 @Injectable()
 export class CronService implements OnModuleInit {
@@ -177,10 +178,50 @@ export class CronService implements OnModuleInit {
       this.rotatingLeaguesDone = true;
     }
 
-    const inSeason =
-      (await isCurrentSeason(league)) || (await isPlayoffsPeriod(league));
-    if (!inSeason) {
-      console.info(`[Cron] League rotation: ${league} is off-season — skipped.`);
+    // Refresh frequency is governed by needRefresh() → numberOfDaysToRefresh():
+    //   - Playoffs: every day
+    //   - Regular season: every 3 days
+    //   - Off-season: every 7 days
+    // This replaces the old hard off-season skip so that off-season leagues still
+    // get their schedule checked weekly (e.g. to pick up a newly released calendar).
+    let needsRefresh = true;
+    try {
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      const gamesForLeague = await this.gameService.gameModel
+        .find({
+          league,
+          isActive: true,
+          gameDate: {
+            $gte: readableDate(new Date()),
+            $lte: readableDate(nextWeek),
+          },
+        })
+        .sort({ startTimeUTC: -1 })
+        .limit(2)
+        .lean()
+        .exec();
+
+      if (gamesForLeague.length === 0) {
+        const anyGames = await this.gameService.gameModel
+          .find({ league, isActive: true })
+          .sort({ startTimeUTC: -1 })
+          .limit(2)
+          .lean()
+          .exec();
+        needsRefresh = await needRefresh(league, { data: anyGames });
+      } else {
+        needsRefresh = await needRefresh(league, { data: gamesForLeague });
+      }
+    } catch (err) {
+      // On error, assume refresh is needed
+      needsRefresh = true;
+    }
+
+    if (!needsRefresh) {
+      console.info(
+        `[Cron] League rotation: ${league} refreshed recently — skipped.`,
+      );
       return;
     }
 
@@ -249,21 +290,21 @@ export class CronService implements OnModuleInit {
       const currentYear = new Date().getFullYear();
       const maxYearsBeforeDelete = this.gameService.maxYearBeforeDelete; // 10
       const minYear = currentYear - maxYearsBeforeDelete;
+      const maxOldieYear = currentYear - 1; // Prior year (exclude in-progress season)
 
       // 1. Pick a random league from the League enum
       const leagueValues = Object.values(League);
       const randomLeague =
         leagueValues[Math.floor(Math.random() * leagueValues.length)];
 
-      // 2. Pick a single random year to refresh per run, instead of looping over all
-      // 11 years at once. This dramatically limits the per-tick work volume, which was
-      // one of the causes of the Render restarts during the data update. It will take up to
-      // ~11 days to cover the whole window, one year per day.
+      // 2. Pick a single random year between minYear and maxOldieYear (last year)
+      // to refresh per run. The current year is excluded because it is already refreshed
+      // by the regular rotation and score crons.
       const randomYear =
-        minYear + Math.floor(Math.random() * (currentYear - minYear + 1));
+        minYear + Math.floor(Math.random() * (maxOldieYear - minYear + 1));
 
       console.info(
-        `[Cron] Oldies refresh: checking league ${randomLeague} for year ${randomYear} (1 of up to ${maxYearsBeforeDelete + 1} years, one per tick).`,
+        `[Cron] Oldies refresh: checking league ${randomLeague} for year ${randomYear} (range: ${minYear}..${maxOldieYear}, one year per tick).`,
       );
 
       try {
@@ -334,21 +375,28 @@ export class CronService implements OnModuleInit {
     }
   }
 
-  @Cron('0 3,15 * * *') // TWICE DAILY AT 3AM & 3PM (UTC) — purge the oldest month of games
-  async purgeOldestMonth() {
+  @Cron('0 4 * * 0') // WEEKLY ON SUNDAY AT 4AM (UTC) — purge stale teams without active games
+  async purgeStaleTeams() {
     try {
-      console.info('[Cron] Running monthly purge of oldest games...');
-      const result = await this.gameService.purgeOldestMonth();
+      console.info(
+        '[Cron] Running weekly purge of stale teams without active games...',
+      );
+      // Refresh teams first so `updateDate` is current for still-listed teams;
+      // only teams missing from the provider for more than 2 months stay stale.
+      await this.teamService.getTeams();
+      const result = await this.gameService.purgeStaleTeamsWithoutGames();
 
       if (result.action === 'purged') {
         console.info(
-          `[Cron] Purged ${result.deletedCount} games from ${result.purgedYear}-${result.purgedMonth?.toString().padStart(2, '0')}. Remaining years: ${result.remainingYears?.join(', ')}`,
+          `[Cron] Purged ${result.deletedCount} stale team(s): ${result.deletedIds.join(', ')}`,
         );
       } else {
-        console.info('[Cron] No games to purge.');
+        console.info(
+          `[Cron] No stale teams to purge (${result.candidates} candidate(s)).`,
+        );
       }
     } catch (err) {
-      console.error('[Cron] Error running monthly purge:', err);
+      console.error('[Cron] Error running stale teams purge:', err);
     }
   }
 
@@ -356,11 +404,12 @@ export class CronService implements OnModuleInit {
   async monitorDiskCapacity() {
     try {
       console.info('[Cron] Running disk capacity check...');
-      const result = await this.gameService.purgeOldestYearsIfNeeded();
+      const result = await this.gameService.purgeOldestMonthIfNeeded();
 
       if (result.action === 'purged') {
+        const purgedMonth = `${result.purgedYear}-${String(result.purgedMonth).padStart(2, '0')}`;
         console.warn(
-          `[Cron] Purged years: ${result.purgedYears?.join(', ')}. Remaining years: ${result.remainingYears?.join(', ')}`,
+          `[Cron] Purged ${result.deletedCount} game(s) from ${purgedMonth}. Remaining years: ${result.remainingYears?.join(', ')}`,
         );
       } else {
         console.info(

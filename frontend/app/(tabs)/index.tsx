@@ -121,8 +121,8 @@ const GameofTheDayContent = () => {
     nextDate: null,
   });
   const closestRequestRef = useRef('');
-  // Stocke l'uniqueId résolu de l'équipe sélectionnée (slider = label → résolu via cache teams ; modale = uniqueId direct).
-  // Permet à l'effet 'closest' de filtrer par équipe même quand le jour est vide (games vide → résolution impossible depuis games).
+  // Stores the resolved uniqueId of the selected team (slider = label → resolved via the teams cache; modal = uniqueId directly).
+  // Lets the 'closest' effect filter by team even when the day is empty (empty games → no way to resolve from games).
   const [selectedTeamUniqueId, setSelectedTeamUniqueId] = useState('');
 
   const [dateLimits, setDateLimits] = useState(() => getDateRangeLimits());
@@ -131,8 +131,8 @@ const GameofTheDayContent = () => {
     fetchDateRangeLimits().then(setDateLimits);
   }, []);
 
-  // Précharger le cache 'teams' (24h) au montage pour garantir que getCache<Team[]>('teams')
-  // est disponible quand l'utilisateur filtre par équipe via le slider (résolution label → uniqueId).
+  // Preload the 'teams' cache (24h) on mount to guarantee that getCache<Team[]>('teams')
+  // is available when the user filters by team through the slider (label → uniqueId resolution).
   useEffect(() => {
     fetchTeams().catch(() => {});
   }, []);
@@ -313,11 +313,14 @@ const GameofTheDayContent = () => {
 
   const disabledFilters: string[] = useMemo(() => {
     const disabled: string[] = [...disabledLeagues];
-    if (gamesSelected.length === 0) {
+    // The favorites (bookmark) chip only opens a list when at least one favorite game exists
+    // for the displayed date: with nothing to show it is dimmed and not tappable
+    // (same rule as the filled/outlined icon, based on `isAnyGameSelectedToday`).
+    if (!isAnyGameSelectedToday) {
       disabled.push('BOOKMARKS');
     }
     return disabled;
-  }, [disabledLeagues, gamesSelected]);
+  }, [disabledLeagues, isAnyGameSelectedToday]);
 
   const visibleGamesByHour = useMemo(() => {
     const sortGamesByFavorites = (gamesToSort: GameFormatted[]) => {
@@ -573,7 +576,7 @@ const GameofTheDayContent = () => {
   const handleTeamSelectionChange = useCallback((teamId: string | string[]) => {
     const finalTeamId = Array.isArray(teamId) ? teamId[0] : teamId;
     setTeamSelectedId(finalTeamId);
-    // La modale envoie directement l'uniqueId : le stocker pour l'effet 'closest'.
+    // The modal sends the uniqueId directly: store it for the 'closest' effect.
     setSelectedTeamUniqueId(finalTeamId);
   }, []);
 const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
@@ -604,10 +607,10 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
     setRetryCount(0);
   }, [selectDate, selectLeagues, teamSelectedId, activeFilter]);
 
-  // Quand aucun match n'est visible pour le jour + filtre courant, interroger
-  // la route 'closest' avec la date affichée comme borne :
-  // - équipe spécifique sélectionnée → teamSelectedIds (uniqueId déjà résolu dans selectedTeamUniqueId) ;
-  // - sinon ("TOUS") → leagues (la league filtrée, ex. MLB).
+  // When no game is visible for the day + current filter, query the 'closest'
+  // route with the displayed date as boundary:
+  // - specific team selected → teamSelectedIds (uniqueId already resolved in selectedTeamUniqueId);
+  // - otherwise ("ALL") → leagues (the filtered league, e.g. MLB).
   useEffect(() => {
     if (isLoading || visibleGamesByHour.length > 0) {
       if (visibleGamesByHour.length > 0) {
@@ -616,16 +619,16 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       }
       return;
     }
-    // Contrat index : date affichée (borne) + équipe spécifique si sélectionnée,
-    // sinon league filtrée quand le filtre équipe est sur "TOUS".
-    // selectedTeamUniqueId contient l'uniqueId résolu au moment de la sélection
-    // (slider : label → résolu via cache teams ; modale : uniqueId direct),
-    // donc utilisable même quand le jour est vide (games vide).
-    // Fallback de sécurité : si selectedTeamUniqueId est vide mais que teamSelectedId
-    // est un label (contient un espace), résoudre via fetchTeams() (cache 24h) avant l'appel.
-    // Cela couvre le cas où le cache 'teams' n'aurait pas été chargé au moment du clic.
-    // League effective : filtre league explicite (ex. MLB via handleFilterChange),
-    // en excluant les pseudo-filtres ALL / FAVORITES / BOOKMARKS.
+    // Index contract: displayed date (boundary) + specific team when one is selected,
+    // otherwise the filtered league when the team filter is on "ALL".
+    // selectedTeamUniqueId holds the uniqueId resolved at selection time
+    // (slider: label → resolved via the teams cache; modal: uniqueId directly),
+    // so it is usable even when the day is empty (empty games).
+    // Safety fallback: when selectedTeamUniqueId is empty but teamSelectedId
+    // is a label (contains a space), resolve it via fetchTeams() (24h cache) before the call.
+    // This covers the case where the 'teams' cache was not loaded yet at click time.
+    // Effective league: explicit league filter (e.g. MLB via handleFilterChange),
+    // excluding the ALL / FAVORITES / BOOKMARKS pseudo-filters.
     const effectiveLeague =
       activeFilter !== 'ALL' && activeFilter !== 'FAVORITES' && activeFilter !== 'BOOKMARKS'
         ? activeFilter
@@ -687,7 +690,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
         closestRequestRef.current = '';
       }
     };
-    // selectedTeamUniqueId remplace games pour la résolution équipe (indépendant du jour).
+    // selectedTeamUniqueId replaces games for team resolution (day-independent).
   }, [isLoading, visibleGamesByHour.length, selectDate, selectedTeamUniqueId, teamSelectedId, selectLeagues, activeFilter]);
 
   const hasFavorites = useMemo(() => {
@@ -782,9 +785,9 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
         setTeamSelectedId('');
         setSelectedTeamUniqueId('');
       } else {
-        // Le slider envoie un label (ex. "New Jersey Devils") : résoudre vers l'uniqueId
-        // via le cache 'teams' (24h) pour que l'effet 'closest' puisse filtrer par équipe
-        // même quand le jour affiché est vide (games vide → résolution impossible depuis games).
+        // The slider sends a label (e.g. "New Jersey Devils"): resolve it to the uniqueId
+        // through the 'teams' cache (24h) so the 'closest' effect can filter by team
+        // even when the displayed day is empty (empty games → no way to resolve from games).
         const cachedTeams = getCache<Team[]>('teams');
         const resolved = cachedTeams?.find((t) => t.label === val)?.uniqueId ?? '';
         setTeamSelectedId(val);
@@ -866,8 +869,8 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
     }
 
     if (visibleGamesByHour.length === 0) {
-      // Si la route 'closest' a trouvé des dates avec des matchs pour les
-      // filtres courants, proposer de naviguer vers la date en amont/aval.
+      // When the 'closest' route found dates with games for the
+      // current filters, offer to navigate to the previous/next date.
       const closestProps =
         !isLoading && (closestDates.previousDate || closestDates.nextDate)
           ? {

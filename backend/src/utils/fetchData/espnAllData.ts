@@ -1,6 +1,6 @@
 import { readableDate } from '../../utils/date';
 import { CollegeLeague, League } from '../../utils/enum';
-import { Colors } from '../Colors';
+import { getTeamColors } from '../Colors';
 import type { ESPNTeam, TeamESPN, TeamType } from '../interface/team';
 import { UniversityLogos } from '../UniversityLogos';
 import { capitalize, getLuminance, getCurrentSeasonYears } from '../utils';
@@ -33,7 +33,9 @@ const fetchWithRetry = async (url: string, retries = 1) => {
     } catch (error) {
       lastError = error;
       if (attempt < retries) {
-        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 500 * (attempt + 1)),
+        );
       }
     }
   }
@@ -229,12 +231,14 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
       return allTeams;
     }
     if (!leaguesData[leagueName]) return [];
-    const fetchedTeams = await fetchWithRetry(leaguesData[leagueName].fetchTeam);
+    const fetchedTeams = await fetchWithRetry(
+      leaguesData[leagueName].fetchTeam,
+    );
     const fetchTeams: TeamESPN = await fetchedTeams.json();
     const { sports } = fetchTeams;
     if (!sports) return [];
     const { leagues } = sports[0];
-    let allTeams: ESPNTeam[] = leagues[0].teams || [];
+    const allTeams: ESPNTeam[] = leagues[0].teams || [];
     const standings = await getESPNStandings(leagueName);
 
     if (allTeams.length === 0 && leagueName.includes('OLYMPICS')) {
@@ -332,12 +336,22 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
 
         const record = standings[id];
 
-        let colorTeam = color
-          ? '#' + color
-          : Colors[uniqueId]?.color || Colors.default.color;
+        // University teams sometimes come without colors from ESPN. The shared
+        // resolver falls back to the same university in another college league
+        // (e.g. NCAAB-X -> NCAAF-X) before using the default placeholder.
+        const fallbackColors = getTeamColors(uniqueId);
+        let colorTeam = color ? '#' + color : fallbackColors.color;
         let backgroundColorTeam = alternateColor
           ? '#' + alternateColor
-          : Colors[uniqueId]?.backgroundColor || Colors.default.backgroundColor;
+          : fallbackColors.backgroundColor;
+
+        // Safeguard: ESPN sometimes returns color === alternateColor (or an
+        // entry that collapses into the fallback); such a pair is unusable, so
+        // keep the resolved fallback colors instead.
+        if (colorTeam.toLowerCase() === backgroundColorTeam.toLowerCase()) {
+          colorTeam = fallbackColors.color;
+          backgroundColorTeam = fallbackColors.backgroundColor;
+        }
 
         if (getLuminance(colorTeam) < getLuminance(backgroundColorTeam)) {
           const temp = colorTeam;
@@ -456,22 +470,15 @@ const getEachTeamSchedule = async (
     }
     let games = [];
     const soccerLeagues = new Set([League.MLS, League.NWSL]);
-    const collegeLeagues = new Set([
-      League.NCAAF,
-      League.NCAAB,
-      League.NCCABB,
-      League.WNCAAB,
-      League.NCAAMH,
-      League.NCAAWH,
-    ]);
 
+    // NOTE: college leagues (NCAAF, NCAAB, NCCABB, WNCAAB, NCAAMH, NCAAWH)
+    // intentionally use the team schedule endpoint below (else branch):
+    // the scoreboard?dates={year} path does not return their full history.
+    // Olympics + soccer keep the scoreboard path (incl. oldies via season).
     if (
       leagueName.includes('OLYMPICS') ||
-      soccerLeagues.has(leagueName as League) ||
-      collegeLeagues.has(leagueName as League)
+      soccerLeagues.has(leagueName as League)
     ) {
-      const currentYear = new Date().getFullYear();
-
       const years = season ? [season] : getCurrentSeasonYears(leagueName);
 
       for (const year of years) {
@@ -602,8 +609,8 @@ const getEachTeamSchedule = async (
             (l) => l.rel?.includes('dark') && l.rel?.includes('scoreboard'),
           )?.href || homeTeamLogo;
 
-        let homeTeamShort = homeAbbrev;
-        let awayTeamShort = awayAbbrev;
+        const homeTeamShort = homeAbbrev;
+        const awayTeamShort = awayAbbrev;
         const comp = competitions[0];
 
         return {
@@ -766,8 +773,8 @@ export const getESPNScores = async (
                 const awayTeamRecord =
                   away?.records?.find((r) => r.type === 'total')?.summary || '';
 
-                let homeTeamShort = home?.team?.abbreviation || undefined;
-                let awayTeamShort = away?.team?.abbreviation || undefined;
+                const homeTeamShort = home?.team?.abbreviation || undefined;
+                const awayTeamShort = away?.team?.abbreviation || undefined;
 
                 const displayClockDetail = comp.status?.displayClock || '';
                 const statusIndicatesFinishedDetail =
@@ -859,8 +866,8 @@ export const getESPNScores = async (
         const awayTeamRecord =
           away?.records?.find((r) => r.type === 'total')?.summary || '';
 
-        let homeTeamShort = home?.team?.abbreviation || undefined;
-        let awayTeamShort = away?.team?.abbreviation || undefined;
+        const homeTeamShort = home?.team?.abbreviation || undefined;
+        const awayTeamShort = away?.team?.abbreviation || undefined;
 
         finishedCount++;
         const normalized = {

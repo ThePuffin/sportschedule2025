@@ -33,8 +33,9 @@ Adds a number of days to a date and returns the result as a string.
 Determines the status of a game based on the current time and the game's league duration:
 
 1. If `gameStatus` contains `FINAL`, `FINISHED`, or `ENDED` → `GameStatus.FINISHED`
-2. If current time > end time (start + league duration) → `GameStatus.FINAL`
-3. If current time >= start time → `GameStatus.IN_PROGRESS`
-4. Otherwise → `GameStatus.SCHEDULED`
+2. If `gameStatus` contains `DELAY`/`SUSPEND`/`RAIN`/`WEATHER` (temporarily interrupted) → `GameStatus.DELAYED`
+3. If current time > end time (start + league duration) → `GameStatus.FINAL`
+4. If current time >= start time → `GameStatus.IN_PROGRESS`
+5. Otherwise → `GameStatus.SCHEDULED`
 
 Uses `timeDurationEnum[game.league]` to determine the game duration (defaults to 2.5 hours).

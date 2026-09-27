@@ -31,12 +31,25 @@ export const getGamesStatus = (game: GameFormatted) => {
   const endTime = new Date(startTime);
   endTime.setHours(endTime.getHours() + duration);
 
+  const gameStatus = game.gameStatus?.toUpperCase();
+
   if (
-    game.gameStatus?.toUpperCase().includes('FINAL') ||
-    game.gameStatus?.toUpperCase().includes('FINISHED') ||
-    game.gameStatus?.toUpperCase().includes('ENDED')
+    gameStatus?.includes('FINAL') ||
+    gameStatus?.includes('FINISHED') ||
+    gameStatus?.includes('ENDED')
   ) {
     return GameStatus.FINISHED;
+  }
+
+  // Temporarily interrupted game (rain delay / suspended): stays visible with its
+  // own status so the card can show the translated "interrupted / delayed" badge.
+  if (
+    gameStatus?.includes('DELAY') ||
+    gameStatus?.includes('SUSPEND') ||
+    gameStatus?.includes('RAIN') ||
+    gameStatus?.includes('WEATHER')
+  ) {
+    return GameStatus.DELAYED;
   }
 
   if (now > endTime) {

@@ -1,6 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TeamService } from '../../teams/teams.service';
+import { Colors, DEFAULT_TEAM_COLORS } from '../../utils/Colors';
 import { League } from '../../utils/enum';
 import * as utils from '../../utils/utils';
 import { GameService } from '../games.service';
@@ -28,6 +29,7 @@ describe('GameService', () => {
     countByLeague: jest.fn(),
     findAll: jest.fn(),
     deleteManyByIds: jest.fn(),
+    purgeStaleTeamsWithoutGames: jest.fn(),
   };
 
   const mockRefreshTimestampService = {
@@ -60,6 +62,77 @@ describe('GameService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('_resolveTeamColors', () => {
+    afterEach(() => {
+      delete (Colors as any)['NCAAF-COLORTEST'];
+    });
+
+    it('keeps stored colors when they are not the placeholder', () => {
+      const colors = (service as any)._resolveTeamColors({
+        uniqueId: 'NCAAB-DUKE',
+        color: '#00539b',
+        backgroundColor: '#ffffff',
+      });
+
+      expect(colors).toEqual({
+        color: '#00539b',
+        backgroundColor: '#ffffff',
+      });
+    });
+
+    it('borrows the colors from the same university in another college league', () => {
+      Colors['NCAAF-COLORTEST'] = {
+        color: '#111111',
+        backgroundColor: '#222222',
+      };
+
+      const colors = (service as any)._resolveTeamColors(
+        { color: '#ffffff', backgroundColor: '#000000' },
+        'NCAAB-COLORTEST',
+      );
+
+      expect(colors).toEqual({
+        color: '#111111',
+        backgroundColor: '#222222',
+      });
+    });
+
+    it('uses the default placeholder for non-college leagues', () => {
+      const colors = (service as any)._resolveTeamColors(
+        { color: '#ffffff', backgroundColor: '#000000' },
+        'NHL-NOPE',
+      );
+
+      expect(colors).toEqual(DEFAULT_TEAM_COLORS);
+    });
+
+    it('treats stored degenerate (color === background) colors as unknown and borrows from another league', () => {
+      Colors['NCAAF-COLORTEST'] = {
+        color: '#111111',
+        backgroundColor: '#222222',
+      };
+
+      const colors = (service as any)._resolveTeamColors(
+        { color: '#000000', backgroundColor: '#000000' },
+        'NCCABB-COLORTEST',
+      );
+
+      expect(colors).toEqual({
+        color: '#111111',
+        backgroundColor: '#222222',
+      });
+    });
+
+    it('falls back to the default placeholder when the stored colors are degenerate and no league helps', () => {
+      const colors = (service as any)._resolveTeamColors(
+        { color: '#000000', backgroundColor: '#000000' },
+        'NHL-NOPE',
+      );
+
+      expect(colors).toEqual(DEFAULT_TEAM_COLORS);
+    });
   });
 
   describe('checkLeagueGamesAvailability', () => {
@@ -237,7 +310,11 @@ describe('GameService', () => {
       ]);
       getLeagueGamesSpy = jest
         .spyOn(service, 'getLeagueGames')
-        .mockResolvedValue({ added: 1, skippedExisting: 0, skippedMissingTeamData: 0 });
+        .mockResolvedValue({
+          added: 1,
+          skippedExisting: 0,
+          skippedMissingTeamData: 0,
+        });
     });
 
     afterEach(() => {
@@ -254,11 +331,11 @@ describe('GameService', () => {
       expect(getLeagueGamesSpy).not.toHaveBeenCalled();
     });
 
-    it('should loop over the last 5 seasons when no year is specified', async () => {
+    it('should loop over finished seasons only when no year is specified (excludes current year)', async () => {
       const currentYear = new Date().getFullYear();
       const expectedYears = [];
       for (
-        let y = currentYear;
+        let y = currentYear - 1;
         y > currentYear - service.maxYearBeforeDelete;
         y--
       ) {
@@ -317,11 +394,30 @@ describe('GameService', () => {
 
       const result = await service.getOldiesGames(undefined, League.NHL);
 
-      // Only the first year (currentYear) should appear in the message since it had added > 0
-      expect(result.yearsWithAdditions).toContain(currentYear);
-      expect(result.message).toContain(String(currentYear));
+      // Only the first year (currentYear - 1) should appear in the message since it had added > 0
+      expect(result.yearsWithAdditions).toContain(currentYear - 1);
+      expect(result.message).toContain(String(currentYear - 1));
       // The second year should NOT appear
-      expect(result.message).not.toContain(String(currentYear - 1));
+      expect(result.message).not.toContain(String(currentYear - 2));
+    });
+
+    it('should still allow forcing the current year explicitly via year param', async () => {
+      const currentYear = new Date().getFullYear();
+
+      const result = await service.getOldiesGames(
+        String(currentYear),
+        League.NHL,
+      );
+
+      expect(getLeagueGamesSpy).toHaveBeenCalledTimes(1);
+      expect(getLeagueGamesSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          league: League.NHL,
+          season: currentYear,
+          addMissingOnly: true,
+        }),
+      );
+      expect(result.message).toContain(String(currentYear));
     });
 
     it('should return "already up to date" message when no games were added', async () => {
@@ -681,6 +777,9 @@ describe('GameService', () => {
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('active game(s) unresolved'),
       );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Removed 2 unresolved game(s) started more than 90 days ago.'),
+      );
 
       removeSpy.mockRestore();
       consoleSpy.mockRestore();
@@ -699,7 +798,7 @@ describe('GameService', () => {
     });
   });
 
-  describe('purgeOldestYearsIfNeeded', () => {
+  describe('purgeOldestMonthIfNeeded', () => {
     it('should return "none" if disk usage is below threshold', async () => {
       const getAvailableYearsSpy = jest
         .spyOn(service as any, 'getAvailableYears')
@@ -726,7 +825,7 @@ describe('GameService', () => {
           percentage: 0.5, // 50% - below 90% threshold
         });
 
-      const result = await service.purgeOldestYearsIfNeeded();
+      const result = await service.purgeOldestMonthIfNeeded();
 
       expect(result.action).toBe('none');
       expect(result.diskUsage.percentage).toBe(0.5);
@@ -736,80 +835,89 @@ describe('GameService', () => {
       getDiskUsageSpy.mockRestore();
     });
 
-    it('should purge oldest years when disk usage exceeds threshold', async () => {
-      const initialYears = [
-        {
-          year: 2020,
-          count: 50,
-          oldestDate: '2020-01-01',
-          newestDate: '2020-12-31',
-        },
-        {
-          year: 2023,
-          count: 80,
-          oldestDate: '2023-01-01',
-          newestDate: '2023-12-31',
-        },
-        {
-          year: 2024,
-          count: 100,
-          oldestDate: '2024-01-01',
-          newestDate: '2024-12-31',
-        },
-      ];
-
-      const afterPurgeYears = [
-        {
-          year: 2023,
-          count: 80,
-          oldestDate: '2023-01-01',
-          newestDate: '2023-12-31',
-        },
-        {
-          year: 2024,
-          count: 100,
-          oldestDate: '2024-01-01',
-          newestDate: '2024-12-31',
-        },
-      ];
+    it('should purge ONLY the oldest month when disk usage exceeds threshold', async () => {
+      const purgeOldestMonthSpy = jest
+        .spyOn(service, 'purgeOldestMonth')
+        .mockResolvedValue({
+          action: 'purged',
+          purgedYear: 2016,
+          purgedMonth: 9,
+          deletedCount: 296,
+          remainingYears: [2017, 2023, 2024],
+        });
 
       const getAvailableYearsSpy = jest
         .spyOn(service as any, 'getAvailableYears')
-        .mockResolvedValueOnce(initialYears) // First call for purge logic
-        .mockResolvedValueOnce(afterPurgeYears); // Second call for remainingYears
-
-      const deleteGamesForYearSpy = jest
-        .spyOn(service as any, 'deleteGamesForYear')
-        .mockResolvedValue(50); // Deletes 50 games
+        .mockResolvedValue([
+          {
+            year: 2017,
+            count: 80,
+            oldestDate: '2017-01-01',
+            newestDate: '2017-12-31',
+          },
+        ]);
 
       const getDiskUsageSpy = jest
         .spyOn(service as any, 'getDiskUsage')
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           usedMB: 95,
           totalMB: 100,
           percentage: 0.95, // 95% - exceeds 90%
-        })
-        .mockResolvedValueOnce({
-          usedMB: 70,
-          totalMB: 100,
-          percentage: 0.7, // After purge: 70% - below threshold
-        })
-        .mockResolvedValueOnce({
-          usedMB: 70,
-          totalMB: 100,
-          percentage: 0.7,
         });
 
-      const result = await service.purgeOldestYearsIfNeeded();
+      const result = await service.purgeOldestMonthIfNeeded();
 
       expect(result.action).toBe('purged');
-      expect(result.purgedYears).toEqual([2020]);
-      expect(deleteGamesForYearSpy).toHaveBeenCalledWith(2020);
-      expect(result.remainingYears).toEqual([2023, 2024]);
+      // Single-shot purge: exactly ONE month is purged, never a loop over years
+      expect(purgeOldestMonthSpy).toHaveBeenCalledTimes(1);
+      expect(result.purgedYear).toBe(2016);
+      expect(result.purgedMonth).toBe(9);
+      expect(result.deletedCount).toBe(296);
+      expect(result.remainingYears).toEqual([2017, 2023, 2024]);
+      expect(result.diskUsage.percentage).toBe(0.95);
 
+      purgeOldestMonthSpy.mockRestore();
       getAvailableYearsSpy.mockRestore();
-      deleteGamesForYearSpy.mockRestore();
       getDiskUsageSpy.mockRestore();
+    });
+
+    it('never loops: purges a single month even when usage stays above threshold', async () => {
+      // Regression guard: the old implementation kept deleting years because
+      // getDiskUsage() returns a 60s-cached value, so the "drop below 90%"
+      // condition never became true and the whole database was wiped.
+      const purgeOldestMonthSpy = jest
+        .spyOn(service, 'purgeOldestMonth')
+        .mockResolvedValue({
+          action: 'purged',
+          purgedYear: 2016,
+          purgedMonth: 9,
+          deletedCount: 296,
+          remainingYears: [2017],
+        });
+
+      jest.spyOn(service as any, 'getAvailableYears').mockResolvedValue([
+        {
+          year: 2017,
+          count: 80,
+          oldestDate: '2017-01-01',
+          newestDate: '2017-12-31',
+        },
+      ]);
+
+      // Disk usage NEVER drops below the threshold (stale cache scenario)
+      jest.spyOn(service as any, 'getDiskUsage').mockResolvedValue({
+        usedMB: 95,
+        totalMB: 100,
+        percentage: 0.95,
+      });
+
+      const result = await service.purgeOldestMonthIfNeeded();
+
+      expect(result.action).toBe('purged');
+      // The purge must be triggered exactly once per call — no iteration.
+      expect(purgeOldestMonthSpy).toHaveBeenCalledTimes(1);
+
+      jest.restoreAllMocks();
     });
 
     it('should not re-check disk if within CHECK_INTERVAL_MS', async () => {
@@ -833,11 +941,11 @@ describe('GameService', () => {
         });
 
       // First call
-      await service.purgeOldestYearsIfNeeded();
+      await service.purgeOldestMonthIfNeeded();
       expect(getDiskUsageSpy).toHaveBeenCalledTimes(1);
 
       // Second call immediately after (should skip due to interval)
-      const result = await service.purgeOldestYearsIfNeeded();
+      const result = await service.purgeOldestMonthIfNeeded();
       expect(getDiskUsageSpy).toHaveBeenCalledTimes(1); // Still 1
       expect(result.action).toBe('none');
 
@@ -878,12 +986,14 @@ describe('GameService', () => {
       expect(mockGameModel.aggregate).toHaveBeenCalled();
     });
   });
-describe('purgeOldestMonth', () => {
+  describe('purgeOldestMonth', () => {
     beforeEach(() => {
       // Reset aggregate and deleteMany mocks
       mockGameModel.aggregate = jest.fn();
       mockGameModel.deleteMany = jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue({ deletedCount: 0, acknowledged: true }),
+        exec: jest
+          .fn()
+          .mockResolvedValue({ deletedCount: 0, acknowledged: true }),
       });
     });
 
@@ -1032,7 +1142,7 @@ describe('purgeOldestMonth', () => {
     });
   });
 
-describe('getDateRange', () => {
+  describe('getDateRange', () => {
     it('should return min/max dates from the aggregate', async () => {
       mockGameModel.aggregate.mockResolvedValue([
         { minDate: '2024-01-01', maxDate: '2024-12-31' },
@@ -1073,7 +1183,10 @@ describe('getDateRange', () => {
 
       const result = await service.getClosestDates({});
 
-      expect(result).toEqual({ previousDate: '2026-02-01', nextDate: '2026-03-10' });
+      expect(result).toEqual({
+        previousDate: '2026-02-01',
+        nextDate: '2026-03-10',
+      });
       expect(mockGameModel.aggregate).toHaveBeenCalledTimes(2);
     });
 
@@ -1156,6 +1269,55 @@ describe('getDateRange', () => {
       expect(result).toEqual({});
       expect(getAllGamesSpy).not.toHaveBeenCalled();
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('findUsedTeamIds / purgeStaleTeamsWithoutGames', () => {
+    it('findUsedTeamIds unions teamSelectedId + homeTeamId + awayTeamId of active games', async () => {
+      mockGameModel.distinct.mockImplementation((field: string) => ({
+        exec: jest.fn().mockResolvedValue(
+          field === 'teamSelectedId'
+            ? ['NHL-BOS', 'NHL-TOR']
+            : field === 'homeTeamId'
+              ? ['NHL-BOS', '']
+              : ['NHL-EDM', null],
+        ),
+      }));
+
+      const used = await service.findUsedTeamIds();
+
+      expect(mockGameModel.distinct).toHaveBeenCalledWith('teamSelectedId', {
+        isActive: true,
+      });
+      expect(mockGameModel.distinct).toHaveBeenCalledWith('homeTeamId', {
+        isActive: true,
+      });
+      expect(mockGameModel.distinct).toHaveBeenCalledWith('awayTeamId', {
+        isActive: true,
+      });
+      expect(used).toEqual(new Set(['NHL-BOS', 'NHL-TOR', 'NHL-EDM']));
+    });
+
+    it('purgeStaleTeamsWithoutGames delegates used ids to TeamService', async () => {
+      mockGameModel.distinct.mockImplementation(() => ({
+        exec: jest.fn().mockResolvedValue(['NHL-BOS']),
+      }));
+      const purgeResult = {
+        action: 'purged' as const,
+        candidates: 1,
+        deletedCount: 1,
+        deletedIds: ['NHL-TOR'],
+      };
+      mockTeamService.purgeStaleTeamsWithoutGames = jest
+        .fn()
+        .mockResolvedValue(purgeResult);
+
+      const result = await service.purgeStaleTeamsWithoutGames();
+
+      expect(result).toEqual(purgeResult);
+      expect(mockTeamService.purgeStaleTeamsWithoutGames).toHaveBeenCalledWith(
+        new Set(['NHL-BOS']),
+      );
     });
   });
 });

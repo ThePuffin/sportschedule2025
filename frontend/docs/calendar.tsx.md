@@ -12,7 +12,10 @@ The **Calendar** tab (also called "Agenda") displays games for multiple selected
 - **Home/Away game toggle** — filter to home games, away games, or all
 - **Swipe gesture** — swipe left/right on the page to cycle through home / all / away filters
 - **Hidden teams** — hide specific teams from the display
-- **Bookmarked games modal** — view and manage selected games
+- **Bookmarked games modal** — view and manage selected games. Tapping a card opens the game
+  details modal (`GameModal`), which offers a trash button (replacing "locate arena") to
+  remove that single game from the favorites; the bookmark pill on the card removes it
+  directly. The header trash button still clears the whole selection.
 - **Firestore sync** — teams, games, and date range synced to user account
 
 ## State Variables
@@ -71,6 +74,14 @@ Called when the user changes the date range. Fetches games, prunes bookmarked ga
 
 Toggles a game in the bookmarked selection (max 10). Matches games by teams + exact UTC date/time.
 
+### `handleRemoveGameSelection(game)`
+
+Unconditionally removes a single game from the bookmarks (used by the FAVORIS modal's card
+details: the `GameModal` trash button and the card bookmark pill). Uses the module-level
+`isSameGame(a, b)` helper (same teams + same UTC year/month/day/hour, so doubleheaders remain
+distinguishable), then updates the state, saves the `gameSelected` cache, dispatches
+`gamesSelectedUpdated` and syncs to Firestore. No-op when the game is not bookmarked.
+
 ### `handleOpenReorder()`
 
 Opens the team reorder modal with the current valid team selection.
@@ -90,7 +101,7 @@ A `PanResponder` created with `useMemo` that detects horizontal swipes on the pa
 - **Swipe left** (`dx < -30`) → next filter
 - **Swipe right** (`dx > 30`) → previous filter
 
-Only horizontal swipes are captured (ignores vertical scroll) via `onMoveShouldSetPanResponder`.
+Only horizontal swipes are captured (ignores vertical scroll) via `onMoveShouldSetPanResponder`. It also checks `isScrollingHorizontallyRef` (mirroring `isScrollingHorizontally` from `HorizontalScrollContext`) and refuses to capture the gesture when the user is scrolling horizontally inside a `FilterSlider`, preventing accidental filter changes. IMPORTANT: `swipePanResponder.panHandlers` are attached ONLY to the `View` wrapping the games cards (`displayAccordions()`), NOT to the root view — so swipes starting in the filter zone (team slider, date picker, buttons) can never change the home/away filter. Only swipes starting on the cards count.
 
 ## Key Memoized Values
 

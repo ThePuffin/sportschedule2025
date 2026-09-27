@@ -55,6 +55,12 @@ Each file in `frontend/docs/` (and `frontend/docs/components/`) contains AI-read
 4. **For every new feature or user-visible behavior change**, update the relevant docs and changelog as part of the implementation. Documentation is not a separate cleanup task.
 5. **The `backend/` directory** has its own structure; consult `backend/README.md` for backend-specific instructions.
 6. **If you are unsure about a file's behavior**, read its documentation file FIRST before reading the source code.
+7. **When a feature is removed or modified**, the documentation must be brought into line in the same change:
+   - **Delete** any documentation section that describes a feature, state variable, function, prop, or behavior that no longer exists in the code.
+   - **Rewrite** the sections that describe behavior which has been modified, so they match the new implementation (do not leave stale descriptions "just in case").
+   - If a source file has been **deleted**, delete its documentation file too and remove its row from the Documentation Index below.
+   - Documentation must never describe functionality that is absent from the code: outdated docs are treated as bugs, not as harmless leftovers.
+8. **English only**: all code comments, commit messages, documentation files (`.md`), and changelog entries MUST be written in English — no French or other languages. The only exception is user-facing translated strings (e.g. the 11-language support in `frontend/utils/utils.tsx`).
 
 ## Architecture Notes
 

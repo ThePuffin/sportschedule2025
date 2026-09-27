@@ -359,6 +359,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#e31837',
     backgroundColor: '#002b5c',
   },
+  'NCAAB-AKR': {
+    color: '#c5b783',
+    backgroundColor: '#041e42',
+  },
   'NCAAB-ALA': {
     color: '#ffffff',
     backgroundColor: '#9e1b32',
@@ -367,6 +371,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#c41130',
     backgroundColor: '#c8102e',
   },
+  'NCAAB-APP': {
+    color: '#ffcd00',
+    backgroundColor: '#000000',
+  },
   'NCAAB-ARIZ': {
     color: '#cc0033',
     backgroundColor: '#003366',
@@ -374,6 +382,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-ARK': {
     color: '#ffffff',
     backgroundColor: '#a32136',
+  },
+  'NCAAB-ARST': {
+    color: '#cc092f',
+    backgroundColor: '#000000',
   },
   'NCAAB-ASU': {
     color: '#ffc627',
@@ -391,9 +403,17 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#dbcca6',
     backgroundColor: '#8c2232',
   },
+  'NCAAB-BEL': {
+    color: '#c9262d',
+    backgroundColor: '#182142',
+  },
   'NCAAB-BELL': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
+  },
+  'NCAAB-BGSU': {
+    color: '#fd5000',
+    backgroundColor: '#4f2c1d',
   },
   'NCAAB-BOIS': {
     color: '#d64309',
@@ -411,10 +431,6 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#005bbb',
   },
-  'NCAAB-BUT': {
-    color: '#00a3e0',
-    backgroundColor: '#0d1361',
-  },
   'NCAAB-BYU': {
     color: '#0047ba',
     backgroundColor: '#002e5d',
@@ -427,9 +443,21 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#e00122',
     backgroundColor: '#000000',
   },
+  'NCAAB-CLE': {
+    color: '#006633',
+    backgroundColor: '#231f20',
+  },
   'NCAAB-CLEM': {
     color: '#ffffff',
     backgroundColor: '#f56600',
+  },
+  'NCAAB-CLT': {
+    color: '#a49665',
+    backgroundColor: '#005035',
+  },
+  'NCAAB-COFC': {
+    color: '#9e8959',
+    backgroundColor: '#7a2531',
   },
   'NCAAB-COLO': {
     color: '#cfb87c',
@@ -451,6 +479,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#c8c372',
     backgroundColor: '#004c23',
   },
+  'NCAAB-CSUN': {
+    color: '#b50000',
+    backgroundColor: '#000000',
+  },
   'NCAAB-DAV': {
     color: '#e51837',
     backgroundColor: '#000000',
@@ -467,6 +499,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#2d649c',
     backgroundColor: '#ce1125',
   },
+  'NCAAB-DRKE': {
+    color: '#bec0c2',
+    backgroundColor: '#005596',
+  },
   'NCAAB-DUKE': {
     color: '#ffffff',
     backgroundColor: '#00539b',
@@ -475,21 +511,49 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#b90b2e',
     backgroundColor: '#002D62',
   },
+  'NCAAB-ECU': {
+    color: '#ffc72c',
+    backgroundColor: '#582c83',
+  },
   'NCAAB-EMU': {
     color: '#ffffff',
     backgroundColor: '#006938',
+  },
+  'NCAAB-ETSU': {
+    color: '#ffc423',
+    backgroundColor: '#002d61',
   },
   'NCAAB-FAMU': {
     color: '#F89728',
     backgroundColor: '#00843d',
   },
+  'NCAAB-FAU': {
+    color: '#003366',
+    backgroundColor: '#cc0000',
+  },
   'NCAAB-FLA': {
     color: '#fa4616',
     backgroundColor: '#0021a5',
   },
+  'NCAAB-FRES': {
+    color: '#b1102b',
+    backgroundColor: '#13284c',
+  },
   'NCAAB-FSU': {
     color: '#ceb888',
     backgroundColor: '#782f40',
+  },
+  'NCAAB-FUR': {
+    color: '#ffffff',
+    backgroundColor: '#582c83',
+  },
+  'NCAAB-GASO': {
+    color: '#a3aaae',
+    backgroundColor: '#041e42',
+  },
+  'NCAAB-GAST': {
+    color: '#ffffff',
+    backgroundColor: '#0039a6',
   },
   'NCAAB-GCU': {
     color: '#ffffff',
@@ -523,6 +587,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#005737',
     backgroundColor: '#000000',
   },
+  'NCAAB-HOF': {
+    color: '#ffc72c',
+    backgroundColor: '#003594',
+  },
   'NCAAB-HOU': {
     color: '#ffffff',
     backgroundColor: '#c8102e',
@@ -538,6 +606,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-ILL': {
     color: '#ff5f05',
     backgroundColor: '#13294b',
+  },
+  'NCAAB-IONA': {
+    color: '#f0ab00',
+    backgroundColor: '#6f2c3e',
   },
   'NCAAB-IOWA': {
     color: '#fcd116',
@@ -555,6 +627,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#d59f0f',
     backgroundColor: '#A81F30',
   },
+  'NCAAB-JMU': {
+    color: '#cbb677',
+    backgroundColor: '#450084',
+  },
   'NCAAB-JXST': {
     color: '#cc0000',
     backgroundColor: '#000000',
@@ -571,6 +647,14 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#0051ba',
     backgroundColor: '#e8000d',
   },
+  'NCAAB-LBSU': {
+    color: '#f1f2f3',
+    backgroundColor: '#000000',
+  },
+  'NCAAB-LIB': {
+    color: '#b72025',
+    backgroundColor: '#0a254e',
+  },
   'NCAAB-LMU': {
     color: '#00345b',
     backgroundColor: '#880029',
@@ -582,6 +666,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-LSU': {
     color: '#fdd023',
     backgroundColor: '#461d76',
+  },
+  'NCAAB-LT': {
+    color: '#cb333b',
+    backgroundColor: '#003087',
   },
   'NCAAB-LUC': {
     color: '#9d1244',
@@ -603,6 +691,14 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#ce1126',
   },
+  'NCAAB-MEM': {
+    color: '#8e908f',
+    backgroundColor: '#004991',
+  },
+  'NCAAB-MER': {
+    color: '#ff7f29',
+    backgroundColor: '#080808',
+  },
   'NCAAB-MIA': {
     color: '#f47423',
     backgroundColor: '#035131',
@@ -623,6 +719,18 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#f1b82d',
     backgroundColor: '#000000',
   },
+  'NCAAB-MONT': {
+    color: '#666666',
+    backgroundColor: '#751D4A',
+  },
+  'NCAAB-MOST': {
+    color: '#ffffff',
+    backgroundColor: '#5e0009',
+  },
+  'NCAAB-MRSH': {
+    color: '#00b140',
+    backgroundColor: '#000000',
+  },
   'NCAAB-MSST': {
     color: '#c1c6c8',
     backgroundColor: '#5d1725',
@@ -631,9 +739,21 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#173f35',
   },
+  'NCAAB-MTST': {
+    color: '#bc955c',
+    backgroundColor: '#00205c',
+  },
+  'NCAAB-MTSU': {
+    color: '#ffffff',
+    backgroundColor: '#036eb7',
+  },
   'NCAAB-MUR': {
     color: '#002148',
     backgroundColor: '#000e00',
+  },
+  'NCAAB-NCAT': {
+    color: '#004684',
+    backgroundColor: '#0505aa',
   },
   'NCAAB-NCSU': {
     color: '#ffffff',
@@ -659,9 +779,29 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffc82e',
     backgroundColor: '#000000',
   },
+  'NCAAB-NMSU': {
+    color: '#7e141b',
+    backgroundColor: '#231f20',
+  },
+  'NCAAB-NOLA': {
+    color: '#fdd023',
+    backgroundColor: '#461d7c',
+  },
   'NCAAB-NU': {
     color: '#ffffff',
     backgroundColor: '#492f92',
+  },
+  'NCAAB-OAK': {
+    color: '#bc955c',
+    backgroundColor: '#04091c',
+  },
+  'NCAAB-ODU': {
+    color: '#a1d2f1',
+    backgroundColor: '#003768',
+  },
+  'NCAAB-OHIO': {
+    color: '#ffffff',
+    backgroundColor: '#154734',
   },
   'NCAAB-OKST': {
     color: '#fe5c00',
@@ -670,6 +810,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-ORE': {
     color: '#fff41b',
     backgroundColor: '#00934b',
+  },
+  'NCAAB-ORST': {
+    color: '#dc4405',
+    backgroundColor: '#000000',
   },
   'NCAAB-OSU': {
     color: '#a8adb4',
@@ -683,6 +827,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#dc762f',
     backgroundColor: '#003A72',
   },
+  'NCAAB-PFW': {
+    color: '#cfb991',
+    backgroundColor: '#000000',
+  },
   'NCAAB-PITT': {
     color: '#ffb81c',
     backgroundColor: '#003594',
@@ -690,6 +838,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-PORT': {
     color: '#a8b3ba',
     backgroundColor: '#330072',
+  },
+  'NCAAB-PRIN': {
+    color: '#ff6000',
+    backgroundColor: '#000000',
   },
   'NCAAB-PROV': {
     color: '#a3a19e',
@@ -703,6 +855,22 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ceb888',
     backgroundColor: '#000000',
   },
+  'NCAAB-RAD': {
+    color: '#c2c3c0',
+    backgroundColor: '#BC1515',
+  },
+  'NCAAB-RGV': {
+    color: '#e1732d',
+    backgroundColor: '#dc6000',
+  },
+  'NCAAB-RICE': {
+    color: '#c1c6c8',
+    backgroundColor: '#00205b',
+  },
+  'NCAAB-RICH': {
+    color: '#b90b2e',
+    backgroundColor: '#9e0712',
+  },
   'NCAAB-RUTG': {
     color: '#ffffff',
     backgroundColor: '#ce0e2d',
@@ -710,6 +878,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-SAC': {
     color: '#cdb97d',
     backgroundColor: '#00573C',
+  },
+  'NCAAB-SAM': {
+    color: '#005485',
+    backgroundColor: '#bc0023',
   },
   'NCAAB-SBU': {
     color: '#70261D',
@@ -734,6 +906,14 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-SF': {
     color: '#ffffff',
     backgroundColor: '#005a36',
+  },
+  'NCAAB-SFA': {
+    color: '#bec0c2',
+    backgroundColor: '#393996',
+  },
+  'NCAAB-SHU': {
+    color: '#c29472',
+    backgroundColor: '#a40012',
   },
   'NCAAB-SIU': {
     color: '#c2c3c0',
@@ -767,6 +947,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#56854e',
     backgroundColor: '#0a5640',
   },
+  'NCAAB-SUU': {
+    color: '#c72026',
+    backgroundColor: '#000000',
+  },
   'NCAAB-SYR': {
     color: '#ff431b',
     backgroundColor: '#000e54',
@@ -779,6 +963,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#4d1979',
   },
+  'NCAAB-TEM': {
+    color: '#ffffff',
+    backgroundColor: '#a41e35',
+  },
   'NCAAB-TENN': {
     color: '#ffffff',
     backgroundColor: '#ff8200',
@@ -787,21 +975,49 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#af5c37',
   },
+  'NCAAB-TLSA': {
+    color: '#d0b787',
+    backgroundColor: '#003595',
+  },
+  'NCAAB-TNST': {
+    color: '#f0f0f0',
+    backgroundColor: '#171796',
+  },
   'NCAAB-TOL': {
     color: '#ffcd00',
     backgroundColor: '#0b2240',
+  },
+  'NCAAB-TOW': {
+    color: '#FFC229',
+    backgroundColor: '#3c3c3c',
+  },
+  'NCAAB-TROY': {
+    color: '#b1b1b1',
+    backgroundColor: '#862633',
   },
   'NCAAB-TTU': {
     color: '#da291c',
     backgroundColor: '#000000',
   },
+  'NCAAB-TULN': {
+    color: '#418fde',
+    backgroundColor: '#006747',
+  },
   'NCAAB-UAB': {
     color: '#fdb913',
     backgroundColor: '#1a5632',
   },
+  'NCAAB-UCD': {
+    color: '#c3c4c6',
+    backgroundColor: '#002855',
+  },
   'NCAAB-UCF': {
     color: '#b4a169',
     backgroundColor: '#000000',
+  },
+  'NCAAB-UCI': {
+    color: '#fec52e',
+    backgroundColor: '#002B5C',
   },
   'NCAAB-UCLA': {
     color: '#f2a900',
@@ -810,6 +1026,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-UCR': {
     color: '#14234F',
     backgroundColor: '#000000',
+  },
+  'NCAAB-UCSB': {
+    color: '#febc11',
+    backgroundColor: '#1e1840',
   },
   'NCAAB-UCSD': {
     color: '#ffcd00',
@@ -835,6 +1055,42 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#7bafd4',
     backgroundColor: '#13294b',
   },
+  'NCAAB-UNCG': {
+    color: '#ffd90a',
+    backgroundColor: '#003559',
+  },
+  'NCAAB-UNCO': {
+    color: '#ffc533',
+    backgroundColor: '#13558D',
+  },
+  'NCAAB-UNCW': {
+    color: '#ffda00',
+    backgroundColor: '#00665e',
+  },
+  'NCAAB-UND': {
+    color: '#c2c3c0',
+    backgroundColor: '#00A26B',
+  },
+  'NCAAB-UNH': {
+    color: '#c3c4c6',
+    backgroundColor: '#004990',
+  },
+  'NCAAB-UNI': {
+    color: '#ffffff',
+    backgroundColor: '#473282',
+  },
+  'NCAAB-UNLV': {
+    color: '#cac8c8',
+    backgroundColor: '#cf0a2c',
+  },
+  'NCAAB-UNM': {
+    color: '#a7a8aa',
+    backgroundColor: '#ba0c2f',
+  },
+  'NCAAB-UNT': {
+    color: '#ffffff',
+    backgroundColor: '#068f33',
+  },
   'NCAAB-USA': {
     color: '#bf0d3e',
     backgroundColor: '#00205b',
@@ -847,20 +1103,48 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#cfc493',
     backgroundColor: '#006747',
   },
+  'NCAAB-USM': {
+    color: '#ffc72c',
+    backgroundColor: '#231f20',
+  },
   'NCAAB-USU': {
     color: '#ffffff',
     backgroundColor: '#0f2439',
+  },
+  'NCAAB-UTA': {
+    color: '#f58024',
+    backgroundColor: '#004b7c',
   },
   'NCAAB-UTAH': {
     color: '#ffffff',
     backgroundColor: '#be0000',
   },
+  'NCAAB-UTEP': {
+    color: '#ff8200',
+    backgroundColor: '#041e42',
+  },
+  'NCAAB-UTSA': {
+    color: '#f15a22',
+    backgroundColor: '#0c2340',
+  },
   'NCAAB-UVA': {
     color: '#f84c1e',
     backgroundColor: '#232d4b',
   },
+  'NCAAB-UVM': {
+    color: '#ffc72c',
+    backgroundColor: '#154734',
+  },
+  'NCAAB-VAL': {
+    color: '#794500',
+    backgroundColor: '#381e0e',
+  },
   'NCAAB-VAN': {
     color: '#cfae70',
+    backgroundColor: '#000000',
+  },
+  'NCAAB-VCU': {
+    color: '#ffaf00',
     backgroundColor: '#000000',
   },
   'NCAAB-VILL': {
@@ -871,6 +1155,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#cf4520',
     backgroundColor: '#6a2c3e',
   },
+  'NCAAB-W&M': {
+    color: '#f0b323',
+    backgroundColor: '#115740',
+  },
   'NCAAB-WAKE': {
     color: '#ceb888',
     backgroundColor: '#2c2a29',
@@ -878,6 +1166,18 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-WASH': {
     color: '#e8d3a2',
     backgroundColor: '#33006f',
+  },
+  'NCAAB-WCU': {
+    color: '#bf9e70',
+    backgroundColor: '#492F91',
+  },
+  'NCAAB-WEB': {
+    color: '#ebebeb',
+    backgroundColor: '#18005a',
+  },
+  'NCAAB-WIN': {
+    color: '#fdb41e',
+    backgroundColor: '#9e0b0e',
   },
   'NCAAB-WIS': {
     color: '#ffffff',
@@ -891,6 +1191,14 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#f1c500',
     backgroundColor: '#532e1f',
   },
+  'NCAAB-WOF': {
+    color: '#f0f0f0',
+    backgroundColor: '#533B22',
+  },
+  'NCAAB-WRST': {
+    color: '#a36209',
+    backgroundColor: '#000000',
+  },
   'NCAAB-WSU': {
     color: '#4d4d4d',
     backgroundColor: '#a60f2d',
@@ -899,6 +1207,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#eaaa00',
     backgroundColor: '#002855',
   },
+  'NCAAB-WYO': {
+    color: '#ffc425',
+    backgroundColor: '#492f24',
+  },
   'NCAAB-XAV': {
     color: '#a5a7a8',
     backgroundColor: '#21304e',
@@ -906,6 +1218,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAB-YALE': {
     color: '#286dc0',
     backgroundColor: '#004a81',
+  },
+  'NCAAB-YSU': {
+    color: '#E51935',
+    backgroundColor: '#690717',
   },
   'NCAAF-ACU': {
     color: '#b1b3b3',
@@ -999,9 +1315,17 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#bf2f38',
     backgroundColor: '#000000',
   },
+  'NCAAF-BRWN': {
+    color: '#949300',
+    backgroundColor: '#411e09',
+  },
   'NCAAF-BRY': {
     color: '#9f8343',
     backgroundColor: '#000000',
+  },
+  'NCAAF-BUCK': {
+    color: '#00316e',
+    backgroundColor: '#000060',
   },
   'NCAAF-BUFF': {
     color: '#ffffff',
@@ -1020,7 +1344,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#041e42',
   },
   'NCAAF-CAM': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-CARK': {
@@ -1079,33 +1403,49 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#cfb87c',
     backgroundColor: '#000000',
   },
+  'NCAAF-COLU': {
+    color: '#7ba4db',
+    backgroundColor: '#183863',
+  },
   'NCAAF-COMU': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-CONN': {
     color: '#a2aaad',
     backgroundColor: '#0c2340',
   },
+  'NCAAF-COR': {
+    color: '#ffffff',
+    backgroundColor: '#b31b1b',
+  },
   'NCAAF-CP': {
     color: '#eed897',
     backgroundColor: '#1E4D2B',
   },
   'NCAAF-CRU': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-CSU': {
     color: '#c8c372',
     backgroundColor: '#004c23',
   },
+  'NCAAF-DART': {
+    color: '#005730',
+    backgroundColor: '#000000',
+  },
   'NCAAF-DBQ': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-DEL': {
     color: '#ffd200',
     backgroundColor: '#00539f',
+  },
+  'NCAAF-DRKE': {
+    color: '#bec0c2',
+    backgroundColor: '#005596',
   },
   'NCAAF-DSU': {
     color: '#009cdb',
@@ -1132,7 +1472,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#660819',
   },
   'NCAAF-ELMH': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-EMU': {
@@ -1140,7 +1480,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#006938',
   },
   'NCAAF-ETAM': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-ETSU': {
@@ -1196,7 +1536,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#ee8601',
   },
   'NCAAF-GRNL': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-GT': {
@@ -1214,6 +1554,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAF-HAMP': {
     color: '#0067AC',
     backgroundColor: '#000000',
+  },
+  'NCAAF-HARV': {
+    color: '#dbdbdb',
+    backgroundColor: '#990000',
   },
   'NCAAF-HAW': {
     color: '#005737',
@@ -1267,6 +1611,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#970310',
   },
+  'NCAAF-JKST': {
+    color: '#b5b7ba',
+    backgroundColor: '#123297',
+  },
   'NCAAF-JMU': {
     color: '#cbb677',
     backgroundColor: '#450084',
@@ -1304,7 +1652,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#0a254e',
   },
   'NCAAF-LIN': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-LIU': {
@@ -1352,7 +1700,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#080808',
   },
   'NCAAF-MERC': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-MIA': {
@@ -1364,7 +1712,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#00274c',
   },
   'NCAAF-MILK': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-MINN': {
@@ -1387,6 +1735,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#666666',
     backgroundColor: '#751D4A',
   },
+  'NCAAF-MORE': {
+    color: '#fed91a',
+    backgroundColor: '#094FA3',
+  },
   'NCAAF-MORG': {
     color: '#f47937',
     backgroundColor: '#014786',
@@ -1396,16 +1748,20 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#5e0009',
   },
   'NCAAF-MRHO': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-MRMK': {
-    color: '#000000',
+    color: '#2f4f93',
     backgroundColor: '#000000',
   },
   'NCAAF-MRSH': {
     color: '#00b140',
     backgroundColor: '#000000',
+  },
+  'NCAAF-MRST': {
+    color: '#f0f0f0',
+    backgroundColor: '#e53730',
   },
   'NCAAF-MSST': {
     color: '#c1c6c8',
@@ -1442,6 +1798,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAF-NCAT': {
     color: '#004684',
     backgroundColor: '#0505aa',
+  },
+  'NCAAF-NCCU': {
+    color: '#c2c3c0',
+    backgroundColor: '#880023',
   },
   'NCAAF-NCSU': {
     color: '#ffffff',
@@ -1480,7 +1840,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#0c8968',
   },
   'NCAAF-NPU': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-NU': {
@@ -1519,9 +1879,21 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#990000',
   },
+  'NCAAF-PENN': {
+    color: '#a6163d',
+    backgroundColor: '#082A74',
+  },
   'NCAAF-PITT': {
     color: '#ffb81c',
     backgroundColor: '#003594',
+  },
+  'NCAAF-PRES': {
+    color: '#194896',
+    backgroundColor: '#990134',
+  },
+  'NCAAF-PRIN': {
+    color: '#ff6000',
+    backgroundColor: '#000000',
   },
   'NCAAF-PRST': {
     color: '#ebebeb',
@@ -1587,6 +1959,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#c8102e',
     backgroundColor: '#000000',
   },
+  'NCAAF-SFA': {
+    color: '#bec0c2',
+    backgroundColor: '#393996',
+  },
   'NCAAF-SHSU': {
     color: '#ffffff',
     backgroundColor: '#f56423',
@@ -1623,8 +1999,12 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#56854e',
     backgroundColor: '#0a5640',
   },
+  'NCAAF-STMN': {
+    color: '#512682',
+    backgroundColor: '#000000',
+  },
   'NCAAF-STO': {
-    color: '#000000',
+    color: '#300A48',
     backgroundColor: '#000000',
   },
   'NCAAF-SUU': {
@@ -1640,7 +2020,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#500000',
   },
   'NCAAF-TAR': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-TCU': {
@@ -1666,6 +2046,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAF-TNST': {
     color: '#f0f0f0',
     backgroundColor: '#171796',
+  },
+  'NCAAF-TNTC': {
+    color: '#ffde00',
+    backgroundColor: '#5A4099',
   },
   'NCAAF-TOL': {
     color: '#ffcd00',
@@ -1719,6 +2103,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ba0c2f',
     backgroundColor: '#2c2a29',
   },
+  'NCAAF-UIW': {
+    color: '#080808',
+    backgroundColor: '#000000',
+  },
   'NCAAF-UK': {
     color: '#ffffff',
     backgroundColor: '#0033a0',
@@ -1732,7 +2120,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#840029',
   },
   'NCAAF-UNA': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-UNC': {
@@ -1779,6 +2167,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffc72c',
     backgroundColor: '#9d2235',
   },
+  'NCAAF-USD': {
+    color: '#0d1361',
+    backgroundColor: '#000000',
+  },
   'NCAAF-USF': {
     color: '#cfc493',
     backgroundColor: '#006747',
@@ -1808,12 +2200,16 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#0c2340',
   },
   'NCAAF-UTU': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAF-UVA': {
     color: '#f84c1e',
     backgroundColor: '#232d4b',
+  },
+  'NCAAF-VAL': {
+    color: '#794500',
+    backgroundColor: '#381e0e',
   },
   'NCAAF-VAN': {
     color: '#cfae70',
@@ -1830,6 +2226,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAF-VT': {
     color: '#cf4520',
     backgroundColor: '#6a2c3e',
+  },
+  'NCAAF-W&M': {
+    color: '#f0b323',
+    backgroundColor: '#115740',
   },
   'NCAAF-WAG': {
     color: '#ffffff',
@@ -1912,11 +2312,11 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-ARIZ': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#cc0033',
+    backgroundColor: '#003366',
   },
   'NCAAMH-ARMY': {
-    color: '#ffffff',
+    color: '#d3bc8d',
     backgroundColor: '#000000',
   },
   'NCAAMH-ASMP': {
@@ -1928,8 +2328,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-ASU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#ffc627',
+    backgroundColor: '#8c1d40',
   },
   'NCAAMH-AUGS': {
     color: '#ffffff',
@@ -1937,22 +2337,22 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCAAMH-AUSD': {
     color: '#NULL',
-    backgroundColor: '#NULL',
+    backgroundColor: '#000000',
   },
   'NCAAMH-BC': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#dbcca6',
+    backgroundColor: '#8c2232',
   },
   'NCAAMH-BENT': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAMH-BGSU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#fd5000',
+    backgroundColor: '#4f2c1d',
   },
   'NCAAMH-BRWN': {
-    color: '#ffffff',
+    color: '#54413A',
     backgroundColor: '#000000',
   },
   'NCAAMH-BST': {
@@ -1977,18 +2377,18 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCAAMH-COLG': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#821019',
   },
   'NCAAMH-CONN': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#a2aaad',
+    backgroundColor: '#0c2340',
   },
   'NCAAMH-COR': {
-    color: '#ffffff',
+    color: '#d60027',
     backgroundColor: '#000000',
   },
   'NCAAMH-DART': {
-    color: '#ffffff',
+    color: '#005730',
     backgroundColor: '#000000',
   },
   'NCAAMH-DEN': {
@@ -2000,16 +2400,16 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-HARV': {
-    color: '#ffffff',
+    color: '#990000',
     backgroundColor: '#000000',
   },
   'NCAAMH-HC': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#582c83',
   },
   'NCAAMH-IONA': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#f0ab00',
+    backgroundColor: '#6f2c3e',
   },
   'NCAAMH-LIN': {
     color: '#ffffff',
@@ -2025,18 +2425,18 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCAAMH-M-OH': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#c41230',
   },
   'NCAAMH-MASS': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#881c1c',
   },
   'NCAAMH-MDAR': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAMH-ME': {
-    color: '#ffffff',
+    color: '#127dbe',
     backgroundColor: '#000000',
   },
   'NCAAMH-MERC': {
@@ -2044,39 +2444,39 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-MICH': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#ffcb05',
+    backgroundColor: '#00274c',
   },
   'NCAAMH-MINN': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#fab41c',
+    backgroundColor: '#5e0a2f',
   },
   'NCAAMH-MNST': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAMH-MRMK': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#e8c535',
+    backgroundColor: '#2f4f93',
   },
   'NCAAMH-MSU': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#173f35',
   },
   'NCAAMH-MTU': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAMH-ND': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c99700',
+    backgroundColor: '#062340',
   },
   'NCAAMH-NE': {
-    color: '#ffffff',
+    color: '#CC0001',
     backgroundColor: '#000000',
   },
   'NCAAMH-NIA': {
-    color: '#ffffff',
+    color: '#641460',
     backgroundColor: '#000000',
   },
   'NCAAMH-NMI': {
@@ -2089,34 +2489,34 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCAAMH-OHIO': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#154734',
   },
   'NCAAMH-OMA': {
-    color: '#ffffff',
+    color: '#e3193e',
     backgroundColor: '#000000',
   },
   'NCAAMH-OSU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#a8adb4',
+    backgroundColor: '#ba0c2f',
   },
   'NCAAMH-POST': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAMH-PRIN': {
-    color: '#ffffff',
+    color: '#FF9408',
     backgroundColor: '#000000',
   },
   'NCAAMH-PROV': {
-    color: '#ffffff',
+    color: '#a3a19e',
     backgroundColor: '#000000',
   },
   'NCAAMH-PSU': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#061440',
   },
   'NCAAMH-QUIN': {
-    color: '#ffffff',
+    color: '#002162',
     backgroundColor: '#000000',
   },
   'NCAAMH-RIT': {
@@ -2128,8 +2528,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-RMU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#a21d2b',
+    backgroundColor: '#00214D',
   },
   'NCAAMH-RPI': {
     color: '#ffffff',
@@ -2140,19 +2540,19 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-SHU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c29472',
+    backgroundColor: '#a40012',
   },
   'NCAAMH-STM': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAMH-STMN': {
-    color: '#ffffff',
+    color: '#512682',
     backgroundColor: '#000000',
   },
   'NCAAMH-STO': {
-    color: '#ffffff',
+    color: '#300A48',
     backgroundColor: '#000000',
   },
   'NCAAMH-UAA': {
@@ -2168,12 +2568,12 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-UND': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c2c3c0',
+    backgroundColor: '#00A26B',
   },
   'NCAAMH-UNH': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c3c4c6',
+    backgroundColor: '#004990',
   },
   'NCAAMH-UNNY': {
     color: '#ffffff',
@@ -2184,8 +2584,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAMH-UVM': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#ffc72c',
+    backgroundColor: '#154734',
   },
   'NCAAMH-WAY': {
     color: '#ffffff',
@@ -2193,26 +2593,26 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCAAMH-WIS': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#a00000',
   },
   'NCAAMH-WMU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#f1c500',
+    backgroundColor: '#532e1f',
   },
   'NCAAMH-YALE': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#286dc0',
+    backgroundColor: '#004a81',
   },
   'NCAAWH-ASP': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAWH-BC': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#dbcca6',
+    backgroundColor: '#8c2232',
   },
   'NCAAWH-BRWN': {
-    color: '#ffffff',
+    color: '#54413A',
     backgroundColor: '#000000',
   },
   'NCAAWH-BST': {
@@ -2229,18 +2629,18 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCAAWH-COLG': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#821019',
   },
   'NCAAWH-CONN': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#a2aaad',
+    backgroundColor: '#0c2340',
   },
   'NCAAWH-COR': {
-    color: '#ffffff',
+    color: '#d60027',
     backgroundColor: '#000000',
   },
   'NCAAWH-DART': {
-    color: '#ffffff',
+    color: '#005730',
     backgroundColor: '#000000',
   },
   'NCAAWH-FP': {
@@ -2252,12 +2652,12 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAWH-HARV': {
-    color: '#ffffff',
+    color: '#990000',
     backgroundColor: '#000000',
   },
   'NCAAWH-HC': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#582c83',
   },
   'NCAAWH-LIN': {
     color: '#ffffff',
@@ -2268,7 +2668,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAWH-ME': {
-    color: '#ffffff',
+    color: '#127dbe',
     backgroundColor: '#000000',
   },
   'NCAAWH-MERC': {
@@ -2276,51 +2676,51 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAWH-MINN': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#fab41c',
+    backgroundColor: '#5e0a2f',
   },
   'NCAAWH-MNST': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAWH-MRMK': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#e8c535',
+    backgroundColor: '#2f4f93',
   },
   'NCAAWH-NE': {
-    color: '#ffffff',
+    color: '#CC0001',
     backgroundColor: '#000000',
   },
   'NCAAWH-NIA': {
-    color: '#ffffff',
+    color: '#641460',
     backgroundColor: '#000000',
   },
   'NCAAWH-OSU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#a8adb4',
+    backgroundColor: '#ba0c2f',
   },
   'NCAAWH-POST': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAWH-PRIN': {
-    color: '#ffffff',
+    color: '#FF9408',
     backgroundColor: '#000000',
   },
   'NCAAWH-PROV': {
-    color: '#ffffff',
+    color: '#a3a19e',
     backgroundColor: '#000000',
   },
   'NCAAWH-PSU': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#061440',
   },
   'NCAAWH-PU': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAWH-QUIN': {
-    color: '#ffffff',
+    color: '#002162',
     backgroundColor: '#000000',
   },
   'NCAAWH-RIT': {
@@ -2328,8 +2728,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAWH-RMU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#a21d2b',
+    backgroundColor: '#00214D',
   },
   'NCAAWH-RPI': {
     color: '#ffffff',
@@ -2344,12 +2744,12 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAWH-SHU': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c29472',
+    backgroundColor: '#a40012',
   },
   'NCAAWH-ST.': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#d6c682',
+    backgroundColor: '#55318c',
   },
   'NCAAWH-STA': {
     color: '#ffffff',
@@ -2364,28 +2764,28 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAWH-STMN': {
-    color: '#ffffff',
+    color: '#512682',
     backgroundColor: '#000000',
   },
   'NCAAWH-STO': {
-    color: '#ffffff',
+    color: '#300A48',
     backgroundColor: '#000000',
   },
   'NCAAWH-SYR': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#ff431b',
+    backgroundColor: '#000e54',
   },
   'NCAAWH-UMD': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCAAWH-UND': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c2c3c0',
+    backgroundColor: '#00A26B',
   },
   'NCAAWH-UNH': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c3c4c6',
+    backgroundColor: '#004990',
   },
   'NCAAWH-UNNY': {
     color: '#ffffff',
@@ -2396,16 +2796,16 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAWH-UVM': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#ffc72c',
+    backgroundColor: '#154734',
   },
   'NCAAWH-WIS': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#a00000',
   },
   'NCAAWH-YALE': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#286dc0',
+    backgroundColor: '#004a81',
   },
   'NCCABB-AAMU': {
     color: '#790000',
@@ -2444,7 +2844,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-APP': {
-    color: '#000000',
+    color: '#ffcd00',
     backgroundColor: '#000000',
   },
   'NCCABB-APSU': {
@@ -2504,7 +2904,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-BING': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-BRAD': {
@@ -2520,7 +2920,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-BSC': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-BUCK': {
@@ -2540,19 +2940,19 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-CAM': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-CAN': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-CARK': {
-    color: '#000000',
+    color: '#8e959a',
     backgroundColor: '#000000',
   },
   'NCCABB-CBU': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-CCSU': {
@@ -2568,11 +2968,11 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-CIN': {
-    color: '#000000',
+    color: '#e00122',
     backgroundColor: '#000000',
   },
   'NCCABB-CIT': {
-    color: '#000000',
+    color: '#002856',
     backgroundColor: '#000000',
   },
   'NCCABB-CLEM': {
@@ -2668,7 +3068,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-ELON': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-EMU': {
@@ -2684,7 +3084,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-FAIR': {
-    color: '#000000',
+    color: '#ebebeb',
     backgroundColor: '#000000',
   },
   'NCCABB-FAMU': {
@@ -2700,7 +3100,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-FGCU': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-FIU': {
@@ -2733,14 +3133,14 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCCABB-GCU': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#522398',
   },
   'NCCABB-GMU': {
     color: '#016600',
     backgroundColor: '#000000',
   },
   'NCCABB-GONZ': {
-    color: '#000000',
+    color: '#041e42',
     backgroundColor: '#000000',
   },
   'NCCABB-GRAM': {
@@ -2748,7 +3148,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-GT': {
-    color: '#000000',
+    color: '#b3a369',
     backgroundColor: '#000000',
   },
   'NCCABB-GTWN': {
@@ -2812,15 +3212,15 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-INST': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#f0f0f0',
+    backgroundColor: '#00669a',
   },
   'NCCABB-IOWA': {
-    color: '#000000',
+    color: '#231f20',
     backgroundColor: '#000000',
   },
   'NCCABB-IU': {
-    color: '#000000',
+    color: '#970310',
     backgroundColor: '#000000',
   },
   'NCCABB-JAX': {
@@ -2848,8 +3248,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-KENN': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#fdbb30',
+    backgroundColor: '#0b1315',
   },
   'NCCABB-KENT': {
     color: '#212142',
@@ -2876,7 +3276,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-LBSU': {
-    color: '#000000',
+    color: '#f1f2f3',
     backgroundColor: '#000000',
   },
   'NCCABB-LEH': {
@@ -2952,7 +3352,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-ME': {
-    color: '#000000',
+    color: '#127dbe',
     backgroundColor: '#000000',
   },
   'NCCABB-MEM': {
@@ -2960,7 +3360,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-MER': {
-    color: '#000000',
+    color: '#080808',
     backgroundColor: '#000000',
   },
   'NCCABB-MIA': {
@@ -2972,7 +3372,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-MILW': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-MINN': {
@@ -2988,7 +3388,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-MIZZ': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-MONM': {
@@ -3061,7 +3461,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   },
   'NCCABB-NDSU': {
     color: '#ffffff',
-    backgroundColor: '#000000',
+    backgroundColor: '#01402A',
   },
   'NCCABB-NE': {
     color: '#CC0001',
@@ -3096,7 +3496,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-NKU': {
-    color: '#000000',
+    color: '#ffc82e',
     backgroundColor: '#000000',
   },
   'NCCABB-NMSU': {
@@ -3128,7 +3528,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-OKST': {
-    color: '#000000',
+    color: '#fe5c00',
     backgroundColor: '#000000',
   },
   'NCCABB-OMA': {
@@ -3140,7 +3540,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-ORST': {
-    color: '#000000',
+    color: '#dc4405',
     backgroundColor: '#000000',
   },
   'NCCABB-ORU': {
@@ -3212,8 +3612,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-RGV': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#e1732d',
+    backgroundColor: '#dc6000',
   },
   'NCCABB-RICE': {
     color: '#00315A',
@@ -3232,7 +3632,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-RUTG': {
-    color: '#000000',
+    color: '#ce0e2d',
     backgroundColor: '#000000',
   },
   'NCCABB-S ALA': {
@@ -3240,8 +3640,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-SAC': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#cdb97d',
+    backgroundColor: '#00573C',
   },
   'NCCABB-SAM': {
     color: '#005485',
@@ -3252,7 +3652,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-SC': {
-    color: '#000000',
+    color: '#73000a',
     backgroundColor: '#000000',
   },
   'NCCABB-SCU': {
@@ -3260,7 +3660,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-SDST': {
-    color: '#000000',
+    color: '#0033a0',
     backgroundColor: '#000000',
   },
   'NCCABB-SDSU': {
@@ -3316,7 +3716,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-SLU': {
-    color: '#000000',
+    color: '#00539C',
     backgroundColor: '#000000',
   },
   'NCCABB-SM': {
@@ -3384,7 +3784,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-TOW': {
-    color: '#000000',
+    color: '#FFC229',
     backgroundColor: '#000000',
   },
   'NCCABB-TROY': {
@@ -3408,7 +3808,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-UAB': {
-    color: '#000000',
+    color: '#1a5632',
     backgroundColor: '#000000',
   },
   'NCCABB-UAPB': {
@@ -3420,7 +3820,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-UCF': {
-    color: '#000000',
+    color: '#b4a169',
     backgroundColor: '#000000',
   },
   'NCCABB-UCI': {
@@ -3440,11 +3840,11 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-UCSB': {
-    color: '#000000',
+    color: '#1e1840',
     backgroundColor: '#000000',
   },
   'NCCABB-UCSD': {
-    color: '#ffffff',
+    color: '#ffcd00',
     backgroundColor: '#000000',
   },
   'NCCABB-UGA': {
@@ -3484,7 +3884,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-UNA': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-UNC': {
@@ -3508,15 +3908,15 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-UNF': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'NCCABB-UNLV': {
-    color: '#000000',
+    color: '#cf0a2c',
     backgroundColor: '#000000',
   },
   'NCCABB-UNM': {
-    color: '#000000',
+    color: '#ba0c2f',
     backgroundColor: '#000000',
   },
   'NCCABB-UNO': {
@@ -3568,7 +3968,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-UTSA': {
-    color: '#000000',
+    color: '#0c2340',
     backgroundColor: '#000000',
   },
   'NCCABB-UTU': {
@@ -3592,7 +3992,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-VAN': {
-    color: '#000000',
+    color: '#cfae70',
     backgroundColor: '#000000',
   },
   'NCCABB-VCU': {
@@ -3612,7 +4012,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-W&M': {
-    color: '#000000',
+    color: '#115740',
     backgroundColor: '#000000',
   },
   'NCCABB-WAG': {
@@ -3620,7 +4020,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-WAKE': {
-    color: '#000000',
+    color: '#2c2a29',
     backgroundColor: '#000000',
   },
   'NCCABB-WASH': {
@@ -3632,8 +4032,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-WES': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#db1a21',
+    backgroundColor: '#0033a1',
   },
   'NCCABB-WICH': {
     color: '#0D0A03',
@@ -3648,7 +4048,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-WKU': {
-    color: '#000000',
+    color: '#e13a3e',
     backgroundColor: '#000000',
   },
   'NCCABB-WMU': {
@@ -3672,8 +4072,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-XAV': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#a5a7a8',
+    backgroundColor: '#21304e',
   },
   'NCCABB-YALE': {
     color: '#004a81',
@@ -4103,10 +4503,6 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#000000',
   },
-  'PWHL-LV': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
-  },
   'PWHL-MIN': {
     color: '#ffffff',
     backgroundColor: '#9e7dc5',
@@ -4235,8 +4631,12 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#dbcca6',
     backgroundColor: '#8c2232',
   },
+  'WNCAAB-BEL': {
+    color: '#c9262d',
+    backgroundColor: '#182142',
+  },
   'WNCAAB-BELL': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'WNCAAB-BOIS': {
@@ -4250,6 +4650,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'WNCAAB-BRWN': {
     color: '#949300',
     backgroundColor: '#411e09',
+  },
+  'WNCAAB-BTLR': {
+    color: '#00a3e0',
+    backgroundColor: '#0d1361',
   },
   'WNCAAB-BYU': {
     color: '#0047ba',
@@ -4311,9 +4715,17 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#2d649c',
     backgroundColor: '#ce1125',
   },
+  'WNCAAB-DRKE': {
+    color: '#bec0c2',
+    backgroundColor: '#005596',
+  },
   'WNCAAB-DUKE': {
     color: '#ffffff',
     backgroundColor: '#00539b',
+  },
+  'WNCAAB-EVAN': {
+    color: '#ef6f00',
+    backgroundColor: '#663399',
   },
   'WNCAAB-FAIR': {
     color: '#ebebeb',
@@ -4371,6 +4783,14 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ff5f05',
     backgroundColor: '#13294b',
   },
+  'WNCAAB-ILST': {
+    color: '#ffe716',
+    backgroundColor: '#CE1126',
+  },
+  'WNCAAB-INST': {
+    color: '#f0f0f0',
+    backgroundColor: '#00669a',
+  },
   'WNCAAB-IOWA': {
     color: '#fcd116',
     backgroundColor: '#231f20',
@@ -4406,6 +4826,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'WNCAAB-LSU': {
     color: '#fdd023',
     backgroundColor: '#461d76',
+  },
+  'WNCAAB-MARQ': {
+    color: '#ffcc00',
+    backgroundColor: '#003366',
   },
   'WNCAAB-MD': {
     color: '#ffffff',
@@ -4619,6 +5043,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#7bafd4',
     backgroundColor: '#13294b',
   },
+  'WNCAAB-UNI': {
+    color: '#ffffff',
+    backgroundColor: '#473282',
+  },
   'WNCAAB-USA': {
     color: '#bf0d3e',
     backgroundColor: '#00205b',
@@ -4632,7 +5060,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#006747',
   },
   'WNCAAB-USI': {
-    color: '#000000',
+    color: '#ffffff',
     backgroundColor: '#000000',
   },
   'WNCAAB-UTAH': {
@@ -4642,6 +5070,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'WNCAAB-UVA': {
     color: '#f84c1e',
     backgroundColor: '#232d4b',
+  },
+  'WNCAAB-VAL': {
+    color: '#794500',
+    backgroundColor: '#381e0e',
   },
   'WNCAAB-VAN': {
     color: '#cfae70',
