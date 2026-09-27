@@ -41,7 +41,7 @@ const parseDateString = (dateStr: string) => {
 };
 
 const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerProps>>(
-  (
+  function DateRangePicker(
     {
       onDateChange,
       dateRange = { startDate: new Date(), endDate: new Date() },
@@ -52,7 +52,7 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
       title,
     },
     ref,
-  ) => {
+  ) {
     const [isOpen, setIsOpen] = useState(false);
     const [showModal, setShowModal] = useState(false);
   // Month currently displayed in the calendar. `current` is a controlled prop on
@@ -466,7 +466,8 @@ const DateRangePicker = forwardRef<DatePickerHandle, Readonly<DateRangePickerPro
       )}
     </div>
   );
-});
+  },
+);
 
 export default DateRangePicker;
 

@@ -431,6 +431,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#005bbb',
   },
+  'NCAAB-BUT': {
+    color: '#708090',
+    backgroundColor: '#002d62',
+  },
   'NCAAB-BYU': {
     color: '#0047ba',
     backgroundColor: '#002e5d',
@@ -1987,6 +1991,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffc82d',
     backgroundColor: '#004B97',
   },
+  'NCAAF-ST.': {
+    color: '#d6c682',
+    backgroundColor: '#55318c',
+  },
   'NCAAF-STAN': {
     color: '#ffffff',
     backgroundColor: '#8c1515',
@@ -2487,6 +2495,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#000000',
   },
+  'NCAAMH-OAK': {
+    color: '#04091c',
+    backgroundColor: '#000000',
+  },
   'NCAAMH-OHIO': {
     color: '#ffffff',
     backgroundColor: '#154734',
@@ -2542,6 +2554,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAMH-SHU': {
     color: '#c29472',
     backgroundColor: '#a40012',
+  },
+  'NCAAMH-ST.': {
+    color: '#d6c682',
+    backgroundColor: '#55318c',
   },
   'NCAAMH-STM': {
     color: '#ffffff',
@@ -2694,6 +2710,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
   'NCAAWH-NIA': {
     color: '#641460',
     backgroundColor: '#000000',
+  },
+  'NCAAWH-NMU': {
+    color: '#ffc425',
+    backgroundColor: '#095339',
   },
   'NCAAWH-OSU': {
     color: '#a8adb4',
@@ -3735,6 +3755,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#001555',
     backgroundColor: '#000000',
   },
+  'NCCABB-ST.': {
+    color: '#d6c682',
+    backgroundColor: '#55318c',
+  },
   'NCCABB-STAN': {
     color: '#B72931',
     backgroundColor: '#000000',
@@ -4500,6 +4524,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'PWHL-HAM': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
+  'PWHL-LV': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },

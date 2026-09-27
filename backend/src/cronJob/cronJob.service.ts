@@ -213,7 +213,7 @@ export class CronService implements OnModuleInit {
       } else {
         needsRefresh = await needRefresh(league, { data: gamesForLeague });
       }
-    } catch (err) {
+    } catch {
       // On error, assume refresh is needed
       needsRefresh = true;
     }
@@ -400,7 +400,7 @@ export class CronService implements OnModuleInit {
     }
   }
 
-  @Cron('0 */6 * * *') // EVERY 6 HOURS
+  @Cron('0 */1 * * *') // EVERY HOURS
   async monitorDiskCapacity() {
     try {
       console.info('[Cron] Running disk capacity check...');

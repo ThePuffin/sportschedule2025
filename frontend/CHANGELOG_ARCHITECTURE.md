@@ -2,6 +2,76 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Fix: Revealing a score reveals it in both accordions (past-day league view)
+
+### Problem
+
+On past dates the same game appears twice (FAVORITES section + its league section)
+as two separate `CardLarge` instances, each with its own local `scoreRevealed`
+state — tapping the eye on one card left its duplicate hidden.
+
+### Changes
+
+- `frontend/components/CardLarge.tsx` — module-level `revealedGameKeys` set +
+  `scoreRevealed` window event (same pattern as `scoresUpdated`): the new
+  `revealScore()` helper (eye button, live-score link, card press, details opener)
+  marks the game revealed for all instances; each card initializes from the set and
+  syncs via the event; toggling scores off clears the game's entry.
+
+### Docs
+
+- `frontend/docs/components/CardLarge.tsx.md` — documented the shared reveal state
+  and `revealScore()`.
+
+---
+
+## Added: League-grouped day view for past dates (favorites section first)
+
+### Goal
+
+On the **Game of the Day** tab, a date **strictly before today** is no longer grouped by
+kick-off hour: it is grouped by **league**, with a dedicated **favorites** section rendered
+first, and as much work as possible delegated to the backend (see the matching backend
+changelog entry for `GET /games/league-day/:gameDate`).
+
+### Changes
+
+- `frontend/utils/fetchData.ts` — new `fetchGamesByLeagueDay(date, limit?, skip?, favoriteTeams?)`
+  calling `GET /games/league-day/:gameDate`. Reads the `leaguesSelected` cache for the
+  `leagues` param, forwards `maxResults` / `skip` / `favoriteTeams`, caches the raw
+  `{ groups }` payload in sessionStorage (2-minute TTL, keyed on every param) and returns the
+  unwrapped `LeagueDayGroup[]`.
+- `frontend/utils/types.tsx` — new `LeagueDayGroup` interface (`{ key, games }`, where `key`
+  is a league code or the special `FAVORITES` key).
+- `frontend/app/(tabs)/index.tsx`:
+  - `isPastDay` (selected date `< today`) selects the grouping mode.
+  - `getGamesFromApi()` now fetches `/games/league-day` for a past date and stores the sections
+    in `leagueDayGroups`; the flat `games` state (bookmarks, team list, live scores) is rebuilt
+    with `dedupeGames(...)` because the `FAVORITES` section repeats games already listed in
+    their league section.
+  - `visibleLeagueGroups` applies only the client-side filters (selected leagues, team,
+    favorites/bookmarks chips) to the backend sections and drops empty ones — the grouping,
+    the section order and the favorites extraction stay server-side.
+  - `visibleSections` normalizes what is rendered (`{ key, label, games }`): past days render
+    the league sections (`FAVORITES` labelled via `translateWord('favorites')`), other days the
+    hour sections. `visibleGroupCount` replaces the `visibleGamesByHour.length` checks in the
+    retry effect, the `closest` effect and `displayContent`, so both modes detect an empty day
+    identically.
+  - Live scores are merged into `leagueDayGroups` by game identity (`refreshLeagueGroups`)
+    instead of rebuilding the sections.
+  - A new effect (declared after the Firestore init effect) refetches the displayed past day
+    when `favoriteTeams` changes; `leagueDayFavoritesKeyRef` stores the favorites of the last
+    past-day fetch so date navigation never triggers a redundant request. Leagues/team/bookmarks
+    remain client-side and need no refetch.
+
+### Docs
+
+- `frontend/docs/index.tsx.md` — grouping modes, new state/refs/memos, favorites refetch.
+- `frontend/docs/fetchData.ts.md` — documented `fetchGamesByLeagueDay`.
+- `frontend/docs/types.tsx.md` — documented `LeagueDayGroup`.
+
+---
+
 ## Fix: Default team logo missing in the game modal
 
 ### Problem

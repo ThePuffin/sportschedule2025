@@ -335,7 +335,7 @@ describe('syncToFirestore (debounced writes)', () => {
     jest.advanceTimersByTime(DEFAULT_DEBOUNCE_MS + 100);
 
     expect(mockSetDoc).toHaveBeenCalledTimes(1);
-    const [ref, payload] = mockSetDoc.mock.calls[0];
+    const [, payload] = mockSetDoc.mock.calls[0];
     expect(payload.favoriteTeams).toEqual(['NFL-SF']);
     expect(payload.leaguesSelected).toEqual(['NFL']);
     expect(payload.showScores).toBe(true);

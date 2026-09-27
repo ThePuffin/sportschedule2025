@@ -1,4 +1,4 @@
-import { FilterGames, GameFormatted, Team } from '@/utils/types';
+import { FilterGames, GameFormatted, LeagueDayGroup, Team } from '@/utils/types';
 import * as fflate from 'fflate';
 
 const EXPO_PUBLIC_API_BASE_URL =
@@ -125,7 +125,7 @@ const fetchWithCacheStrategy = async <T>(
     if (cacheKey) saveCache(cacheKey, data, storage);
     if (customSaveCache) customSaveCache(data);
     return data;
-  } catch (error) {
+  } catch {
     console.warn(`Fetch failed for ${url} (5s). Checking cache...`);
 
     let cached: T | null = null;
@@ -198,6 +198,60 @@ export const fetchGamesByHour = async (
     100000,
     sessionStorage,
   );
+};
+
+export const fetchGamesByLeagueDay = async (
+  date: string,
+  limit?: number,
+  skip?: number,
+  favoriteTeams?: string[],
+): Promise<LeagueDayGroup[]> => {
+  const leaguesSelected = getCache<string[]>('leaguesSelected') || [];
+  let cacheKey = `games_league_day_${date}`;
+  let url = `${EXPO_PUBLIC_API_BASE_URL}/games/league-day/${date}`;
+
+  const params = new URLSearchParams();
+
+  if (leaguesSelected?.length > 0) {
+    const leaguesParam = leaguesSelected.join('+');
+    params.append('leagues', leaguesParam);
+    cacheKey += `_${leaguesParam}`;
+  }
+
+  if (limit) {
+    params.append('maxResults', limit.toString());
+    cacheKey += `_limit_${limit}`;
+  }
+  if (skip) {
+    params.append('skip', skip.toString());
+    cacheKey += `_skip_${skip}`;
+  }
+
+  const favoriteTeamsParam = (favoriteTeams || []).filter(Boolean);
+  if (favoriteTeamsParam.length > 0) {
+    const favorites = favoriteTeamsParam.join('+');
+    params.append('favoriteTeams', favorites);
+    cacheKey += `_fav_${favorites}`;
+  }
+
+  if (params.toString()) url += `?${params.toString()}`;
+
+  if (isCacheValid(cacheKey, 2 / 60, sessionStorage)) {
+    const cached = getCache<{ groups: LeagueDayGroup[] }>(cacheKey, sessionStorage);
+    if (cached) return cached.groups ?? [];
+  }
+
+  const data = await fetchWithCacheStrategy<{ groups: LeagueDayGroup[] }>(
+    url,
+    cacheKey,
+    { groups: [] },
+    undefined,
+    undefined,
+    100000,
+    sessionStorage,
+  );
+
+  return data?.groups ?? [];
 };
 
 export const fetchLeagues = async (setLeaguesAvailable: (leagues: string[]) => void) => {

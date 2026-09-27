@@ -7,7 +7,10 @@ The **CardLarge** component displays a single game as a card with team logos, sc
 ## Key Features
 
 - **Team display** — home/away team logos, names, abbreviations, records
-- **Score display** — shows scores with reveal button for hidden scores
+- **Score display** — shows scores with reveal button for hidden scores; the per-card
+  "revealed" state is shared module-wide (`revealedGameKeys` set + `scoreRevealed`
+  window event, same pattern as `scoresUpdated`), so revealing a score on one card
+  also reveals it on its duplicate (FAVORITES + league accordions on past days)
 - **Live badge** — pulsing red dot for live games
 - **Game status** — displays period, clock, final, postponed, etc.
 - **Favorite stars** — add/remove favorite teams
@@ -49,6 +52,16 @@ The **CardLarge** component displays a single game as a card with team logos, sc
 | `homeGameVisibility`    | `HomeGameFilter`        | `'all'` | Home/away filter                                        |
 
 ## Key Functions
+
+### `revealScore()`
+
+Marks the game revealed in the module-level `revealedGameKeys` set and dispatches
+a `scoreRevealed` window event (detail: the game key built from `uniqueId`, falling
+back to teams + `startTimeUTC`), then sets the local `scoreRevealed` state. Every
+card listens for the event and initializes from the set, so duplicates of the same
+game stay in sync. Called by the eye reveal button, the live-score link, the card
+press handler and the details opener. Toggling scores off clears the game's entry
+from the set.
 
 ### `internalHandleSelection()`
 

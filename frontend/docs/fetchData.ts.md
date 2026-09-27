@@ -53,6 +53,14 @@ Core fetch strategy:
 
 Fetches games for a specific date, grouped by hour. Uses sessionStorage with 2-minute TTL. Includes `leagues` param from `leaguesSelected` cache.
 
+### `fetchGamesByLeagueDay(date, limit?, skip?, favoriteTeams?)`
+
+Fetches games for a specific date, **grouped by league** (`GET /games/league-day/:gameDate`), used by the day view for **past dates**. Returns `LeagueDayGroup[]` (the `groups` array of the response) where the first entry may be the special `FAVORITES` key (favorite-team games, also kept in their league group) followed by one entry per league in alphabetical order (games oldest-to-newest within each group).
+
+- Query params: `leagues` (from the `leaguesSelected` cache, `+`-joined), `maxResults`, `skip`, `favoriteTeams` (`+`-joined team uniqueIds)
+- sessionStorage cache (2-minute TTL) keyed on the date **and** all params, so a favorites change gets its own entry
+- Returns `[]` when the request fails and no cache is available (the strategy caches the raw `{ groups }` object, which the helper unwraps)
+
 ### `fetchLeagues(setLeaguesAvailable)`
 
 Fetches available leagues. Cached for 24 hours.

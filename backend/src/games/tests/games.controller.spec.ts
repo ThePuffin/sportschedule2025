@@ -30,6 +30,9 @@ const mockGameService = {
     .mockResolvedValue({ previousDate: '2024-12-01', nextDate: '2025-01-15' }),
   findByDate: jest.fn().mockResolvedValue(mockGames),
   findByDateHour: jest.fn().mockResolvedValue({ '19:00': mockGames }),
+  findByDateLeague: jest
+    .fn()
+    .mockResolvedValue({ groups: [{ key: 'NHL', games: mockGames }] }),
   findByLeague: jest.fn().mockResolvedValue(mockGames),
   findOne: jest.fn().mockResolvedValue(mockGame),
   create: jest.fn().mockResolvedValue(mockGame),
@@ -40,13 +43,20 @@ const mockGameService = {
   removeLeague: jest.fn().mockResolvedValue({ deletedCount: 10 }),
   removeAll: jest.fn().mockResolvedValue({ deletedCount: 100 }),
   removeDuplicatesAndOlds: jest.fn().mockResolvedValue({ success: true }),
-    remove: jest.fn().mockResolvedValue(mockGame),
-    getCapacityStatus: jest.fn().mockResolvedValue({
+  remove: jest.fn().mockResolvedValue(mockGame),
+  getCapacityStatus: jest.fn().mockResolvedValue({
     usedMB: 2048,
     totalMB: 4096,
     percentage: 0.5,
     diskUsage: { usedMB: 2048, totalMB: 4096, percentage: 0.5 },
-    years: [{ year: 2024, count: 100, oldestDate: '2024-01-01', newestDate: '2024-12-31' }],
+    years: [
+      {
+        year: 2024,
+        count: 100,
+        oldestDate: '2024-01-01',
+        newestDate: '2024-12-31',
+      },
+    ],
     teamCount: 50,
     gameCount: 5000,
     threshold: 0.9,
@@ -212,6 +222,34 @@ describe('GamesController', () => {
     });
   });
 
+  describe('findByDateLeague', () => {
+    it('should return games grouped by league for a date', async () => {
+      const date = '2024-10-10';
+      await controller.findByDateLeague(date);
+      expect(service.findByDateLeague).toHaveBeenCalledWith(
+        date,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should forward leagues, pagination and favoriteTeams', async () => {
+      const date = '2024-10-10';
+      const leagues = 'NHL,NBA';
+      const favoriteTeams = 'NHL-BOS,MLB-CHC';
+      await controller.findByDateLeague(date, leagues, 15, 15, favoriteTeams);
+      expect(service.findByDateLeague).toHaveBeenCalledWith(
+        date,
+        leagues,
+        15,
+        15,
+        favoriteTeams,
+      );
+    });
+  });
+
   describe('findByLeague', () => {
     it('should return games for a league', async () => {
       const league = 'NHL';
@@ -324,7 +362,7 @@ describe('GamesController', () => {
     });
   });
 
-    describe('remove', () => {
+  describe('remove', () => {
     it('should remove a single game', async () => {
       const uniqueId = '2024-NHL-123';
       await controller.remove(uniqueId);
@@ -341,7 +379,14 @@ describe('GamesController', () => {
         totalMB: 4096,
         percentage: 0.5,
         diskUsage: { usedMB: 2048, totalMB: 4096, percentage: 0.5 },
-        years: [{ year: 2024, count: 100, oldestDate: '2024-01-01', newestDate: '2024-12-31' }],
+        years: [
+          {
+            year: 2024,
+            count: 100,
+            oldestDate: '2024-01-01',
+            newestDate: '2024-12-31',
+          },
+        ],
         teamCount: 50,
         gameCount: 5000,
         threshold: 0.9,
