@@ -79,6 +79,17 @@ export interface FilterGames {
   [date: string]: GameFormatted[];
 }
 
+/**
+ * One section of the league-grouped day view returned by
+ * `GET /games/league-day/:gameDate` (used for past dates): `key` is a league
+ * code (`NHL`, `NBA`, …) or the special `FAVORITES` key for the leading
+ * favorites section (whose games are also kept in their league group).
+ */
+export interface LeagueDayGroup {
+  key: string;
+  games: GameFormatted[];
+}
+
 export type AccordionProps = {
   readonly i?: number;
   readonly filter?: string;

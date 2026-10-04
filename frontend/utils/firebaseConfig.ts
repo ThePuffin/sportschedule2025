@@ -55,7 +55,7 @@ const auth: Auth =
           return initializeAuth(app, {
             persistence: getReactNativePersistence(AsyncStorage),
           });
-        } catch (e) {
+        } catch {
           return getAuth(app);
         }
       })();

@@ -104,11 +104,6 @@ export default function GameModal({
         isToday &&
         (status as GameStatus) !== GameStatus.FINISHED &&
         (status as GameStatus) !== GameStatus.FINAL));
-  const isGameFinishedByStatus =
-    gameStatus?.toUpperCase().includes('FINAL') ||
-    gameStatus?.toUpperCase().includes('ENDED') ||
-    (status as GameStatus) === GameStatus.FINAL ||
-    (status as GameStatus) === GameStatus.FINISHED;
   const gameStatusAlreadyIncludesClock = (status?: string, clock?: string) => {
     if (!status || !clock) return false;
     const normalizedStatus = status.toLowerCase();

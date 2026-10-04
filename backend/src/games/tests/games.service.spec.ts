@@ -14,6 +14,8 @@ describe('GameService', () => {
   const mockGameModel = {
     find: jest.fn().mockReturnThis(),
     sort: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
     lean: jest.fn().mockReturnThis(),
     exec: jest.fn(),
     countDocuments: jest.fn(),
@@ -30,6 +32,8 @@ describe('GameService', () => {
     findAll: jest.fn(),
     deleteManyByIds: jest.fn(),
     purgeStaleTeamsWithoutGames: jest.fn(),
+    updateRecord: jest.fn().mockResolvedValue(undefined),
+    updateRecords: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockRefreshTimestampService = {
@@ -300,6 +304,138 @@ describe('GameService', () => {
     });
   });
 
+  describe('refreshCurrentSeasonRecords', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should only fetch in-season leagues and persist their tallies', async () => {
+      const inSeason = jest.spyOn(utils, 'isCurrentSeason');
+      inSeason.mockImplementation(
+        async (league: string) => league === League.NHL,
+      );
+      jest.spyOn(utils, 'isPlayoffsPeriod').mockResolvedValue(false);
+
+      const fetchSpy = jest
+        .spyOn(service as any, '_fetchUniqueGames')
+        .mockImplementation(
+          async (
+            _league: string,
+            _season: number | undefined,
+            teamRecords?: Map<string, string>,
+          ) => {
+            teamRecords?.set('NHL-BOS', '20-15-5');
+            teamRecords?.set('NHL-TOR', '18-17-5');
+            return [];
+          },
+        );
+      const updateRecordsSpy = jest
+        .spyOn(mockTeamService as any, 'updateRecords')
+        .mockResolvedValue(undefined);
+
+      const result = await service.refreshCurrentSeasonRecords();
+
+      expect(result.leagues).toEqual([League.NHL]);
+      expect(result.updatedTeams).toBe(2);
+      // Only the in-season league was fetched, with no season (current one)
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        League.NHL,
+        undefined,
+        expect.any(Map),
+      );
+      expect(updateRecordsSpy).toHaveBeenCalledWith([
+        { uniqueId: 'NHL-BOS', record: '20-15-5' },
+        { uniqueId: 'NHL-TOR', record: '18-17-5' },
+      ]);
+    });
+
+    it('should include leagues in playoffs even outside the regular season', async () => {
+      jest.spyOn(utils, 'isCurrentSeason').mockResolvedValue(false);
+      jest
+        .spyOn(utils, 'isPlayoffsPeriod')
+        .mockImplementation(async (league: string) => league === League.NBA);
+
+      jest
+        .spyOn(service as any, '_fetchUniqueGames')
+        .mockImplementation(
+          async (
+            _league: string,
+            _season: number | undefined,
+            teamRecords?: Map<string, string>,
+          ) => {
+            teamRecords?.set('NBA-LAL', '40-20');
+            return [];
+          },
+        );
+      const updateRecordsSpy = jest
+        .spyOn(mockTeamService as any, 'updateRecords')
+        .mockResolvedValue(undefined);
+
+      const result = await service.refreshCurrentSeasonRecords();
+
+      expect(result.leagues).toEqual([League.NBA]);
+      expect(updateRecordsSpy).toHaveBeenCalledWith([
+        { uniqueId: 'NBA-LAL', record: '40-20' },
+      ]);
+    });
+
+    it('should skip every league when none is in season and write nothing', async () => {
+      jest.spyOn(utils, 'isCurrentSeason').mockResolvedValue(false);
+      jest.spyOn(utils, 'isPlayoffsPeriod').mockResolvedValue(false);
+      const fetchSpy = jest.spyOn(service as any, '_fetchUniqueGames');
+      const updateRecordsSpy = jest.spyOn(
+        mockTeamService as any,
+        'updateRecords',
+      );
+
+      const result = await service.refreshCurrentSeasonRecords();
+
+      expect(result).toEqual({ leagues: [], updatedTeams: 0 });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(updateRecordsSpy).not.toHaveBeenCalled();
+    });
+
+    it('should keep processing the other leagues when one fetch fails', async () => {
+      jest
+        .spyOn(utils, 'isCurrentSeason')
+        .mockImplementation(async (league: string) =>
+          [League.NHL, League.NBA].includes(league as never),
+        );
+      jest.spyOn(utils, 'isPlayoffsPeriod').mockResolvedValue(false);
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      jest
+        .spyOn(service as any, '_fetchUniqueGames')
+        .mockImplementation(async (league: string) => {
+          if (league === League.NHL) throw new Error('ESPN down');
+          return [];
+        });
+      const updateRecordsSpy = jest
+        .spyOn(mockTeamService as any, 'updateRecords')
+        .mockResolvedValue(undefined);
+
+      const result = await service.refreshCurrentSeasonRecords();
+
+      expect(result.leagues).toEqual([League.NHL, League.NBA]);
+      expect(updateRecordsSpy).not.toHaveBeenCalled();
+    });
+
+    it('should never persist any game', async () => {
+      jest.spyOn(utils, 'isCurrentSeason').mockResolvedValue(true);
+      jest.spyOn(utils, 'isPlayoffsPeriod').mockResolvedValue(false);
+      const createSpy = jest.spyOn(service, 'create');
+      jest.spyOn(mockGameModel, 'deleteMany').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+      } as any);
+
+      await service.refreshCurrentSeasonRecords();
+
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(mockGameModel.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getOldiesGames', () => {
     let getLeagueGamesSpy: jest.SpyInstance;
 
@@ -421,8 +557,6 @@ describe('GameService', () => {
     });
 
     it('should return "already up to date" message when no games were added', async () => {
-      const currentYear = new Date().getFullYear();
-
       // All calls return added = 0
       getLeagueGamesSpy.mockResolvedValue({
         added: 0,
@@ -435,6 +569,68 @@ describe('GameService', () => {
       expect(result.yearsWithAdditions).toHaveLength(0);
       expect(result.message).toContain('no new games were added');
       expect(result.message).toContain('already up to date');
+    });
+
+    it('should force the capacity check after every step by default', async () => {
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockResolvedValue({
+          action: 'none',
+          diskUsage: { usedMB: 100, totalMB: 512, percentage: 0.2 },
+        });
+
+      const currentYear = new Date().getFullYear();
+      await service.getOldiesGames(String(currentYear - 1), League.NHL);
+
+      // One league x one year -> exactly one capacity check, forced (true).
+      expect(purgeSpy).toHaveBeenCalledTimes(1);
+      expect(purgeSpy).toHaveBeenCalledWith(true);
+
+      purgeSpy.mockRestore();
+    });
+
+    it('should not force the capacity check when forceCapacityCheck is false', async () => {
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockResolvedValue({
+          action: 'none',
+          diskUsage: { usedMB: 100, totalMB: 512, percentage: 0.2 },
+        });
+
+      const currentYear = new Date().getFullYear();
+      await service.getOldiesGames(String(currentYear - 1), League.NHL, {
+        forceCapacityCheck: false,
+      });
+
+      expect(purgeSpy).toHaveBeenCalledTimes(1);
+      expect(purgeSpy).toHaveBeenCalledWith(false);
+
+      purgeSpy.mockRestore();
+    });
+
+    it('should keep processing seasons when the capacity check throws', async () => {
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockRejectedValue(new Error('dbStats unavailable'));
+      const consoleErrorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      const currentYear = new Date().getFullYear();
+      const result = await service.getOldiesGames(
+        String(currentYear - 1),
+        League.NHL,
+      );
+
+      expect(getLeagueGamesSpy).toHaveBeenCalledTimes(1);
+      expect(result.message).toContain('History recovery');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        `[Oldies] Capacity check failed after ${League.NHL} ${currentYear - 1}:`,
+        'dbStats unavailable',
+      );
+
+      purgeSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -599,6 +795,107 @@ describe('GameService', () => {
 
       createSpy.mockRestore();
     });
+
+    it('backfills a stored game that has no per-game team records', async () => {
+      const currentYear = new Date().getFullYear();
+      const pastTime = new Date();
+      pastTime.setHours(pastTime.getHours() - 2);
+
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      // Stored before per-game records existed: same id, same scores, no records.
+      mockGameModel.exec.mockResolvedValue([
+        { uniqueId: 'existing-no-record', homeTeamScore: 3, awayTeamScore: 1 },
+      ]);
+
+      (service as any)._fetchUniqueGames = jest.fn().mockResolvedValue([
+        {
+          uniqueId: 'existing-no-record',
+          league: League.NHL,
+          homeTeamId: 'NHL-BOS',
+          awayTeamId: 'NHL-TOR',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+          startTimeUTC: pastTime.toISOString(),
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        },
+      ]);
+      (service as any)._deleteUnlinkedTeams = jest
+        .fn()
+        .mockResolvedValue(undefined);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+        season: currentYear - 1,
+        addMissingOnly: true,
+      });
+
+      // Identical scores but missing records -> refreshed instead of skipped
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uniqueId: 'existing-no-record',
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        }),
+      );
+
+      createSpy.mockRestore();
+    });
+
+    it('skips a stored game whose scores and team records already match', async () => {
+      const currentYear = new Date().getFullYear();
+      const pastTime = new Date();
+      pastTime.setHours(pastTime.getHours() - 2);
+
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      mockGameModel.exec.mockResolvedValue([
+        {
+          uniqueId: 'existing-with-record',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        },
+      ]);
+
+      (service as any)._fetchUniqueGames = jest.fn().mockResolvedValue([
+        {
+          uniqueId: 'existing-with-record',
+          league: League.NHL,
+          homeTeamId: 'NHL-BOS',
+          awayTeamId: 'NHL-TOR',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+          startTimeUTC: pastTime.toISOString(),
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        },
+      ]);
+      (service as any)._deleteUnlinkedTeams = jest
+        .fn()
+        .mockResolvedValue(undefined);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+        season: currentYear - 1,
+        addMissingOnly: true,
+      });
+
+      expect(createSpy).not.toHaveBeenCalled();
+
+      createSpy.mockRestore();
+    });
   });
 
   describe('getLeagueGames playoff grace period', () => {
@@ -692,6 +989,106 @@ describe('GameService', () => {
       createSpy.mockRestore();
     });
 
+    it('deactivates immediately, skipping the grace period, when the series is already decided', async () => {
+      mockGameModel.exec.mockResolvedValue([
+        { ...futureGame, seriesStatus: 'SD wins series 2-0' },
+      ]);
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+      });
+
+      expect(mockGameModel.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ uniqueId: { $in: [futureGame.uniqueId] } }),
+        { $set: { isActive: false }, $unset: { missingSince: 1 } },
+      );
+      // The grace marker must never be written for a decided series.
+      expect(mockGameModel.updateMany).not.toHaveBeenCalledWith(
+        expect.anything(),
+        { $set: { missingSince: expect.any(String) } },
+      );
+      createSpy.mockRestore();
+    });
+
+    it('deactivates immediately even when the decided game is mid grace period', async () => {
+      const missingSince = new Date(
+        Date.now() - 24 * 60 * 60 * 1000,
+      ).toISOString();
+      mockGameModel.exec.mockResolvedValue([
+        { ...futureGame, missingSince, seriesStatus: 'SD wins series 2-0' },
+      ]);
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+      });
+
+      expect(mockGameModel.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ uniqueId: { $in: [futureGame.uniqueId] } }),
+        { $set: { isActive: false }, $unset: { missingSince: 1 } },
+      );
+      createSpy.mockRestore();
+    });
+
+    it('still applies the grace period when the series status is not decided', async () => {
+      mockGameModel.exec.mockResolvedValue([
+        { ...futureGame, seriesStatus: 'Series tied 1-1' },
+      ]);
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+      });
+
+      expect(mockGameModel.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ uniqueId: { $in: [futureGame.uniqueId] } }),
+        { $set: { missingSince: expect.any(String) } },
+      );
+      expect(mockGameModel.updateMany).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ $set: { isActive: false } }),
+      );
+      createSpy.mockRestore();
+    });
+
+    it('keeps a game whose series status is missing from the immediate deactivation', async () => {
+      mockGameModel.exec.mockResolvedValue([
+        { ...futureGame, seriesStatus: undefined },
+      ]);
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+      });
+
+      expect(mockGameModel.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ uniqueId: { $in: [futureGame.uniqueId] } }),
+        { $set: { missingSince: expect.any(String) } },
+      );
+      expect(mockGameModel.updateMany).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ $set: { isActive: false } }),
+      );
+      createSpy.mockRestore();
+    });
+
     it('clears the grace marker when the game reappears', async () => {
       const missingSince = new Date(
         Date.now() - 24 * 60 * 60 * 1000,
@@ -778,7 +1175,9 @@ describe('GameService', () => {
         expect.stringContaining('active game(s) unresolved'),
       );
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Removed 2 unresolved game(s) started more than 90 days ago.'),
+        expect.stringContaining(
+          'Removed 2 unresolved game(s) started more than 90 days ago.',
+        ),
       );
 
       removeSpy.mockRestore();
@@ -822,7 +1221,7 @@ describe('GameService', () => {
         .mockResolvedValue({
           usedMB: 50,
           totalMB: 100,
-          percentage: 0.5, // 50% - below 90% threshold
+          percentage: 0.5, // well below the 97% threshold
         });
 
       const result = await service.purgeOldestMonthIfNeeded();
@@ -860,9 +1259,9 @@ describe('GameService', () => {
       const getDiskUsageSpy = jest
         .spyOn(service as any, 'getDiskUsage')
         .mockResolvedValue({
-          usedMB: 95,
+          usedMB: 99,
           totalMB: 100,
-          percentage: 0.95, // 95% - exceeds 90%
+          percentage: 0.99, // 99% - strictly above the 97% threshold
         });
 
       const result = await service.purgeOldestMonthIfNeeded();
@@ -874,7 +1273,7 @@ describe('GameService', () => {
       expect(result.purgedMonth).toBe(9);
       expect(result.deletedCount).toBe(296);
       expect(result.remainingYears).toEqual([2017, 2023, 2024]);
-      expect(result.diskUsage.percentage).toBe(0.95);
+      expect(result.diskUsage.percentage).toBe(0.99);
 
       purgeOldestMonthSpy.mockRestore();
       getAvailableYearsSpy.mockRestore();
@@ -883,7 +1282,7 @@ describe('GameService', () => {
 
     it('never loops: purges a single month even when usage stays above threshold', async () => {
       // Regression guard: the old implementation kept deleting years because
-      // getDiskUsage() returns a 60s-cached value, so the "drop below 90%"
+      // getDiskUsage() returns a 60s-cached value, so the "drop below threshold"
       // condition never became true and the whole database was wiped.
       const purgeOldestMonthSpy = jest
         .spyOn(service, 'purgeOldestMonth')
@@ -906,9 +1305,9 @@ describe('GameService', () => {
 
       // Disk usage NEVER drops below the threshold (stale cache scenario)
       jest.spyOn(service as any, 'getDiskUsage').mockResolvedValue({
-        usedMB: 95,
+        usedMB: 99,
         totalMB: 100,
-        percentage: 0.95,
+        percentage: 0.99,
       });
 
       const result = await service.purgeOldestMonthIfNeeded();
@@ -954,9 +1353,42 @@ describe('GameService', () => {
     });
   });
 
+  describe('DISK_USAGE_THRESHOLD', () => {
+    it('is set to 97%', () => {
+      // Single source of truth for every other fixture, doc and comment: if this
+      // constant moves, this test moves with it instead of silently diverging.
+      expect((service as any).DISK_USAGE_THRESHOLD).toBe(0.97);
+    });
+
+    it('is reported by getCapacityStatus and drives actionNeeded', async () => {
+      mockGameModel.countDocuments.mockResolvedValue(10);
+
+      const getDiskUsageSpy = jest
+        .spyOn(service as any, 'getDiskUsage')
+        .mockResolvedValue({ usedMB: 96, totalMB: 100, percentage: 0.96 });
+      jest.spyOn(service as any, 'getAvailableYears').mockResolvedValue([]);
+
+      const below = await service.getCapacityStatus();
+      expect(below.threshold).toBe(0.97);
+      expect(below.actionNeeded).toBe(false);
+
+      getDiskUsageSpy.mockResolvedValue({
+        usedMB: 97,
+        totalMB: 100,
+        percentage: 0.97,
+      });
+      // The comparison is `>=`, so sitting exactly on the threshold triggers it.
+      const on = await service.getCapacityStatus();
+      expect(on.threshold).toBe(0.97);
+      expect(on.actionNeeded).toBe(true);
+
+      getDiskUsageSpy.mockRestore();
+    });
+  });
+
   describe('getAvailableYears', () => {
     it('should return years sorted from oldest to newest with game counts', async () => {
-      const aggregateSpy = jest.spyOn(mockGameModel, 'find' as any);
+      jest.spyOn(mockGameModel, 'find' as any);
       const mockAggregate = [
         {
           year: 2022,
@@ -1272,16 +1704,158 @@ describe('GameService', () => {
     });
   });
 
+  describe('findByDateLeague (past days grouped by league)', () => {
+    const nhlGame = {
+      uniqueId: 'NHL-1',
+      league: League.NHL,
+      homeTeamId: 'NHL-BOS',
+      awayTeamId: 'NHL-TOR',
+      startTimeUTC: '2026-01-10T00:00:00.000Z',
+      gameStatus: 'FINISHED',
+    };
+    const nhlGame2 = {
+      uniqueId: 'NHL-2',
+      league: League.NHL,
+      homeTeamId: 'NHL-NYR',
+      awayTeamId: 'NHL-MTL',
+      startTimeUTC: '2026-01-10T02:00:00.000Z',
+      gameStatus: 'FINISHED',
+    };
+    const nbaGame = {
+      uniqueId: 'NBA-1',
+      league: League.NBA,
+      homeTeamId: 'NBA-LAL',
+      awayTeamId: 'NBA-BOS',
+      startTimeUTC: '2026-01-10T01:00:00.000Z',
+      gameStatus: 'FINISHED',
+    };
+    const mlbGame = {
+      uniqueId: 'MLB-1',
+      league: League.MLB,
+      homeTeamId: 'MLB-CHC',
+      awayTeamId: 'MLB-STL',
+      startTimeUTC: '2026-01-10T03:00:00.000Z',
+      gameStatus: 'FINISHED',
+    };
+
+    beforeEach(() => {
+      mockTeamService.findAll.mockResolvedValue([]);
+    });
+
+    it('groups the day by league (alphabetical order) and puts favorites first', async () => {
+      mockGameModel.exec.mockResolvedValue([nhlGame2, nbaGame, nhlGame]);
+
+      const result = await service.findByDateLeague(
+        '2026-01-10',
+        undefined,
+        undefined,
+        undefined,
+        'NHL-BOS',
+      );
+
+      expect(result.groups.map((group) => group.key)).toEqual([
+        'FAVORITES',
+        League.NBA,
+        League.NHL,
+      ]);
+      // The favorite game is duplicated in its league group.
+      expect(result.groups[0].games).toHaveLength(1);
+      expect(result.groups[0].games[0].uniqueId).toBe('NHL-1');
+      // Games are ordered from oldest to most recent within each group,
+      // even though the DB returned them in reverse order.
+      expect(result.groups[2].games.map((game) => game.uniqueId)).toEqual([
+        'NHL-1',
+        'NHL-2',
+      ]);
+    });
+
+    it('orders the league groups alphabetically', async () => {
+      mockGameModel.exec.mockResolvedValue([mlbGame, nbaGame, nhlGame]);
+
+      const result = await service.findByDateLeague('2026-01-10');
+
+      expect(result.groups.map((group) => group.key)).toEqual([
+        League.MLB,
+        League.NBA,
+        League.NHL,
+      ]);
+    });
+
+    it('omits the favorites group when no favorite team plays that day', async () => {
+      mockGameModel.exec.mockResolvedValue([nhlGame, nbaGame]);
+
+      const result = await service.findByDateLeague(
+        '2026-01-10',
+        undefined,
+        undefined,
+        undefined,
+        'MLB-CHC',
+      );
+
+      expect(result.groups.map((group) => group.key)).toEqual([
+        League.NBA,
+        League.NHL,
+      ]);
+    });
+
+    it('matches favorites on the away team as well', async () => {
+      mockGameModel.exec.mockResolvedValue([nhlGame, nbaGame]);
+
+      const result = await service.findByDateLeague(
+        '2026-01-10',
+        undefined,
+        undefined,
+        undefined,
+        'NBA-BOS',
+      );
+
+      expect(result.groups[0].key).toBe('FAVORITES');
+      expect(result.groups[0].games.map((game) => game.uniqueId)).toEqual([
+        'NBA-1',
+      ]);
+    });
+
+    it('applies the same leagues filter and pagination as findByDateHour', async () => {
+      mockGameModel.exec.mockResolvedValue([nhlGame]);
+
+      await service.findByDateLeague('2026-01-10', 'nhl, nba', 25, 5);
+
+      const filter = mockGameModel.find.mock.calls[0][0];
+      expect(filter.isActive).toBe(true);
+      expect(filter.league).toEqual({ $in: [League.NHL, League.NBA] });
+      expect(filter.gameDate).toBe('2026-01-10');
+      expect(mockGameModel.sort).toHaveBeenCalledWith({ startTimeUTC: 1 });
+      expect(mockGameModel.skip).toHaveBeenCalledWith(5);
+      expect(mockGameModel.limit).toHaveBeenCalledWith(25);
+    });
+
+    it('returns { groups: [] } for an empty day without calling getAllGames', async () => {
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+      const getAllGamesSpy = jest
+        .spyOn(service, 'getAllGames')
+        .mockResolvedValue([] as any);
+      mockGameModel.exec.mockResolvedValue([]);
+
+      const result = await service.findByDateLeague('2026-01-10');
+
+      expect(result).toEqual({ groups: [] });
+      expect(getAllGamesSpy).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
+
   describe('findUsedTeamIds / purgeStaleTeamsWithoutGames', () => {
     it('findUsedTeamIds unions teamSelectedId + homeTeamId + awayTeamId of active games', async () => {
       mockGameModel.distinct.mockImplementation((field: string) => ({
-        exec: jest.fn().mockResolvedValue(
-          field === 'teamSelectedId'
-            ? ['NHL-BOS', 'NHL-TOR']
-            : field === 'homeTeamId'
-              ? ['NHL-BOS', '']
-              : ['NHL-EDM', null],
-        ),
+        exec: jest
+          .fn()
+          .mockResolvedValue(
+            field === 'teamSelectedId'
+              ? ['NHL-BOS', 'NHL-TOR']
+              : field === 'homeTeamId'
+                ? ['NHL-BOS', '']
+                : ['NHL-EDM', null],
+          ),
       }));
 
       const used = await service.findUsedTeamIds();

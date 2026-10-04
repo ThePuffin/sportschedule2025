@@ -106,7 +106,7 @@ export default function Schedule() {
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const [focusCount, setFocusCount] = useState(0);
-  const accordionRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const accordionRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const teamsForSelector = useMemo(() => {
     return [...leagueTeams];

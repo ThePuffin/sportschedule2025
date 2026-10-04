@@ -14,6 +14,7 @@ import { CollegeLeague, League } from '../utils/enum';
 import {
   getESPNGameScore,
   getESPNScores,
+  getTeamRecordFromSchedule,
   getTeamsSchedule,
 } from '../utils/fetchData/espnAllData';
 import { HockeyData } from '../utils/fetchData/hockeyData';
@@ -54,8 +55,29 @@ export class GameService {
   // it has been continuously missing for this many hours (default 48h, ~2 daily refresh cycles).
   gracePeriodHours = 48;
 
+  /**
+   * Matches an ESPN `series.summary` string that certifies a series is over,
+   * e.g. `"SD wins series 2-0"` or `"Series over"`. A future game carrying
+   * such a status belongs to an already-decided series and can never be
+   * played (ESPN never creates the event), so it is deactivated immediately
+   * instead of waiting out the grace period — which exists only for
+   * *undecided* "if necessary" games that may transiently disappear.
+   */
+  private readonly decidedSeriesPattern =
+    /(?:win|wins|won)\s+(?:the\s+)?series\b|series\s+(?:is\s+)?over\b|series\s+won\b/i;
+
+  /**
+   * Whether `seriesStatus` proves the series is already decided. An
+   * empty/absent status returns false: absence of proof means the series may
+   * still be ongoing, so the normal grace period must apply.
+   */
+  private _isSeriesDecided(seriesStatus?: string): boolean {
+    if (!seriesStatus || typeof seriesStatus !== 'string') return false;
+    return this.decidedSeriesPattern.test(seriesStatus.trim());
+  }
+
   // Capacity-based purge configuration
-  private readonly DISK_USAGE_THRESHOLD = 0.9; // 90%
+  private readonly DISK_USAGE_THRESHOLD = 0.97; // 97%
   private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
   private readonly DISK_USAGE_CACHE_TTL_MS = 60 * 1000; // 60 seconds cache for disk usage stats
   private readonly CLUSTER_TOTAL_MB = 512; // Total cluster storage in MB (adjust to your Atlas plan)
@@ -208,12 +230,79 @@ export class GameService {
   }
 
   /**
+   * Refreshes `team.record` (wins / losses / ties / otLosses) for every league
+   * whose season — regular season OR playoffs — covers today, WITHOUT saving
+   * any game.
+   *
+   * The schedule of each in-season league is fetched exactly like a normal
+   * refresh, but `_fetchUniqueGames()` is only used for its `teamRecords`
+   * side effect (the most recent tally per team, harvested from the schedule —
+   * the only source for leagues whose scoreboard carries no `records`, e.g.
+   * college hockey). The fetched games are discarded, so no `Game` document is
+   * created, updated or deactivated here.
+   *
+   * Off-season leagues are skipped before any third-party call, so this is
+   * cheap (a handful of leagues) and safe to run a few times a day.
+   */
+  async refreshCurrentSeasonRecords(): Promise<{
+    leagues: string[];
+    updatedTeams: number;
+  }> {
+    const today = new Date();
+    const leagues: string[] = [];
+    const teamRecords = new Map<string, string>();
+
+    for (const league of Object.values(League)) {
+      try {
+        const inSeason =
+          (await isCurrentSeason(league, today)) ||
+          (await isPlayoffsPeriod(league, today));
+        if (!inSeason) continue;
+
+        leagues.push(league);
+        // Dry run: the games are fetched but never persisted (no save / no
+        // deactivation), only the per-team tallies are collected.
+        await this._fetchUniqueGames(league, undefined, teamRecords);
+      } catch (error) {
+        console.error(
+          `[Records] Could not refresh records for ${league}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    if (teamRecords.size > 0) {
+      await this.teamService.updateRecords(
+        Array.from(teamRecords, ([uniqueId, record]) => ({
+          uniqueId,
+          record,
+        })),
+      );
+    }
+
+    console.info(
+      `[Records] Refreshed ${teamRecords.size} team record(s) across ${leagues.length} in-season league(s): ${leagues.join(', ') || 'none'}.`,
+    );
+
+    return { leagues, updatedTeams: teamRecords.size };
+  }
+
+  /**
    * Fetch a league's games for a given season (or current when no season) and
    * return them flattened + deduplicated by `uniqueId`, WITHOUT persisting them.
-   * Used by `getLeagueGames` (which saves) and by the "dry run" season counting
-   * for the oldies cron job.
+   * Used by `getLeagueGames` (which saves), by the "dry run" season counting for
+   * the oldies cron job, and by `refreshCurrentSeasonRecords()` (which only
+   * harvests the `teamRecords` side effect).
+   *
+   * When `teamRecords` is given, it is filled with the most recent tally of
+   * every team of the league, harvested from the schedule that is already being
+   * fetched — the only source for leagues whose scoreboard carries no records.
    */
-  private async _fetchUniqueGames(normalizedLeague: string, season?: number) {
+  private async _fetchUniqueGames(
+    normalizedLeague: string,
+    season?: number,
+    teamRecords?: Map<string, string>,
+  ) {
     const leagueTeams = await this.teamService.findAll([normalizedLeague]);
     const leagueLogos = await this.getTeamsLogo(leagueTeams);
 
@@ -234,6 +323,7 @@ export class GameService {
         leagueLogos,
         true,
         season,
+        teamRecords,
       );
     }
 
@@ -469,10 +559,28 @@ export class GameService {
 
       // Fetch teams and logos for the league, then fetch + deduplicate the
       // season's games (same pipeline used by getSeasonStatus, without saving).
+      // `teamRecords` additionally collects each team's latest tally straight
+      // from the schedule (see `_fetchUniqueGames`), so leagues whose scoreboard
+      // exposes no `records` at all (college hockey) still get theirs refreshed.
+      const teamRecords = new Map<string, string>();
       const uniqueGames = await this._fetchUniqueGames(
         normalizedLeague,
         season,
+        teamRecords,
       );
+
+      // Never write a stale tally over the current one while a season is in
+      // progress: oldies (`season` given) are left alone on purpose, because
+      // there the historical record must stay frozen.
+      if (!season && teamRecords.size > 0) {
+        await this.teamService.updateRecords(
+          Array.from(teamRecords, ([uniqueId, record]) => ({
+            uniqueId,
+            record,
+          })),
+        );
+      }
+
       const games = uniqueGames;
       // Only deactivate future games if we are not fetching an old season, and only the
       // ones that are absent from the freshly fetched season. This turns the previous
@@ -493,10 +601,14 @@ export class GameService {
                 isActive: true,
                 startTimeUTC: { $gt: now.toISOString() },
               },
-              { uniqueId: 1, missingSince: 1, _id: 0 },
+              { uniqueId: 1, missingSince: 1, seriesStatus: 1, _id: 0 },
             )
             .lean()
-            .exec()) as Array<{ uniqueId?: string; missingSince?: string }>;
+            .exec()) as Array<{
+            uniqueId?: string;
+            missingSince?: string;
+            seriesStatus?: string;
+          }>;
 
           const graceMs = this.gracePeriodHours * 60 * 60 * 1000;
           const nowIso = now.toISOString();
@@ -505,6 +617,7 @@ export class GameService {
           const toMarkMissing: string[] = [];
           const toDeactivate: string[] = [];
           const toConfirm: string[] = [];
+          const toDeactivateDecided: string[] = [];
 
           for (const g of existingFuture) {
             const id = g.uniqueId;
@@ -517,6 +630,16 @@ export class GameService {
             }
 
             // Game absent from the freshly fetched source.
+            //
+            // Short-circuit: if its series is already decided, the game can
+            // never be played (ESPN never creates the event for a decided
+            // series), so there is no reason to keep it around during the
+            // grace period. Deactivate right away.
+            if (this._isSeriesDecided(g.seriesStatus)) {
+              toDeactivateDecided.push(id);
+              continue;
+            }
+
             if (!g.missingSince) {
               // First time it is seen missing: start the grace period, keep it active.
               toMarkMissing.push(id);
@@ -541,6 +664,21 @@ export class GameService {
             );
             console.info(
               `[Games] ${toMarkMissing.length} future game(s) missing from source for ${normalizedLeague}; grace period started (kept active pending confirmation).`,
+            );
+          }
+
+          if (toDeactivateDecided.length > 0) {
+            await this.gameModel.updateMany(
+              {
+                league: normalizedLeague,
+                uniqueId: { $in: toDeactivateDecided },
+                isActive: true,
+                startTimeUTC: { $gt: nowIso },
+              },
+              { $set: { isActive: false }, $unset: { missingSince: 1 } },
+            );
+            console.info(
+              `[Games] Deactivated ${toDeactivateDecided.length} future game(s) for ${normalizedLeague}: their series is already decided, so they will never be played (grace period skipped).`,
             );
           }
 
@@ -575,12 +713,19 @@ export class GameService {
       }
       if (uniqueGames && uniqueGames.length > 0) {
         // Oldies recovery: only ever add missing games without overwriting an existing match.
-        // A game is considered "already present" (same game) only when its uniqueId matches
-        // AND both the home and the away scores match the stored ones.
+        // A game is considered "already present" (same game) only when its uniqueId matches,
+        // both the home and the away scores match the stored ones AND the stored team records
+        // already match (or are absent) — so seasons fetched before per-game records existed
+        // are backfilled instead of being skipped forever.
         // Otherwise we refresh it with the fresh (more complete) data.
         const existingResults = new Map<
           string,
-          { homeTeamScore?: number; awayTeamScore?: number }
+          {
+            homeTeamScore?: number;
+            awayTeamScore?: number;
+            homeTeamRecord?: string;
+            awayTeamRecord?: string;
+          }
         >();
         if (addMissingOnly) {
           const ids = uniqueGames.map((g) => g?.uniqueId).filter((id) => !!id);
@@ -588,7 +733,14 @@ export class GameService {
             const existing = await this.gameModel
               .find(
                 { uniqueId: { $in: ids } },
-                { uniqueId: 1, homeTeamScore: 1, awayTeamScore: 1, _id: 0 },
+                {
+                  uniqueId: 1,
+                  homeTeamScore: 1,
+                  awayTeamScore: 1,
+                  homeTeamRecord: 1,
+                  awayTeamRecord: 1,
+                  _id: 0,
+                },
               )
               .lean()
               .exec();
@@ -596,6 +748,8 @@ export class GameService {
               existingResults.set(g?.uniqueId, {
                 homeTeamScore: g?.homeTeamScore,
                 awayTeamScore: g?.awayTeamScore,
+                homeTeamRecord: g?.homeTeamRecord,
+                awayTeamRecord: g?.awayTeamRecord,
               });
             }
           }
@@ -623,7 +777,9 @@ export class GameService {
 
           if (addMissingOnly) {
             // Treat as "already present" only ifthe stored game has the same result
-            // (id AND home/away scores). Otherwise we refresh it with the fresh data.
+            // (id AND home/away scores) and already carries the same team records.
+            // The records comparison is what backfills games stored before per-game
+            // records were introduced.
             const stored = game?.uniqueId
               ? existingResults.get(game?.uniqueId)
               : undefined;
@@ -631,7 +787,10 @@ export class GameService {
               stored &&
               (stored.homeTeamScore ?? null) ===
                 (game?.homeTeamScore ?? null) &&
-              (stored.awayTeamScore ?? null) === (game?.awayTeamScore ?? null);
+              (stored.awayTeamScore ?? null) ===
+                (game?.awayTeamScore ?? null) &&
+              (stored.homeTeamRecord ?? '') === (game?.homeTeamRecord ?? '') &&
+              (stored.awayTeamRecord ?? '') === (game?.awayTeamRecord ?? '');
             if (game?.uniqueId && sameResult) {
               skippedExisting++;
               logInsertProgress(idx + 1);
@@ -1463,8 +1622,6 @@ export class GameService {
   }
 
   async fetchGamesForLiveScoreUpdate(hours = 2): Promise<Game[]> {
-    const now = new Date();
-
     // Upper bound: started at least `hours` ago (default: 2 hours).
     const hoursAgo = new Date();
     hoursAgo.setHours(hoursAgo.getHours() - hours);
@@ -1674,7 +1831,7 @@ export class GameService {
                 })
                 .exec();
               matchingGames.push(...idMatches);
-            } catch (e) {
+            } catch {
               // ignore regex errors
             }
           }
@@ -1748,12 +1905,15 @@ export class GameService {
             }
 
             if ((needsUpdate || score.isFinal) && score.isFinal) {
-              (game as any).homeTeamRecord = score.homeTeamRecord;
-              (game as any).awayTeamRecord = score.awayTeamRecord;
+              // Per-game records are deliberately NOT written here: they would
+              // freeze the tally at the time the score was synced, whereas a
+              // game of the in-progress season must display the most recent
+              // win/loss/draw record (`team.record` fallback). Finished seasons
+              // get their final tally from the schedule fetch instead.
               appliedUpdates.push(game);
             }
           }
-        } catch (err) {
+        } catch {
           // ignore update errors
         }
       }
@@ -1952,13 +2112,114 @@ export class GameService {
     return updatedGames;
   }
 
+  /**
+   * Schedule lookups below are only a fallback for leagues whose scoreboard
+   * carries no records at all (college hockey): cache them so a game that never
+   * resolves cannot re-fetch a team schedule on every 10-minute score cycle.
+   */
+  private readonly teamRecordCache = new Map<
+    string,
+    { at: number; record: string }
+  >();
+  private static readonly TEAM_RECORD_CACHE_TTL_MS = 30 * 60 * 1000;
+
+  /**
+   * Computes the post-game tally from the current DB tally + this game's
+   * outcome. Scoreboard `records` are a pre-game snapshot (they exclude the
+   * just-finished game), so incrementing locally is the only way to keep
+   * `team.record` up to date on opening night. Returns `''` when the current
+   * tally is unknown.
+   */
+  private _nextRecord(
+    team: any,
+    teamScore: number,
+    oppScore: number,
+    league = '',
+    period?: number,
+  ): string {
+    if (!team) return '';
+    let wins = Number(team.wins);
+    let losses = Number(team.losses);
+    let third = Number(team.otLosses ?? team.ties);
+    const hasNumbers =
+      Number.isFinite(wins) &&
+      Number.isFinite(losses) &&
+      Number.isFinite(third);
+    if (!hasNumbers) {
+      const parsed = String(team.record || '')
+        .split('-')
+        .map((part) => Number.parseInt(part, 10));
+      if (
+        parsed.length < 2 ||
+        parsed.slice(0, 3).some((n) => !Number.isFinite(n))
+      ) {
+        return '';
+      }
+      wins = parsed[0];
+      losses = parsed[1];
+      third = Number.isFinite(parsed[2]) ? parsed[2] : 0;
+    }
+
+    if (teamScore > oppScore) {
+      wins += 1;
+    } else if (teamScore < oppScore) {
+      const isOtLoss =
+        (league === 'NHL' || league === 'PWHL') &&
+        typeof period === 'number' &&
+        period > 3;
+      if (isOtLoss) {
+        third += 1;
+      } else {
+        losses += 1;
+      }
+    } else {
+      // Draw (soccer / college hockey ties).
+      third += 1;
+    }
+
+    return `${wins}-${losses}-${third}`;
+  }
+
+  /**
+   * Resolves a team's current tally from its ESPN season schedule — the only
+   * source for leagues whose scoreboard, summary and team detail all omit it.
+   * Returns `''` when it cannot be resolved.
+   */
+  private async _resolveTeamRecord(league: string, teamUniqueId: string) {
+    const key = `${league}:${teamUniqueId}`;
+    const cached = this.teamRecordCache.get(key);
+    if (
+      cached &&
+      Date.now() - cached.at < GameService.TEAM_RECORD_CACHE_TTL_MS
+    ) {
+      return cached.record;
+    }
+
+    let record = '';
+    try {
+      const team = await this.teamService.findOne(teamUniqueId);
+      if (team?.id) {
+        record = await getTeamRecordFromSchedule(league, team.id);
+      }
+    } catch (error) {
+      console.error(
+        `[syncGameWithScore] Could not resolve the schedule record for ${teamUniqueId}:`,
+        (error as any)?.message || error,
+      );
+    }
+
+    this.teamRecordCache.set(key, { at: Date.now(), record });
+    return record;
+  }
+
   private async syncGameWithScore(
     matchedScore: any,
-    game: mongoose.Document<unknown, {}, Game> &
+    game: mongoose.Document<unknown, object, Game> &
       Game &
       Required<{ _id: unknown }> & { __v: number },
   ) {
     const resolvedStatus = this._resolveStatus(matchedScore);
+    const previousStatus = (game.gameStatus as string) || '';
 
     // Only update scores and game time information if the game is in progress or finished.
     // This avoids filling the database with temporary scores (e.g., 0-0) for games that are still "scheduled".
@@ -1994,18 +2255,72 @@ export class GameService {
     game.seriesSummary = matchedScore.seriesSummary;
     game.seriesStatus = matchedScore.seriesStatus;
 
-    // Update team records
-    if (matchedScore.homeTeamRecord && game.homeTeamId) {
-      await this.teamService.updateRecord(
-        game.homeTeamId,
-        matchedScore.homeTeamRecord,
-      );
+    // Update team records.
+    // Scoreboard `records` are a *pre-game* snapshot: the just-finished game is
+    // not included in them yet. Deriving `team.record` from them would therefore
+    // freeze e.g. `0-0-0` forever on the opening game. Instead, when the game is
+    // final and its score is known, the post-game tally is computed from the
+    // current DB tally + this game's outcome — exactly once per game (guarded by
+    // the previous `gameStatus`, since this sync runs on every score cycle).
+    // Leagues such as college hockey expose no `records` on the scoreboard nor
+    // on the summary (`records: []`) and no `record.items` on the team detail,
+    // so the team's season schedule is used there as a fallback source.
+    const isFinalGame =
+      resolvedStatus === 'FINISHED' || matchedScore.isFinal === true;
+    const wasAlreadyFinal = previousStatus === 'FINISHED';
+    let homeTeamRecord = matchedScore.homeTeamRecord;
+    let awayTeamRecord = matchedScore.awayTeamRecord;
+
+    if (isFinalGame && !wasAlreadyFinal) {
+      const homeScore = game.homeTeamScore;
+      const awayScore = game.awayTeamScore;
+      const scoresKnown =
+        typeof homeScore === 'number' && typeof awayScore === 'number';
+
+      if (scoresKnown && game.homeTeamId && game.awayTeamId) {
+        const [homeTeam, awayTeam] = await Promise.all([
+          this.teamService.findOne(game.homeTeamId),
+          this.teamService.findOne(game.awayTeamId),
+        ]);
+        homeTeamRecord =
+          this._nextRecord(
+            homeTeam,
+            homeScore,
+            awayScore,
+            game.league,
+            game.gamePeriod,
+          ) || homeTeamRecord;
+        awayTeamRecord =
+          this._nextRecord(
+            awayTeam,
+            awayScore,
+            homeScore,
+            game.league,
+            game.gamePeriod,
+          ) || awayTeamRecord;
+      }
+
+      if ((!homeTeamRecord || !awayTeamRecord) && game.homeTeamId) {
+        if (!homeTeamRecord) {
+          homeTeamRecord =
+            (await this._resolveTeamRecord(game.league, game.homeTeamId)) ||
+            homeTeamRecord;
+        }
+        if (!awayTeamRecord && game.awayTeamId) {
+          awayTeamRecord =
+            (await this._resolveTeamRecord(game.league, game.awayTeamId)) ||
+            awayTeamRecord;
+        }
+      }
     }
-    if (matchedScore.awayTeamRecord && game.awayTeamId) {
-      await this.teamService.updateRecord(
-        game.awayTeamId,
-        matchedScore.awayTeamRecord,
-      );
+
+    if (homeTeamRecord && game.homeTeamId) {
+      game.homeTeamRecord = homeTeamRecord;
+      await this.teamService.updateRecord(game.homeTeamId, homeTeamRecord);
+    }
+    if (awayTeamRecord && game.awayTeamId) {
+      game.awayTeamRecord = awayTeamRecord;
+      await this.teamService.updateRecord(game.awayTeamId, awayTeamRecord);
     }
 
     // Propagate series info to future games in the same series
@@ -2071,12 +2386,24 @@ export class GameService {
     return resolvedStatus;
   }
 
-  async findByDateHour(
+  /**
+   * Shared read-only query used by the date views (`findByDateHour`,
+   * `findByDateLeague`): builds the same active + home-game filter, runs it and
+   * returns the enriched games sorted by `startTimeUTC`.
+   *
+   * A game is stored once per team, so the `homeTeamId === teamSelectedId`
+   * expression keeps a single row per game (no duplicates).
+   *
+   * Returns an empty array when the day has no game (or when the filters match
+   * nothing). The read-only routes never refresh on empty — see the comment in
+   * `findByDateHour`.
+   */
+  private async _findEnrichedGamesForDay(
     gameDate: string,
     leagues?: string,
     maxResults?: number,
     skip?: number,
-  ) {
+  ): Promise<any[]> {
     const today = readableDate(new Date());
     const yesterdayDate = new Date();
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
@@ -2120,16 +2447,7 @@ export class GameService {
 
     const games = await query.lean().exec();
     if (games.length === 0) {
-      // Read-only route: no refresh-on-empty. An empty day is a legitimate
-      // result (off-season, no games for the selected leagues/filters); the
-      // cron jobs (daily per-league refreshes + monthly getAllGames +
-      // checkLeagueGamesAvailability) fill and keep the DB fresh. Refreshing
-      // from this read path was blocking the server during third-party
-      // schedule fetches (event-loop + memory pressure → restarts).
-      console.info(
-        `[findByDateHour] No games found for ${gameDate}. Returning {}.`,
-      );
-      return {};
+      return [];
     }
 
     const leaguesInGames = Array.from(
@@ -2146,19 +2464,47 @@ export class GameService {
     const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
 
     // avoid dupplicate games
-    const filteredGames = games.filter(({ gameStatus, startTimeUTC }) => {
-      const now = new Date();
-      const isStartedForMoreThan12Hours =
-        new Date(startTimeUTC) < new Date(now.getTime() - 12 * 60 * 60 * 1000);
-      return (
-        (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
-        gameStatus === 'FINISHED'
+    return games
+      .filter(({ gameStatus, startTimeUTC }) => {
+        const now = new Date();
+        const isStartedForMoreThan12Hours =
+          new Date(startTimeUTC) <
+          new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        return (
+          (gameStatus !== 'FINISHED' && !isStartedForMoreThan12Hours) ||
+          gameStatus === 'FINISHED'
+        );
+      })
+      .map((game: any) => this._enrichGameWithTeamData(game, teamsMap));
+  }
+
+  async findByDateHour(
+    gameDate: string,
+    leagues?: string,
+    maxResults?: number,
+    skip?: number,
+  ) {
+    // Read-only route: no refresh-on-empty. An empty day is a legitimate
+    // result (off-season, no games for the selected leagues/filters); the
+    // cron jobs (daily per-league refreshes + monthly getAllGames +
+    // checkLeagueGamesAvailability) fill and keep the DB fresh. Refreshing
+    // from this read path was blocking the server during third-party
+    // schedule fetches (event-loop + memory pressure → restarts).
+    const filteredGames = await this._findEnrichedGamesForDay(
+      gameDate,
+      leagues,
+      maxResults,
+      skip,
+    );
+    if (filteredGames.length === 0) {
+      console.info(
+        `[findByDateHour] No games found for ${gameDate}. Returning {}.`,
       );
-    });
+      return {};
+    }
 
     const gamesByTimeSlot: { [key: string]: any[] } = {};
-    filteredGames.forEach((game: any) => {
-      const enrichedGame = this._enrichGameWithTeamData(game, teamsMap);
+    filteredGames.forEach((enrichedGame: any) => {
       const date = new Date(enrichedGame.startTimeUTC);
       const hours = date.getUTCHours().toString().padStart(2, '0');
       const minutes = date.getUTCMinutes();
@@ -2172,6 +2518,102 @@ export class GameService {
     });
 
     return gamesByTimeSlot;
+  }
+
+  /**
+   * Same games as `findByDateHour` (same filters, same enrichment, same
+   * 12-hour status guard) but grouped by **league** instead of by time slot.
+   *
+   * Used by the frontend day view for past dates, where a league is a more
+   * meaningful section than a kick-off hour. Everything (grouping, ordering,
+   * favorites extraction) is computed here so the client only renders the
+   * payload:
+   *
+   * ```
+   * {
+   *   groups: [
+   *     { key: 'FAVORITES', games: [...] }, // only when favoriteTeams matches
+   *     { key: 'MLB', games: [...] },       // leagues in alphabetical order
+   *     { key: 'NBA', games: [...] },
+   *   ]
+   * }
+   * ```
+   *
+   * The `FAVORITES` group is a *duplicate* view: those games also stay in
+   * their league group. Within every group the games are ordered from oldest
+   * to most recent (`startTimeUTC` ascending).
+   *
+   * `favoriteTeams` is a comma / space / `+` separated list of team
+   * `uniqueId`s (e.g. `NHL-BOS,MLB-CHC`).
+   */
+  async findByDateLeague(
+    gameDate: string,
+    leagues?: string,
+    maxResults?: number,
+    skip?: number,
+    favoriteTeams?: string,
+  ): Promise<{ groups: { key: string; games: any[] }[] }> {
+    const games = await this._findEnrichedGamesForDay(
+      gameDate,
+      leagues,
+      maxResults,
+      skip,
+    );
+
+    if (games.length === 0) {
+      console.info(
+        `[findByDateLeague] No games found for ${gameDate}. Returning { groups: [] }.`,
+      );
+      return { groups: [] };
+    }
+
+    const groups: { key: string; games: any[] }[] = [];
+
+    const favoriteIds = (favoriteTeams ?? '')
+      .split(/[ ,+]+/)
+      .map((teamId) => teamId.trim())
+      .filter((teamId) => teamId.length > 0);
+
+    if (favoriteIds.length > 0) {
+      const favoriteGames = games.filter(
+        (game) =>
+          favoriteIds.includes(game.homeTeamId) ||
+          favoriteIds.includes(game.awayTeamId),
+      );
+      if (favoriteGames.length > 0) {
+        groups.push({ key: 'FAVORITES', games: favoriteGames });
+      }
+    }
+
+    const gamesByLeague = new Map<string, any[]>();
+
+    games.forEach((game) => {
+      const league = game.league || 'OTHER';
+      const leagueGames = gamesByLeague.get(league);
+      if (leagueGames) {
+        leagueGames.push(game);
+      } else {
+        gamesByLeague.set(league, [game]);
+      }
+    });
+
+    const byStartTimeAsc = (gameA: any, gameB: any) =>
+      new Date(gameA.startTimeUTC).getTime() -
+      new Date(gameB.startTimeUTC).getTime();
+
+    if (groups.length > 0) {
+      groups[0].games.sort(byStartTimeAsc);
+    }
+
+    Array.from(gamesByLeague.keys())
+      .sort((leagueA, leagueB) => leagueA.localeCompare(leagueB))
+      .forEach((league) => {
+        const leagueGames = gamesByLeague.get(league)!;
+        leagueGames.sort(byStartTimeAsc);
+        groups.push({ key: league, games: leagueGames });
+      });
+
+    return { groups };
   }
 
   private _resolveStatus(score: any): string {
@@ -2624,7 +3066,7 @@ export class GameService {
               usedBytes,
             }),
           );
-        } catch (aggError) {
+        } catch {
           // Last resort: just use the games collection stats
           console.info(
             '[Capacity Manager] Aggregation failed, using games collection only',
@@ -2714,7 +3156,7 @@ export class GameService {
     teamCount: number;
     /** Total number of stored game documents */
     gameCount: number;
-    /** Occupancy threshold above which a purge is triggered (default 0.9) */
+    /** Occupancy threshold above which a purge is triggered (see `DISK_USAGE_THRESHOLD`, 0.97) */
     threshold: number;
     /** True when `percentage >= threshold` */
     actionNeeded: boolean;
@@ -2766,14 +3208,14 @@ export class GameService {
   }
 
   /**
-   * Checks disk space and, when usage is at or above the threshold (90%),
+   * Checks disk space and, when usage is at or above the threshold (97%),
    * purges ONLY the oldest month of games — a single, one-shot deletion.
    *
    * IMPORTANT: this method never loops over years or months. The previous
    * implementation deleted whole years inside a `for` loop and re-checked the
    * disk after each deletion to decide when to stop. But `getDiskUsage()`
    * serves a value cached for 60 seconds (DISK_USAGE_CACHE_TTL_MS), so the
-   * post-deletion check kept returning the same stale "≥ 90%" figure, the
+   * post-deletion check kept returning the same stale "≥ 97%" figure, the
    * loop never broke, and the entire database could be wiped. Deleting
    * exactly one month per call keeps the purge predictable: repeated calls
    * (cron every 6h / manual endpoint) gradually free space, one month at a
@@ -2782,8 +3224,11 @@ export class GameService {
    * Returns a report with the action taken and the disk usage that triggered
    * the decision (measured BEFORE the purge; it is re-evaluated on the next
    * check, once the 60-second cache has expired).
+   *
+   * @param force when true, bypasses the 1-hour `CHECK_INTERVAL_MS` guard.
+   * Used by `refreshAllOldies` which already waits 30s between attempts.
    */
-  async purgeOldestMonthIfNeeded(): Promise<{
+  async purgeOldestMonthIfNeeded(force = false): Promise<{
     action: 'none' | 'purged';
     diskUsage: { usedMB: number; totalMB: number; percentage: number };
     purgedYear?: number;
@@ -2793,8 +3238,12 @@ export class GameService {
   }> {
     const now = Date.now();
 
-    // Avoid overly frequent checks (maximum once per hour)
-    if (now - this.lastDiskCheck < this.CHECK_INTERVAL_MS) {
+    // Avoid overly frequent checks (maximum once per hour),
+    // unless forced by a batch caller that already waits 30s between attempts.
+    if (!force && now - this.lastDiskCheck < this.CHECK_INTERVAL_MS) {
+      console.info(
+        '[Capacity Manager] Skipped: last check was less than 1 hour ago.',
+      );
       return {
         action: 'none',
         diskUsage: { usedMB: 0, totalMB: 1, percentage: 0 },
@@ -2802,6 +3251,13 @@ export class GameService {
     }
 
     this.lastDiskCheck = now;
+
+    // Forced calls are spaced 30s apart but the disk usage cache lives 60s:
+    // invalidate it so each retry re-measures the real usage instead of
+    // reusing the stale pre-purge value.
+    if (force) {
+      this.diskUsageCache = null;
+    }
 
     const diskUsage = await this.getDiskUsage();
 
@@ -2845,6 +3301,9 @@ export class GameService {
 
     const remainingYears = ((await this.getAvailableYears()) ?? []).map(
       (y) => y.year,
+    );
+    console.info(
+      `[Capacity Manager] No purge needed: disk usage is ${(diskUsage.percentage * 100).toFixed(1)}% (threshold ${(this.DISK_USAGE_THRESHOLD * 100).toFixed(0)}%).`,
     );
     return {
       action: 'none',
@@ -3105,7 +3564,21 @@ export class GameService {
     }
   }
 
-  async getOldiesGames(yearStr?: string, leagueParam?: string) {
+  /**
+   * Historical recovery over leagues × years (exposed via
+   * `POST /games/refresh/oldies`).
+   *
+   * @param options.forceCapacityCheck when true (default), the per-step capacity
+   * check bypasses the 1-hour `CHECK_INTERVAL_MS` guard, so a long oldies run
+   * cannot fill the database up to 100% between two hourly checks. Set it to
+   * false to restore the throttled behavior.
+   */
+  async getOldiesGames(
+    yearStr?: string,
+    leagueParam?: string,
+    options: { forceCapacityCheck?: boolean } = {},
+  ) {
+    const { forceCapacityCheck = true } = options;
     const currentYear = new Date().getFullYear();
     const minYear = currentYear - this.maxYearBeforeDelete;
 
@@ -3200,7 +3673,23 @@ export class GameService {
           console.info(
             `[Oldies] progress: ${pct}% (${completedSteps}/${totalSteps}) — last: ${league} ${year}`,
           );
-          await this.purgeOldestMonthIfNeeded();
+          // Capacity check after EVERY league x year step, forced by default:
+          // without `force`, the 1-hour guard would skip every check after the
+          // first one and the DB could reach 100% during a long oldies run.
+          try {
+            const purge =
+              await this.purgeOldestMonthIfNeeded(forceCapacityCheck);
+            if (purge.action === 'purged') {
+              console.info(
+                `[Oldies] Capacity purge after ${league} ${year}: removed ${purge.deletedCount} games from ${purge.purgedYear}-${String(purge.purgedMonth).padStart(2, '0')}.`,
+              );
+            }
+          } catch (error) {
+            console.error(
+              `[Oldies] Capacity check failed after ${league} ${year}:`,
+              error instanceof Error ? error.message : String(error),
+            );
+          }
         }
       }
     }

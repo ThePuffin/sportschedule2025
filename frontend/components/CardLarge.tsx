@@ -9,7 +9,7 @@ import { CardsProps, GameFormatted, Team } from '@/utils/types';
 import { addFavoriteTeam, translateWord } from '@/utils/utils';
 import { Card } from '@rneui/base';
 import { Icon } from '@rneui/themed';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -22,6 +22,30 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import GameModal from './GameModal';
+
+/**
+ * Games duplicated across accordions (FAVORITES + league group) render two
+ * separate `CardLarge` instances. A module-level set keeps the per-game
+ * "score revealed" (eye button) state shared so revealing the score on one
+ * card reveals it on its duplicate too. Cross-instance sync goes through the
+ * `scoreRevealed` window event (detail: `{ gameKey }`), following the same
+ * pattern as the `scoresUpdated` / `favoritesUpdated` events below.
+ */
+const revealedGameKeys = new Set<string>();
+const SCORE_REVEALED_EVENT = 'scoreRevealed';
+
+function getGameKey(data: GameFormatted): string {
+  return data.uniqueId || `${data.homeTeamId}-${data.awayTeamId}-${data.startTimeUTC}`;
+}
+
+function markGameRevealed(gameKey: string): void {
+  revealedGameKeys.add(gameKey);
+  if (globalThis.window !== undefined) {
+    globalThis.window.dispatchEvent(
+      new CustomEvent<string>(SCORE_REVEALED_EVENT, { detail: gameKey }),
+    );
+  }
+}
 
 export default function CardLarge({
   data,
@@ -112,7 +136,10 @@ export default function CardLarge({
   }, [propShowScores]);
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [scoreRevealed, setScoreRevealed] = useState(false);
+  const gameKey = getGameKey(data);
+  const [scoreRevealed, setScoreRevealed] = useState(
+    () => revealedGameKeys.has(gameKey),
+  );
   const fadeAnim = useRef(new Animated.Value(animateEntry ? 0 : 1)).current;
   const scaleAnim = useRef(new Animated.Value(animateEntry ? 0.95 : 1)).current;
   const translateYAnim = useRef(new Animated.Value(animateEntry ? 20 : 0)).current;
@@ -290,11 +317,34 @@ export default function CardLarge({
     ]).start();
   }, [isSelected]);
 
+  const revealScore = useCallback(() => {
+    markGameRevealed(gameKey);
+    setScoreRevealed(true);
+  }, [gameKey]);
+
+  // A duplicate card of the same game (FAVORITES + league accordion) may
+  // reveal the score first: sync through the module-level store + event.
+  useEffect(() => {
+    if (globalThis.window === undefined) return;
+    const syncRevealed = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === gameKey) {
+        setScoreRevealed(true);
+      }
+    };
+    globalThis.window.addEventListener(SCORE_REVEALED_EVENT, syncRevealed);
+    return () => {
+      globalThis.window.removeEventListener(SCORE_REVEALED_EVENT, syncRevealed);
+    };
+  }, [gameKey]);
+
   useEffect(() => {
     if (!showScores) {
+      revealedGameKeys.delete(gameKey);
       setScoreRevealed(false);
+    } else if (revealedGameKeys.has(gameKey)) {
+      setScoreRevealed(true);
     }
-  }, [showScores]);
+  }, [showScores, gameKey]);
 
   const hasScore = homeTeamScore != null && awayTeamScore != null;
   const status = getGamesStatus(data);
@@ -542,7 +592,7 @@ export default function CardLarge({
             style={styles.revealButton}
             onPress={(e) => {
               e.stopPropagation();
-              setScoreRevealed(true);
+              revealScore();
             }}
           >
             <Icon name="eye" type="font-awesome" size={verticalMode ? 20 : 30} color={isDark ? '#94a3b8' : '#475569'} />
@@ -628,7 +678,7 @@ export default function CardLarge({
           }}
           onClick={(e) => {
             e.stopPropagation();
-            setScoreRevealed(true);
+            revealScore();
           }}
         >
           <ThemedText style={[styles.liveTimeText, isSmallCard && { fontSize: 10 }]}>
@@ -734,7 +784,7 @@ export default function CardLarge({
               // Favorites modal: show the game details instead of deleting it.
               setModalVisible(true);
               if (hasScore) {
-                setScoreRevealed(true);
+                revealScore();
               }
             } else if (onSelection) {
               if (data.homeTeamShort && data.awayTeamShort) {
@@ -743,7 +793,7 @@ export default function CardLarge({
             } else {
               setModalVisible(true);
               if (hasScore) {
-                setScoreRevealed(true);
+                revealScore();
               }
             }
           }}
@@ -778,7 +828,7 @@ export default function CardLarge({
                       e.stopPropagation();
                       setModalVisible(true);
                       if (hasScore) {
-                        setScoreRevealed(true);
+                        revealScore();
                       }
                     }}
                   >

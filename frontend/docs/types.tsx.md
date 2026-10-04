@@ -100,6 +100,22 @@ interface FilterGames {
 }
 ```
 
+### `LeagueDayGroup`
+
+One section of the league-grouped day payload returned by `GET /games/league-day/:gameDate`
+(used for past dates):
+
+```typescript
+interface LeagueDayGroup {
+  key: string; // league code (`NHL`, `NBA`, …) or the special `FAVORITES` key
+  games: GameFormatted[];
+}
+```
+
+The `FAVORITES` section (always first when present) repeats games that are also listed in
+their league section, which is why the screen de-duplicates them before building its flat
+`games` state.
+
 ### `AccordionProps`
 
 Props for the `Accordion` component. `onRemoveFromFavorites?: (game: GameFormatted) => void` is

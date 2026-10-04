@@ -27,13 +27,14 @@ import { fetchDateRangeLimits, getDateRangeLimits } from '../../utils/dateRange'
 import {
   fetchClosestDates,
   fetchGamesByHour,
+  fetchGamesByLeagueDay,
   fetchLeagues,
   fetchLiveScores,
   fetchTeams,
   getCache,
   saveCache,
 } from '../../utils/fetchData';
-import { GameFormatted, Team } from '../../utils/types';
+import { GameFormatted, LeagueDayGroup, Team } from '../../utils/types';
 import { getFilterAccordionLabel, translateFilterLabel, translateWord } from '../../utils/utils';
 
 const formatDateLocal = (date: Date) => {
@@ -56,6 +57,46 @@ const groupGamesByHour = (games: GameFormatted[]) => {
     grouped[hour].push(game);
   });
   return grouped;
+};
+
+// Special key of the leading favorites section returned by the backend
+// (`/games/league-day`): those games are also listed in their league group.
+const FAVORITES_GROUP_KEY = 'FAVORITES';
+
+const gameIdentity = (game: GameFormatted) =>
+  game.uniqueId || game._id || `${game.homeTeamId}-${game.awayTeamId}-${game.startTimeUTC}`;
+
+/**
+ * The favorites section duplicates games already present in their league
+ * group, so the flat `games` state (bookmarks, team filter, team list, live
+ * scores) is built from a de-duplicated list.
+ */
+const dedupeGames = (games: GameFormatted[]) => {
+  const seen = new Set<string>();
+  return games.filter((game) => {
+    const id = gameIdentity(game);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
+/**
+ * Live scores only change the values of the games, never the grouping, so the
+ * league groups built by the backend are refreshed by identity instead of
+ * being rebuilt client-side.
+ */
+const refreshLeagueGroups = (
+  groups: LeagueDayGroup[],
+  updatedGames: GameFormatted[],
+): LeagueDayGroup[] => {
+  const updatedById = new Map(updatedGames.map((game) => [gameIdentity(game), game]));
+  return groups.map((group) => ({
+    ...group,
+    games: group.games
+      .map((game) => updatedById.get(gameIdentity(game)))
+      .filter((game): game is GameFormatted => Boolean(game)),
+  }));
 };
 
 const getNextGamesFromApi = async (date: Date): Promise<{ [key: string]: GameFormatted[] }> => {
@@ -149,6 +190,16 @@ const GameofTheDayContent = () => {
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const dateRangePickerRef = useRef<DatePickerHandle>(null);
   const gamesRef = useRef<GameFormatted[]>([]);
+  // League-grouped payload of a past day (`/games/league-day`): the backend
+  // already grouped the games by league and built the leading favorites
+  // section, so the screen renders it as-is.
+  const [leagueDayGroups, setLeagueDayGroups] = useState<LeagueDayGroup[]>([]);
+  // Favorites are needed at fetch time (the backend builds the favorites
+  // section), so they are mirrored in a ref. `leagueDayFavoritesKeyRef` stores
+  // the favorites used by the last past-day fetch to avoid fetching it again
+  // when nothing changed.
+  const favoriteTeamsRef = useRef<string[]>(favoriteTeams);
+  const leagueDayFavoritesKeyRef = useRef('');
 
   const theme = useColorScheme() ?? 'light';
   const isDark = theme === 'dark';
@@ -166,6 +217,17 @@ const GameofTheDayContent = () => {
   useEffect(() => {
     gamesRef.current = games;
   }, [games]);
+
+  useEffect(() => {
+    favoriteTeamsRef.current = favoriteTeams;
+  }, [favoriteTeams]);
+
+  // Dates strictly before today are displayed grouped by league (and not by
+  // hour): see `visibleLeagueGroups` and `displayContent`.
+  const isPastDay = useMemo(
+    () => formatDateLocal(selectDate) < formatDateLocal(new Date()),
+    [selectDate],
+  );
 
   const selectDateRef = useRef(selectDate);
   const isScrollingHorizontallyRef = useRef(isScrollingHorizontally);
@@ -229,6 +291,11 @@ const GameofTheDayContent = () => {
         const updatedGames = await fetchAndMergeLiveScores(currentGames);
         if (updatedGames) {
           setGames(updatedGames);
+          // Past days are rendered from the league groups: keep their games in
+          // sync with the refreshed scores (the grouping itself never changes).
+          setLeagueDayGroups((groups) =>
+            groups.length > 0 ? refreshLeagueGroups(groups, updatedGames) : groups,
+          );
           const todayStr = formatDateLocal(new Date());
           const viewedDateStr = formatDateLocal(selectDateRef.current);
           if (todayStr === viewedDateStr && gamesDayCache.current[todayStr]) {
@@ -429,6 +496,50 @@ const GameofTheDayContent = () => {
     return groups;
   }, [games, selectLeagues, teamSelectedId, activeFilter, favoriteTeams]);
 
+  // Past days are rendered from the league groups built by the backend
+  // (`/games/league-day`). Only the client-side filters are applied here
+  // (selected leagues, team, favorites/bookmarks chips): the grouping, the
+  // group order and the favorites section all come from the API.
+  const visibleLeagueGroups = useMemo(() => {
+    const matchesFilters = (game: GameFormatted) =>
+      game.isActive &&
+      selectLeagues.includes(game.league as League) &&
+      (!teamSelectedId ||
+        game.homeTeamId === teamSelectedId ||
+        game.awayTeamId === teamSelectedId ||
+        game.homeTeam === teamSelectedId ||
+        game.awayTeam === teamSelectedId) &&
+      (activeFilter !== 'FAVORITES' ||
+        favoriteTeams.includes(game.homeTeamId) ||
+        favoriteTeams.includes(game.awayTeamId)) &&
+      (activeFilter !== 'BOOKMARKS' ||
+        gamesSelected.some((g) => g.uniqueId === game.uniqueId || g._id === game._id));
+
+    return leagueDayGroups
+      .filter((group) => activeFilter !== 'FAVORITES' || group.key === FAVORITES_GROUP_KEY)
+      .map((group) => ({ ...group, games: group.games.filter(matchesFilters) }))
+      .filter((group) => group.games.length > 0);
+  }, [leagueDayGroups, selectLeagues, teamSelectedId, activeFilter, favoriteTeams, gamesSelected]);
+
+  // Sections actually rendered: one per league (leading with the favorites
+  // section) for a past day, one per hour group otherwise.
+  const visibleSections = useMemo(() => {
+    if (isPastDay) {
+      return visibleLeagueGroups.map((group) => ({
+        key: group.key,
+        label: group.key === FAVORITES_GROUP_KEY ? translateWord('favorites') : group.key,
+        games: group.games,
+      }));
+    }
+    return visibleGamesByHour.map((group) => ({
+      key: group.hour,
+      label: group.hour,
+      games: group.games,
+    }));
+  }, [isPastDay, visibleLeagueGroups, visibleGamesByHour]);
+
+  const visibleGroupCount = visibleSections.length;
+
   const getGamesFromApi = useCallback(
     async (dateToFetch: Date) => {
       const YYYYMMDD = formatDateLocal(dateToFetch);
@@ -439,12 +550,18 @@ const GameofTheDayContent = () => {
           delete gamesDayCache.current[YYYYMMDD];
           saveCache('gamesDay', gamesDayCache.current);
         }
+        // Past dates are grouped by league instead of by hour: the backend
+        // builds the groups, their order and the leading favorites section, so
+        // the screen only has to render the payload.
+        const requestedFavorites = favoriteTeamsRef.current || [];
+        leagueDayFavoritesKeyRef.current = requestedFavorites.join(',');
         try {
-          const gamesByHourData = await fetchGamesByHour(YYYYMMDD, 1000);
-          const gamesOfTheDay = Object.values(gamesByHourData).flat();
-          setGames(gamesOfTheDay);
+          const groups = await fetchGamesByLeagueDay(YYYYMMDD, 1000, undefined, requestedFavorites);
+          setLeagueDayGroups(groups);
+          setGames(dedupeGames(groups.flatMap((group) => group.games)));
         } catch (error: unknown) {
           console.error(error);
+          setLeagueDayGroups([]);
           setGames([]);
         }
         return;
@@ -542,8 +659,14 @@ const GameofTheDayContent = () => {
       setSelectDate(startDate);
 
       const YYYYMMDD = dateStr;
-      if (!gamesDayCache.current[YYYYMMDD]) {
+      const isTargetPastDay = YYYYMMDD < formatDateLocal(new Date());
+      if (!gamesDayCache.current[YYYYMMDD] || isTargetPastDay) {
         setIsLoading(true);
+      }
+
+      if (isTargetPastDay) {
+        setLeagueDayGroups([]);
+        setGames([]);
       }
 
       getGamesFromApi(startDate).finally(() => {
@@ -592,7 +715,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
 
   // Retry mechanism when no games are found (NoResults is visible)
   useEffect(() => {
-    if (!isLoading && visibleGamesByHour.length === 0 && retryCount < retryIntervals.length) {
+    if (!isLoading && visibleGroupCount === 0 && retryCount < retryIntervals.length) {
       const timer = setTimeout(() => {
         setRetryCount((prev) => prev + 1);
         getGamesFromApi(selectDate);
@@ -600,7 +723,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
 
       return () => clearTimeout(timer);
     }
-  }, [isLoading, visibleGamesByHour.length, retryCount, getGamesFromApi, selectDate, retryIntervals]);
+  }, [isLoading, visibleGroupCount, retryCount, getGamesFromApi, selectDate, retryIntervals]);
 
   // Reset retry count when filter or date changes
   useEffect(() => {
@@ -612,8 +735,8 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
   // - specific team selected → teamSelectedIds (uniqueId already resolved in selectedTeamUniqueId);
   // - otherwise ("ALL") → leagues (the filtered league, e.g. MLB).
   useEffect(() => {
-    if (isLoading || visibleGamesByHour.length > 0) {
-      if (visibleGamesByHour.length > 0) {
+    if (isLoading || visibleGroupCount > 0) {
+      if (visibleGroupCount > 0) {
         closestRequestRef.current = '';
         setClosestDates({ previousDate: null, nextDate: null });
       }
@@ -691,7 +814,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       }
     };
     // selectedTeamUniqueId replaces games for team resolution (day-independent).
-  }, [isLoading, visibleGamesByHour.length, selectDate, selectedTeamUniqueId, teamSelectedId, selectLeagues, activeFilter]);
+  }, [isLoading, visibleGroupCount, selectDate, selectedTeamUniqueId, teamSelectedId, selectLeagues, activeFilter]);
 
   const hasFavorites = useMemo(() => {
     return games.some((game) => favoriteTeams.includes(game.homeTeamId) || favoriteTeams.includes(game.awayTeamId));
@@ -868,7 +991,12 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       return displayNoContent();
     }
 
-    if (visibleGamesByHour.length === 0) {
+    if (visibleGroupCount === 0) {
+      // Still fetching: never flash "no results" (or the closest-date navigation)
+      // while the groups of the requested day are on their way.
+      if (isLoading) {
+        return <LoadingView />;
+      }
       // When the 'closest' route found dates with games for the
       // current filters, offer to navigate to the previous/next date.
       const closestProps =
@@ -897,10 +1025,12 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
 
     return (
       <ThemedView style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.3s' } as any}>
-        {visibleGamesByHour.map(({ hour, games }, i) => (
-          <div key={hour} style={{ width: '100%', margin: '0 auto' }}>
+        {/* Sections: one per league (favorites first) for a past day, one per
+            hour group otherwise. */}
+        {visibleSections.map(({ key, label, games }, i) => (
+          <div key={key} style={{ width: '100%', margin: '0 auto' }}>
             <Accordion
-              filter={hour}
+              filter={label}
               i={i}
               gamesFiltred={games}
               open={true}
@@ -916,7 +1046,8 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
   }, [
     games,
     displayNoContent,
-    visibleGamesByHour,
+    visibleSections,
+    visibleGroupCount,
     gamesSelected,
     showScores,
     isLoading,
@@ -988,6 +1119,18 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
     initializeGames();
   }, [firestoreReady]); // Only run once on mount (once firestore is ready)
 
+  // The favorites section of a past day is computed by the backend, so that
+  // day must be fetched again when the favorite teams change. Leagues, team and
+  // bookmarks are filtered client-side and need no refetch. Declared after the
+  // init effect so the initial fetch has already registered its favorites key.
+  useEffect(() => {
+    if (!firestoreReady || !isPastDay) return;
+    const favoritesKey = (favoriteTeams || []).join(',');
+    if (favoritesKey === leagueDayFavoritesKeyRef.current) return;
+    leagueDayFavoritesKeyRef.current = favoritesKey;
+    getGamesFromApi(selectDate);
+  }, [firestoreReady, favoriteTeams, isPastDay, selectDate, getGamesFromApi]);
+
   useEffect(() => {
     const param = Array.isArray(dateParam) ? dateParam[0] : dateParam;
     let d = new Date();
@@ -1030,8 +1173,15 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
 
     setSelectDate(d);
     const YYYYMMDD = dStr;
-    if (!gamesDayCache.current[YYYYMMDD]) {
+    const isTargetPastDay = YYYYMMDD < formatDateLocal(new Date());
+    if (!gamesDayCache.current[YYYYMMDD] || isTargetPastDay) {
       setIsLoading(true);
+    }
+    // Same as `handleDateChange`: drop the groups of the day being left so the
+    // loading screen shows instead of the previous day's sections.
+    if (isTargetPastDay) {
+      setLeagueDayGroups([]);
+      setGames([]);
     }
     getGamesFromApi(d).finally(() => setIsLoading(false));
   }, [dateParam, selectDate, getGamesFromApi, router, minDate, maxDate]);
