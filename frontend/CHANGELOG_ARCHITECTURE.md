@@ -2,6 +2,298 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Changed: the GameModal "form" row draws bare icons instead of circles
+
+### Problem
+
+The last-5-results row told a win from a loss from a draw purely with circles: **filled** = win,
+**hollow** = loss, **half-filled on the left** = draw. Filled vs. hollow is a shape difference you
+have to zoom in on to read, it is the one distinction the row most needs to be instant, and it is
+useless in monochrome or to a colorblind reader — nothing distinguishes the three at a glance. A
+symbol has no such problem.
+
+### Changes
+
+- **`frontend/components/GameModal.tsx`**
+  - `renderFormRow()` renders one **bare Ionicons glyph** per game instead of a bordered circle:
+    `checkmark` = win, `close` = loss, `contrast` = draw. Both come from the new module-level
+    `FORM_OUTCOME_ICONS: Record<GameOutcome, ...>`. Draw keeps a circle-ish glyph on purpose:
+    "nothing happened" has no glyph of its own, and a half circle reads as a tie far better than a
+    plain dash.
+  - The icons carry **no background and no border** — only the modal's text color (`DOT_COLORS`),
+    which is the neutrality already documented for this row, so the row still never borrows a team
+    color.
+  - Each glyph sits in a new `formIconSlot` (fixed 12×12 box): a checkmark and a cross have
+    different natural extents, so without a fixed box they would not line up on the row.
+  - The accessibility label is now spelled out (`FORM_OUTCOME_LABELS`: "Win" / "Loss" / "Draw")
+    instead of the bare `"W"` / `"L"` / `"D"`, which VoiceOver read as a single letter. Plain English
+    on purpose: `translateWord()` has no `win` / `loss` / `draw` key, and the icons are already
+    self-explanatory for sighted users, so the label is only a screen-reader fallback.
+  - `FormSkeleton`'s placeholders use a new `formSkeletonPlaceholder` (12×12, radius 3) instead of
+    the old circle styles — **sized identically to `formIconSlot`**, so the loading row keeps the
+    exact same layout and nothing shifts when the real icons land.
+  - **Deleted styles** `formDot`, `formDotFill` and `formDotFillHalf`, which the circles needed (fill
+    + half-fill) and the icons no longer use. `formRow` and its `height: 12` are unchanged.
+- **Tests** (`components/__tests__/GameModal-test.tsx`): `@expo/vector-icons` is now mocked like
+  `@rneui/themed` so the suite does not need the bundled icon font. The `formLabels` helper maps the
+  new labels back to `W`/`L`/`D`, so all 33 existing form assertions keep testing the same outcomes
+  and order.
+- **Docs** (`docs/components/GameModal.tsx.md`): the "Recent form row" and "Loading skeleton"
+  bullets and the `renderFormRow` section were rewritten; every mention of the filled/hollow/half
+  circles is gone.
+
+### Notes
+
+No new dependency (`@expo/vector-icons` was already used by `HomeGameToggle`, `ScoreToggle` and
+`calendar.tsx`) and no backend change — `GET /games/team/:id/form` is untouched.
+
+## Fixed: a win could be rendered as a loss (score read from the wrong side)
+
+### Problem
+
+`getRecentForm()` decided which side of a match belonged to the queried team with:
+
+```ts
+const isHome = game.homeTeamId === teamId || game.teamSelectedId === teamId;
+```
+
+A finished match is stored **twice** — each upstream feed writes its own document for the team it was
+asked about — and on one of the two copies `teamSelectedId === teamId` while `homeTeamId` shows the
+team was actually the **away** side. That clause therefore inverted the score: a 3-2 win was read as
+a loss, and a loss as a win.
+
+Which copy survived the ordering was arbitrary (they share the same `startTimeUTC`), so the same
+team could show opposite results on two screens — exactly the "a win or a loss is not necessarily
+shown" symptom. Deduplicating the endpoint hid part of it, but the wrong clause still decided the
+outcome of whichever copy was kept.
+
+### Changes
+
+- **`frontend/utils/date.ts`** — `getRecentForm()` now uses `homeTeamId === teamId` alone, plus a
+  guard skipping any game the team does not play, and deduplicates on
+  `${homeTeamId}-${awayTeamId}-${startTimeUTC}` so a payload cached before the endpoint started
+  collapsing the twins (24 h TTL on past rows) still renders one dot per match.
+- **`frontend/utils/date.test.ts`** — new suite (7 tests), the first dedicated to `getRecentForm`:
+  reading order, reading the score from the team's own side, collapsing the two stored copies
+  **regardless of which one comes first**, excluding the displayed game, ignoring unfinished games,
+  and the empty-payload cases.
+- **`frontend/docs/date.ts.md`** — the outcome and deduplication rules rewritten.
+
+Verified against the live endpoint on three consecutive Anaheim games: `○○○○○` → `○○○○●` → `○○○●●`,
+each modal adding exactly the previous game.
+
+## Fixed: form cache kept serving the duplicated dots for up to 24 h
+
+### Problem
+
+`fetchRecentFormGames` caches the row of a **past** game for 24 h. The rows stored before the
+backend started collapsing the double-stored copies of a match therefore survived the fix for a
+whole day, so the dots could look unchanged even after the endpoint was corrected.
+
+### Changes
+
+- **`frontend/utils/fetchData.ts`** — the cache prefix is now versioned: `recent_form` →
+  `recent_form_v2`, so the entries written with the duplicates are ignored. Bumping that constant is
+  the way to invalidate this cache from the client side.
+- **`frontend/docs/fetchData.ts.md`** — the cache-key bullet documents the version suffix.
+
+## Changed: form dots use the modal's text color, not the team color
+
+### Problem
+
+The form dots were painted in the team color, with an opposite-tone border so they stayed legible on
+the card. The row therefore read as team branding and, depending on the team, could clash with the
+surrounding text instead of looking like a neutral W/L/D indicator.
+
+### Changes
+
+- **`frontend/components/GameModal.tsx`** — the module-level `getDotColors(isDark)` helper (card
+  border + gray fallback) is replaced by `DOT_COLORS = { light: "#0f172a", dark: "#ffffff" }`, the
+  exact colors the modal already passes to its `ThemedText` labels. That single value is used for
+  both the fill and the border, so `W` stays filled, `L` hollow and `D` half-filled on the left.
+  `renderFormRow(form, teamId?)` no longer takes a `teamColor` argument, and the now-unused
+  `awayTeamColor` / `homeTeamColor` destructuring of `displayData` was removed.
+- The loading skeleton keeps its neutral gray placeholders — it never painted team colors.
+- **`frontend/docs/components/GameModal.tsx.md`** — the "Recent form row" feature bullet and the
+  `renderFormRow` signature/behaviour were rewritten to match.
+
+## Added: last-5 results ("form") dots in `GameModal`
+
+> This entry describes the **current** design. An earlier revision reused the existing
+> `GET /games/team/:id/results` payload, which proved unable to return a complete history (see
+> "Why a dedicated endpoint" below); it has been replaced.
+
+### Goal
+
+Show at a glance whether a team is in form: the results of its last five games, as a row of colored
+dots under each team in the game details modal.
+
+### Why a dedicated endpoint
+
+The first attempt derived the row from `GET /games/team/:id/results`, which filters on
+`teamSelectedId`. That id is produced by whichever upstream feed created the document, and games are
+**deduplicated by `uniqueId`**, so it is set on only **one** side of a match — the opponent's id never
+lands on the document. A team's history therefore came back incomplete (and the row sometimes vanished
+entirely). The new endpoint filters on `$or: [{ homeTeamId }, { awayTeamId }]` instead, which returns
+every game of the team whichever side it was stored from.
+
+### Solution
+
+- **`backend/src/games/games.service.ts`** — new `findRecentFormGames(teamId, before?, limit = 5)`:
+  - filters `{ isActive: true, $or: [{ homeTeamId: teamId }, { awayTeamId: teamId }] }`, sorted by
+    `startTimeUTC` descending, capped at `limit`;
+  - `before` is applied only when it parses, as a **strict** `startTimeUTC: { $lt: before }` bound, so
+    the displayed game itself can never come back;
+  - `limit` is clamped to `[1, 20]` (default 5, non-numeric → default);
+  - games missing either score are dropped: only a game already played counts as a result. The status
+    is returned untouched so the client stays the single source of truth for the overtime rule.
+- **`backend/src/games/games.controller.ts`** — new `GET /games/team/:teamSelectedId/form` (public, like
+  the other read routes), forwarding `before` and `limit`.
+- **`backend/src/games/schemas/game.schema.ts`** — two new compound indexes,
+  `{ isActive: 1, homeTeamId: 1, startTimeUTC: -1 }` and `{ isActive: 1, awayTeamId: 1, startTimeUTC: -1 }`.
+  `homeTeamId` / `awayTeamId` are plain props with no index of their own, so without them the `$or`
+  query was a **full collection scan** on every modal open.
+- **`frontend/utils/date.ts`** — new `getRecentForm(results, teamId, limit = RECENT_FORM_LENGTH, excludeUniqueId?)`
+  returning `('W' | 'L' | 'D')[]`, **oldest first**, from the endpoint's flat array.
+  - Games are re-sorted by `startTimeUTC` descending, then sliced and reversed into the reading order.
+  - The outcome is read **from the team's point of view** (`homeTeamId` decides which side is ours).
+  - **An overtime / shootout loss is displayed as a draw.** Those leagues (`NHL`, `PWHL`, `NCAAMH`,
+    `NCAAWH`) have no real tie, and an OT loss is the `otLosses` figure of the team's `"W-L-OTL"` record,
+    so it is rendered as the same half-filled dot as a tie. Detection is done by `isOvertimeGame()`
+    from two signals, since neither is always stored: `gamePeriod > 3` (the exact signal
+    `GameService._nextRecord()` uses on the backend) or a raw status carrying `OT` / `SO` / `OVERTIME` /
+    `SHOOTOUT` **as standalone words** (a bare `includes('OT')` would match unrelated statuses).
+    The check is gated on those leagues, so a baseball game reaching a 5th period is never mistaken
+    for an overtime loss.
+  - `excludeUniqueId` drops the game being displayed. The endpoint already excludes it through the
+    strict `before` bound; the id is still passed as a **defensive** measure, since an upcoming game is
+    requested without any bound.
+- **Form window = the games _before_ the displayed one.** `formBefore` (a `useMemo` on
+  `data.startTimeUTC`) bounds the request so the API only returns what precedes the game shown:
+  - game **upcoming** → `undefined`, i.e. the team's five most recent results. A `now` bound would carry
+    milliseconds and change on every render, making the request URL — and the cache key derived from
+    it — unique on each open, so no result could ever be reused;
+  - game **already played** → its own `startTimeUTC`, i.e. the five results played just before it.
+- **`frontend/utils/fetchData.ts`** — new `fetchRecentFormGames(teamSelected, before?, limit = 5)`:
+  - calls `GET /games/team/:teamSelected/form`, sending `before` only when it parses as a date (an
+    unparsable value is treated as no bound);
+  - has its **own cache layer** (a stable key `recent_form_<team>_<limit>_<before|latest>`, on top of
+    `saveCache` / `getCache` / `isCacheValid`): a past game's row is immutable and is kept for **24 h**,
+    an upcoming game's row still gains results and is re-checked every **5 min**. An empty row is
+    **never** cached, so a team without history is not stuck blank once its first result lands.
+    `fetchWithCacheStrategy` is called with `cacheKey: null`: it only provides the fetch + retry.
+- **`frontend/components/GameModal.tsx`**
+  - `awayForm` / `homeForm` state + a `useEffect` keyed on `[visible, data.awayTeamId, data.homeTeamId]`
+    that calls `fetchRecentFormGames()` for both teams in parallel. Each team is loaded through
+    `loadTeamForm()`, which returns `[]` on a missing id **or on failure**, so one team without
+    history (or a failing request) never hides the other row. The rows reset when the modal closes,
+    and a `cancelled` flag drops a response that arrives after a close.
+  - `renderFormRow()` draws one 10px dot per game: **filled = win, hollow = loss, half-filled (left
+    half) = draw**, all in the modal's text color. Nothing is rendered when
+    the team has no stored history, so a sparse team shows no empty row.
+  - **Color**: every dot (fill _and_ border) uses the same color as the modal's own text —
+    module-level `DOT_COLORS` (`#0f172a` light / `#ffffff` dark), the exact values the modal passes
+    to its `ThemedText` labels — so the row stays a neutral indicator instead of borrowing a team
+    color. **No text and no new translation** was added.
+  - **Animated loading skeleton**: a `formLoading` state is set while the request is in flight and
+    cleared once **both** teams have answered (including on failure, so a team with no stored history
+    never leaves an endless loader). While set, each team's row shows five neutral gray placeholder
+    dots through the new `FormSkeleton` component, which reuses the exact `formRow` / `formDot`
+    styles so **nothing shifts** when the real dots land. A single `Animated.Value` (cheaper than one
+    per dot) sweeps `0 → 1` over `LOADER_CYCLE_MS` (1400 ms) and each dot interpolates its own slice of
+    that sweep, offset by `index * DOT_DELAY_MS` (220 ms, fade over 260 ms) — the dots light up one
+    after the other. `Animated.loop` restarts the sequence when the value reaches 1, which is exactly
+    the "all dots shown → start again" loader behaviour, and `stopAnimation()` on unmount keeps no
+    timer running after the modal closes. A team with no id has nothing to load and shows no skeleton.
+  - **Modal height**: the card is capped at `maxHeight: '92%'` and its content wrapped in a
+    `ScrollView`, so the two added rows can never push the card past the viewport. The form row itself
+    has a fixed 12px height so it never stretches the layout.
+
+### Tests
+
+- **`frontend/components/__tests__/GameModal-test.tsx`** — the `GameModal recent form` suite (15 tests):
+  oldest → newest order, nothing rendered without history, fewer dots than the limit, a **live game
+  with a partial score is ignored**, a game **stalled on `IN_PROGRESS` past its duration** is ignored,
+  the outcome is read correctly for an **away** side, an **overtime loss renders as a draw** (both via
+  `gamePeriod > 3` and via a `STATUS_FINAL_OT` status), a regulation loss stays a loss, and a
+  non-hockey game reaching a 5th period is **not** treated as overtime. The home
+  row survives a failing away request, and no request is made when a team has no id. Plus the form
+  window: the **displayed game is never counted**, and the request is sent **without a bound** for an
+  upcoming game and **with that game's own start** for one already played. A `loading skeleton`
+  sub-suite covers the animated placeholders (shown while pending, gone once settled, never shown for a
+  team without an id) and that a team with **no history at all** does not keep the loader running
+  forever. `../../utils/fetchData` is mocked so no test hits the network.
+- **`frontend/utils/fetchData.test.ts`** — new suite (8 tests) for `fetchRecentFormGames`' request and
+  cache contract: no call for a missing team, the bound sent for a past game and omitted (or ignored
+  when unparsable) for an upcoming one, a past and an upcoming row both served from cache on the second
+  call, a separate entry per team / limit / bound, and an empty row never cached.
+- **`backend/src/games/tests/games.service.spec.ts`** — new `findRecentFormGames` describe block: the
+  `$or` filter on `homeTeamId`/`awayTeamId` with `isActive`, the **strict** `$lt` bound, an unparsable
+  `before` producing no bound, the score-less games dropped, and the `limit` clamping (1–20, default 5,
+  non-numeric → default). The block `afterEach` does `mockReset()` + `mockReturnThis()` because
+  `jest.clearAllMocks()` does **not** reset `mockImplementation`, which let the `find` override leak into
+  the sibling suites.
+
+### Notes / limits
+
+- `backend/src/games/tests/games.service.spec.ts` had to reset its `find` mock: `jest.clearAllMocks()`
+  only clears calls, it does not restore implementations, so the override written for the new block was
+  inherited by every other suite of the file.
+- Draws only exist for leagues that can tie (soccer, college hockey); NHL/PWHL games never produce `D`.
+- Storing a pre-computed form in the database was considered and **rejected**: the row is cheap to
+  compute, and three existing jobs mutate past games retroactively — `purgeOldestMonth()` deletes the
+  oldest month under disk pressure, `getOldiesGames({ addMissingOnly })` backfills historical games, and
+  `fetchGamesScores()` fills null scores later — so a stored row would silently go stale. A compound
+  index plus the client cache removes the real cost (the collection scan) without that risk.
+
+### Files changed
+
+- `backend/src/games/games.service.ts`
+- `backend/src/games/games.controller.ts`
+- `backend/src/games/schemas/game.schema.ts`
+- `backend/src/games/tests/games.service.spec.ts`
+- `backend/docs/games/games.service.ts.md`
+- `backend/docs/games/games.controller.ts.md`
+- `frontend/utils/date.ts`
+- `frontend/utils/fetchData.ts`
+- `frontend/utils/fetchData.test.ts`
+- `frontend/components/GameModal.tsx`
+- `frontend/components/__tests__/GameModal-test.tsx`
+- `frontend/docs/date.ts.md`
+- `frontend/docs/fetchData.ts.md`
+- `frontend/docs/components/GameModal.tsx.md`
+
+---
+
+## Added: tappable team logos in the game modal linking to the team's Wikipedia page
+
+### Problem
+
+The two team logos in `GameModal` were purely decorative: no `onPress`, no accessibility affordance. Tapping the most recognizable element of a team gave no further information, while the modal already offered external links (live game, standings, arena).
+
+### Changes
+
+- **`frontend/utils/utils.tsx`** — two new exported helpers, placed next to the existing translation helpers since they resolve a locale the same way:
+  - `getWikipediaLanguage()` — reads `navigator.language` (already the app's locale source in `translateWord()`, `translateFilterLabel()`, `CardLarge`, `DatePicker`), keeps the **primary subtag** (`fr-CA` → `fr`) and returns it only if Wikipedia publishes an edition for it, otherwise `en`.
+    The check is an **explicit list**, not the raw locale: `SUPPORTED_WIKIPEDIA_LANGUAGES = ['en','fr','de','es','it','ja','ko','nl','pt','ru','zh']`. This is deliberately the exact set of the 11 languages the app is translated into — all of them have a Wikipedia edition, so **no translated language ever falls back**. Conversely a device set to a language the app does not support (`sv`, `pl`, `ar`) resolves to `en` rather than building a URL on a subdomain that may not exist.
+  - `getTeamWikipediaUrl(teamName?)` — returns `https://{locale}.wikipedia.org/wiki/{team}`, replacing runs of spaces with underscores (Wikipedia's article-name convention) and `encodeURIComponent`-escaping the result so names with a dot, an apostrophe or a slash stay well-formed (`"St. Louis City SC"` → `St._Louis_City_SC`). Returns `null` when there is no team name, letting callers keep the interaction inert.
+- **`frontend/components/GameModal.tsx`**:
+  - new `openWikipediaTeam(teamName?)` — resolves the URL, opens it with `Linking.openURL()`, and swallows any failure with a `console.warn`: a device without a browser (or a cancelled prompt) must never crash the modal for a convenience link.
+  - both `<Image>` logos (away and home) are now wrapped in `<TouchableOpacity activeOpacity={0.7}>` calling it. Each carries `accessibilityRole="link"` and an `accessibilityLabel` set to the team name, and is `disabled` when the team name is empty.
+  - The logo `source` logic is untouched — `displayHomeLogo` / `displayAwayLogo` still fall back to the bundled `defaultLogo` require asset, which the existing regression test guards.
+
+### Tests
+
+- **`frontend/components/__tests__/GameModal-test.tsx`** — new `GameModal Wikipedia links` suite (9 tests): both logos are wrapped, the away and home articles open with underscores, `fr-CA` resolves to the `fr` edition, **all 11 translated languages each produce their own subdomain**, an untranslated language (`sv-SE`) falls back to `en`, special characters are escaped, a failing `openURL` does not throw, and a nameless team disables the link.
+  The locale is overridden per test and restored afterwards, so no test depends on — or leaks into — the machine's language.
+
+### Files
+
+- `frontend/utils/utils.tsx`
+- `frontend/components/GameModal.tsx`
+- `frontend/components/__tests__/GameModal-test.tsx`
+- `frontend/docs/utils.tsx.md`, `frontend/docs/components/GameModal.tsx.md`
+
 ## Fix: brief "no results" flash when selecting a past day
 
 ### Problem
@@ -131,8 +423,6 @@ empty dark-mode logo (`homeTeamLogoDark`) from falling back to the light logo.
   `react-native/Libraries/Utilities/useColorScheme`. The suite fails on the pre-fix code
   (3 tests), which is the regression proof.
 
-
-
 ### Problem
 
 In the league slider of the **Today** tab (`frontend/app/(tabs)/index.tsx`), the favorites chip
@@ -257,6 +547,7 @@ A temporarily interrupted game (rain delay / suspended) was conflated with a pos
 - Added the `delayedGame` translation key in all 11 languages in `utils/utils.tsx`.
 
 ### Files
+
 - `frontend/constants/enum.tsx` — `DELAYED` enum value
 - `frontend/utils/date.ts` — `getGamesStatus()` returns `DELAYED`
 - `frontend/components/CardLarge.tsx` — translated label + live-badge exclusion
@@ -271,6 +562,7 @@ On the Calendar tab, swiping left/right on the page cycles through the home/all/
 - **Horizontal scroll guard** — `calendar.tsx` now reads `isScrollingHorizontally` from `HorizontalScrollContext` (via `useHorizontalScroll()`), mirrors it into `isScrollingHorizontallyRef`, and the `swipePanResponder`'s `onMoveShouldSetPanResponder` returns `false` while that ref is true — exactly the pattern already used in `index.tsx`. This prevents the swipe gesture from being claimed when the user is scrolling the team filter slider.
 
 ### Files
+
 - `frontend/app/(tabs)/calendar.tsx` — imported `useHorizontalScroll`; added `isScrollingHorizontallyRef` + sync `useEffect`; guarded `onMoveShouldSetPanResponder`.
 - `frontend/docs/calendar.tsx.md` — documented the horizontal-scroll guard on `swipePanResponder`.
 
@@ -285,11 +577,13 @@ On the Game of the Day (index) and Schedule tabs, the filter bars no longer scro
 - **Unchanged** — multi-selection bars (calendar team filter) and `disableSort` bars (month filter) keep the previous in-scroll behavior.
 
 ### Files
+
 - `frontend/components/FilterSlider.tsx` — added `pinnedItem`/`scrollItems` memos; `renderChip` helper (chip + separator); pinned chip + separator rendered before the ScrollView (which gets `flex: 1` when pinned); `edgeMask` left ramp switches to `transparent 0px → black 40px` when pinned.
 - `frontend/components/TeamFilter.tsx` — removed the negative-margin overlay (`marginLeft: -50`, `scrollPaddingLeft`, `fadeLeftInset`).
 - `frontend/docs/components/FilterSlider.tsx.md`, `frontend/docs/components/TeamFilter.tsx.md` — documented the pinned-selection behavior.
 
 ## Change: Datepicker modal — title matching the filter accordion + fixed height + top-aligned position
+
 ## Change: Datepicker modal — title matching the filter accordion + fixed height + top-aligned position
 
 The `DateRangePicker` modal is now aligned with the team/league filter (`Selector`) modal pattern:
@@ -299,6 +593,7 @@ The `DateRangePicker` modal is now aligned with the team/league filter (`Selecto
 - **Top-aligned position** — the modal backdrop now uses `justifyContent: 'flex-start'` with a `paddingTop` margin (web 60px, native 80px) instead of being vertically centered, so the whole card is always visible on the screen.
 
 ### Files
+
 - `frontend/components/DatePicker.tsx` — added `title` prop; `modalTitle` computed from `title ?? (selectDate ? selectYourDates : filterInterval)`; `calendarCard` now renders a `styles.header` (title + ✕) and a `ScrollView` (`styles.scrollContent` / `scrollContentContainer`, maxHeight 400) around the calendar; the "Aujourd'hui" button moved into a **footer** (`styles.footer`) **always rendered below** the ScrollView — in single-date mode it hosts the button, in range mode it acts as an **empty ~10px bottom buffer** — so it never disappears when the calendar fills the scroll height; removed `calendarContainer` style (replaced by `modalContent`/`header`/`headerTitle`/`scrollContent`/`scrollContentContainer`/`footer`); modal backdrop top-aligned.
 - `frontend/utils/types.tsx` — `DateRangePickerProps` gained `title?: string`.
 - `frontend/utils/utils.tsx` — added `filterInterval` translation key across all languages.
@@ -316,6 +611,7 @@ In range mode (schedule tab), the datepicker no longer commits the selection and
 - Single-date mode (index) is unchanged: tapping a day selects and closes immediately.
 
 ### Files
+
 - `frontend/components/DatePicker.tsx` — `handleDayPress` (range mode) no longer commits/closes; new `handleValidateRange`; footer renders the "Valider" button in range mode; `isOpen` effect re-syncs `tempRange` from props on open.
 - `frontend/utils/utils.tsx` — added `validate` translation key across all 11 languages.
 - `frontend/docs/components/DatePicker.tsx.md` — documented the validation flow.
@@ -325,6 +621,7 @@ In range mode (schedule tab), the datepicker no longer commits the selection and
 Presses inside the calendar (day cells, month-navigation arrows) bubbled up to the **parent** backdrop `TouchableOpacity` (RN-web propagation), closing the modal during the staged range selection. The dimmed backdrop is now a **sibling layer behind the card** (an `absoluteFill` TouchableOpacity underneath a `position: 'relative', zIndex: 1` card wrapper) on both web and native, so taps on the card can never reach the backdrop. Tapping outside the card still closes the picker.
 
 ### Files
+
 - `frontend/components/DatePicker.tsx` — restructured the web overlay and native Modal: backdrop press-catcher as sibling `absoluteFill` layer, card in a `position: 'relative', zIndex: 1` wrapper above it.
 - `frontend/docs/components/DatePicker.tsx.md` — documented the sibling-backdrop structure.
 
@@ -390,8 +687,6 @@ The `Calendar`'s `current` prop is **controlled**: it was always recomputed from
 
 ---
 
-
-
 Since the datepicker now renders in a centered modal (outside the page layout), it no longer needs extra vertical space: `openCalendarDatepicker` in `frontend/app/(tabs)/index.tsx` only calls `dateRangePickerRef.current?.open()` and the league/team accordion keeps its current state (open or closed).
 
 ## Fix: Datepicker opens in a centered modal (mobile clipping fixed)
@@ -439,7 +734,6 @@ The close (X) button now lives **at the bottom of the calendar card**, centered 
 
 ---
 
-
 ## Fix: Open the date selector collapses the league/team filter (mobile height)
 
 ### Symptom
@@ -473,6 +767,7 @@ Let the user close the calendar datepicker on the Game of the Day tab, while kee
 - `frontend/app/(tabs)/index.tsx` — reverted to `openCalendarDatepicker` (opens the calendar and collapses the league/team filter); removed the `calendarOpen` toggle state and the `onOpenChange` wiring (closing is handled by the X inside the calendar).
 
 ---
+
 ## Feature: Always-visible close (X) button for the calendar datepicker (Game of the Day)
 
 ### Goal
@@ -492,6 +787,7 @@ Provide a way to close the calendar datepicker on the Game of the Day tab. Inste
 - `frontend/docs/components/SliderDatePicker.tsx.md`, `frontend/docs/components/DatePicker.tsx.md`, `frontend/docs/types.tsx.md`, `frontend/docs/index.tsx.md` — docs updated.
 
 ---
+
 ## Fix: Selector loses selected teams on parent re-render (off-season API update)
 
 ### Symptom
@@ -520,6 +816,7 @@ The earlier `randomNumber(999999)` value used in the `i` field was a red herring
 Compare incoming selected IDs by content rather than by array reference:
 
 1. `Selector.tsx` — serialize `itemsSelectedIds` (`JSON.stringify`) and use it as the effect dependency, so a parent render that passes an equal-but-new `[]`-array no longer re-initializes the draft:
+
 ```js
 const selectedIdsKey = JSON.stringify(itemsSelectedIds);
 useEffect(() => {
@@ -533,8 +830,6 @@ useEffect(() => {
 2. `schedule.tsx`, `index.tsx` — replaced `randomNumber(999999)` for the `i` field with stable callback identifiers (`'teams'`, `'teamsFilter'`, `'teamsOfDay'`) so the parent can identify which selector is reporting a change across re-renders.
 
 3. Documentation updated: `frontend/docs/components/Selector.tsx.md`, `frontend/docs/schedule.tsx.md`, and `frontend/docs/index.tsx.md`.
-
-
 
 ## Fix: Infinite API call loop when no results (off-season with single league/team)
 
@@ -622,6 +917,7 @@ On mobile, the filter accordion (team/league and date/month) did not have the sa
 ### Root cause
 
 In `FilterAccordion.tsx`:
+
 - Desktop mode: the `Separator` was wrapped in `<ThemedElements>` (correct)
 - Mobile mode: the `ListItem.Accordion` was wrapped in a plain `<div style={{ width: '100%' }}>` (missing background)
 
@@ -663,11 +959,9 @@ Applied the filter background color (`#F0F0F0`/`#121212`) to the main container 
 
 The drag listeners for `mousemove`/`mouseup` were attached to the slider element itself, so as soon as the cursor left the bar during a drag (very frequent on the teams bar, where chips fill the whole row) `mouseleave` cancelled the drag. `mousemove`/`mouseup` are now listened on `window` while dragging (drag continues outside the bar and ends wherever the button is released), text selection is disabled during the drag, and a click following a drag of more than 5px is swallowed so releasing over a chip no longer changes the filter. Applies to all `FilterSlider` instances (leagues, teams, VS, months).
 
-
 ## Change: Team filter fade now matches the date sliders (loupe & VS)
 
 The fade was invisible on the teams slider because it was applied to the slider's outer container while the `ScrollView` (offset by the `paddingLeft: 50` compensation) hard-clipped its content right at the button's edge — there was nothing left to fade. The mask now lives **on the ScrollView itself**, exactly like `SliderDatePicker`: the ScrollView extends under the button via a negative margin, the compensating padding moved to `contentContainerStyle` (`scrollPaddingLeft`/`scrollPaddingRight` props), and the gradient runs from the ScrollView's left edge (under the button) to full opacity ~15px past it — the same progressive look as the dates, for the loupe, the VS button and the calendar teams row.
-
 
 ## Change: Edge fades repositioned into the visible area (they were hidden under the opaque buttons)
 
@@ -681,7 +975,7 @@ The left edge fade used to wait until the slider was scrolled before appearing �
 
 ## Change: Chips fade under the loupe/VS buttons — buttons never masked, uniform right spacing
 
-The edge-fade mask previously sat on the whole filter row, so the gradient visually bled onto the loupe/VS button and chips faded ~40px *before* reaching it (inconsistent spacing). Now the fade is applied to the slider wrapper only, and the slider extends 50px underneath the button (`marginLeft: -50`, compensated by `paddingLeft: 50` on `FilterSlider`), so chips fade out **beneath** the opaque button and are fully visible immediately after its 10px gap. The buttons get `zIndex: 20` so they stay above the slider.
+The edge-fade mask previously sat on the whole filter row, so the gradient visually bled onto the loupe/VS button and chips faded ~40px _before_ reaching it (inconsistent spacing). Now the fade is applied to the slider wrapper only, and the slider extends 50px underneath the button (`marginLeft: -50`, compensated by `paddingLeft: 50` on `FilterSlider`), so chips fade out **beneath** the opaque button and are fully visible immediately after its 10px gap. The buttons get `zIndex: 20` so they stay above the slider.
 
 - `frontend/components/TeamFilter.tsx` (loupe & "VS" buttons — all tabs): mask moved from the row to the slider wrapper; wrapper `marginLeft: -50`; `FilterSlider style={{ paddingLeft: 50 }}`; icon button `zIndex: 20`.
 - `frontend/app/(tabs)/calendar.tsx` (teams row: playlist-add + bookmarks buttons): same pattern with `marginLeft/Right: -50` and `FilterSlider style={{ paddingLeft: 50, paddingRight: 50 }}`; both buttons `zIndex: 20`.
@@ -714,6 +1008,7 @@ Three visual fixes on the Game of the Day tab filter stack:
 - **Uniform month spacing** — month chips previously had a fixed `width: 150` with centered labels, so the visible gaps between labels varied with label length ("Juin 2026" vs "Septembre 2026"). Chips are now auto-width (`paddingHorizontal: 12`) with a uniform `marginHorizontal: 12`, so the gap between consecutive months is constant. The auto-centering scroll no longer uses `index * 150`: each chip's `{ x, width }` is measured via `onLayout` into a `monthLayouts` state array (reset whenever the `months` list changes) and the scroll target is `layout.x + layout.width / 2 - windowWidth / 2`.
 
 ### Files changed
+
 - `frontend/app/(tabs)/index.tsx` — date `FilterAccordion` wrapped in `<ThemedElements>`.
 - `frontend/components/SliderDatePicker.tsx` — auto-width month chips with uniform margins; `monthLayouts` measurement + scroll math update; `MONTH_ITEM_WIDTH` removed.
 - `frontend/docs/components/SliderDatePicker.tsx.md` — month row and auto-centering behaviour updated.
@@ -732,6 +1027,7 @@ The search (magnifier) button is an **overlay on the left edge, aligned with the
 - `container` keeps `position: 'relative'` to anchor the absolutely-positioned button.
 
 ### Files changed
+
 - `frontend/components/SliderDatePicker.tsx` — rows wrapper padding adjusted; magnifier stays the last child (right-edge overlay → left-edge overlay).
 - `frontend/components/styles/SliderDatePicker.styles.ts` — `searchButton` repositioned (`left: 15`, `top: 10`); `monthContainer` `paddingLeft: 40`.
 - `frontend/app/(tabs)/index.tsx` — removed the duplicate horizontal padding on the wrapper around `SliderDatePicker`.
@@ -749,6 +1045,7 @@ The search (magnifier) button is no longer a left column: it now **floats on the
 - The button is rendered as the last child of the component root, so it overlays both the month row and the day row.
 
 ### Files changed
+
 - `frontend/components/SliderDatePicker.tsx` — left column removed; rows wrapper is now `flex: 1` + horizontal padding; magnifier rendered last as a right-edge overlay.
 - `frontend/components/styles/SliderDatePicker.styles.ts` — `searchButton` converted to absolute overlay positioning; `container` set `position: 'relative'`.
 - `frontend/docs/components/SliderDatePicker.tsx.md` — purpose and search-button feature updated.
@@ -756,6 +1053,7 @@ The search (magnifier) button is no longer a left column: it now **floats on the
 ---
 
 ## Change: SliderDatePicker — remove "today" button, center magnifier
+
 ## Change: SliderDatePicker — remove "today" button, center magnifier
 
 The date slider no longer has a dedicated "today" (current date) button. The left column now contains **only** the search (magnifier) button, vertically and horizontally centered, sized exactly like the team-filter magnifier in `TeamFilter`.
@@ -765,6 +1063,7 @@ The date slider no longer has a dedicated "today" (current date) button. The lef
 - Left column uses `justifyContent: 'center'` + `alignItems: 'center'` so the loupe is vertically centered spanning both date rows.
 
 ### Files changed
+
 - `frontend/components/SliderDatePicker.tsx` — left column simplified, "today" button removed, magnifier centered/styled.
 - `frontend/components/styles/SliderDatePicker.styles.ts` — removed `todayButton`/`todayDateText`/`todayYearText`, `searchButton` now circular 40×40.
 - `frontend/docs/components/SliderDatePicker.tsx.md` — updated purpose/features/props and removed stale "today" button references.
@@ -779,6 +1078,7 @@ The `DateRangePicker` calendar includes a quick-return-to-today button **only in
 - Removed the non-functional month-tracking (`currentVisibleDate` / `onVisibleMonthsChange`) logic that made the button appear/disappear and had no effect on navigation.
 
 ### Files changed
+
 - `frontend/components/DatePicker.tsx` — simplified `goToToday`, always visible in `selectDate` mode, removed `currentVisibleDate`/`isCurrentMonthToday`/`handleVisibleMonthsChange`.
 - `frontend/docs/components/DatePicker.tsx.md` — updated feature/state/function docs.
 
@@ -806,6 +1106,7 @@ The search (magnifier) button rendered by `SliderDatePicker` (Game of the Day ta
 - `frontend/app/(tabs)/index.tsx` renders a hidden `DateRangePicker` (ref + `selectDate` + `showInput={false}`) and passes `onSearch={() => dateRangePickerRef.current?.open()}` to `SliderDatePicker`. The selected date flows back through the existing `handleDateChange(start, end)`.
 
 ### Files changed
+
 - `frontend/components/DatePicker.tsx` — `forwardRef`, `useImperativeHandle`, `showInput` prop.
 - `frontend/utils/types.tsx` — `showInput?: boolean` added to `DateRangePickerProps`.
 - `frontend/app/(tabs)/index.tsx` — import + ref + `onSearch` wiring + hidden picker instance.
@@ -824,12 +1125,11 @@ The `DateRangePicker` calendar now includes a quick-return-to-today button:
 - New state: `currentVisibleDate` (YYYY-MM-DD) tracks the visible month via `onVisibleMonthsChange`. New functions: `handleVisibleMonthsChange`, `goToToday`, and memo `isCurrentMonthToday`.
 
 ### Files changed
+
 - `frontend/components/DatePicker.tsx` — `currentVisibleDate` state, `handleVisibleMonthsChange`, `goToToday`, `isCurrentMonthToday` memo, "Aujourd'hui" button in calendar container.
 - `frontend/docs/components/DatePicker.tsx.md` — new state, functions, and feature note.
 
-
 ---
-
 
 ---
 
@@ -863,16 +1163,16 @@ Modified file: `frontend/components/CardLarge.tsx`
 
 ### Behavior
 
-| `verticalMode` | Order shown in card                       |
-| -------------- | ----------------------------------------- |
-| `false`        | Left to right: away / center / home       |
-| `true`         | Top to bottom: away / `@` / home / time   |
+| `verticalMode` | Order shown in card                     |
+| -------------- | --------------------------------------- |
+| `false`        | Left to right: away / center / home     |
+| `true`         | Top to bottom: away / `@` / home / time |
 
 ### Modified files
 
-| File                                       | Change                                      |
-| ------------------------------------------ | ------------------------------------------- |
-| `frontend/components/CardLarge.tsx`         | Reordered stacked rows via CSS `order`      |
+| File                                        | Change                                       |
+| ------------------------------------------- | -------------------------------------------- |
+| `frontend/components/CardLarge.tsx`         | Reordered stacked rows via CSS `order`       |
 | `frontend/docs/components/CardLarge.tsx.md` | Documented the new vertical stacked ordering |
 
 ---
@@ -1134,7 +1434,7 @@ Modified file: `frontend/hooks/useFavoriteColor.ts`
 #### sessionStorage persistence
 
 ```typescript
-const STORAGE_KEY = 'favoriteColor';
+const STORAGE_KEY = "favoriteColor";
 ```
 
 - `readStoredColors()` — reads and parses `{ backgroundColor, textColor }` from `sessionStorage`, returns `null` on missing/corrupted data.
@@ -1289,7 +1589,7 @@ Updated the month comparison to build the full month key matching the `monthFilt
 ```typescript
 if (monthFilter.length > 0) {
   const year = new Date(day).getFullYear();
-  const month = new Date(day).toLocaleString('default', { month: 'long' });
+  const month = new Date(day).toLocaleString("default", { month: "long" });
   const monthKey = `${month} ${year}`;
   if (!monthFilter.includes(monthKey)) continue;
 }
@@ -1343,7 +1643,7 @@ useEffect(() => {
     return;
   }
   const unsubscribe = onSnapshot(
-    doc(db, 'users', user.uid),
+    doc(db, "users", user.uid),
     (docSnap) => {
       if (docSnap.exists()) {
         applyFirestoreData(data); // overwrites local cache
@@ -1438,8 +1738,8 @@ When `firestoreReady` becomes `true`, the color is recomputed. If the cache hasn
 
 ```typescript
 useEffect(() => {
-  window.addEventListener('favoritesUpdated', updateColor);
-  return () => window.removeEventListener('favoritesUpdated', updateColor);
+  window.addEventListener("favoritesUpdated", updateColor);
+  return () => window.removeEventListener("favoritesUpdated", updateColor);
 }, [updateColor]);
 ```
 

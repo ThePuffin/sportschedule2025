@@ -77,6 +77,27 @@ Fetches remaining games for a team. Uses the team games cache (6-minute TTL). If
 
 Fetches past results for a team.
 
+### `fetchRecentFormGames(teamSelected, before?, limit = 5)`
+
+Fetches the last finished games of a team for the modal's form dots, from
+`GET /games/team/:teamSelected/form`. Used by `GameModal` instead of `fetchResultsByTeam`, because the
+`/results` endpoint filters on `teamSelectedId` — an id only stored on **one** side of a deduplicated
+game, so it returned an incomplete history for the opponent.
+
+- `before` is only passed for a game already played (that game's own ISO start); it becomes the strict
+  `startTimeUTC < before` bound. It is left `undefined` for an upcoming game, so the backend returns
+  the team's most recent played games. Omitting it also keeps the URL — hence the cache key — stable
+  across opens, whereas a `now` bound carries milliseconds and would make every request unique.
+- An unparsable `before` is treated as no bound.
+- **Own cache layer** with a stable key `recent_form_v2_<team>_<limit>_<before|latest>`: a past game's row
+  is immutable, so it is kept for **24 h**; an upcoming game's row still gains results, so it is
+  re-checked every **5 min**. An empty row is never cached, so a team without history is not stuck
+  blank once its first result lands. (`fetchWithCacheStrategy` is called with `cacheKey: null`: it only
+  provides the fetch + retry, not this cache.) The `v2` suffix is a cache version: it was bumped when
+  the backend started collapsing the double-stored copies of a match, so the 24 h entries written with
+  the duplicates are not served anymore — bumping it is the way to invalidate this cache from the
+  server side.
+
 ### `fetchResultsByLeague(league, startDate?, maxResults?)`
 
 Fetches past results for a league.

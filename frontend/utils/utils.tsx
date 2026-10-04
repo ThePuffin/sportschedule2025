@@ -108,6 +108,53 @@ export const generateICSFile = ({ homeTeam, awayTeam, startTimeUTC, arenaName, p
   }
 };
 
+/**
+ * Wikipedia editions the app is allowed to link to.
+ *
+ * The app is translated into 11 languages (`fr, de, es, it, ja, ko, nl, pt, ru,
+ * zh`, plus `en`). Every one of them has a Wikipedia edition, so they all map
+ * to a valid subdomain — but the list is kept explicit rather than computed from
+ * the device locale, so a device set to an unsupported language (e.g. `sv`,
+ * `pl`, `ar`) deterministically falls back to `en` instead of building a URL
+ * that would 404 on an empty subdomain.
+ */
+const SUPPORTED_WIKIPEDIA_LANGUAGES = ['en', 'fr', 'de', 'es', 'it', 'ja', 'ko', 'nl', 'pt', 'ru', 'zh'];
+
+/** Default Wikipedia edition, used whenever the device language is not supported. */
+const DEFAULT_WIKIPEDIA_LANGUAGE = 'en';
+
+/**
+ * Resolves the Wikipedia edition to use for the current device language.
+ *
+ * Reads the same source as the rest of the app (`navigator.language`, already
+ * used by `translateWord()` / `translateFilterLabel()` / `CardLarge`), takes the
+ * primary subtag (`fr-CA` -> `fr`) and returns it when Wikipedia has an edition
+ * for it, `en` otherwise.
+ */
+export const getWikipediaLanguage = (): string => {
+  const language = typeof navigator !== 'undefined' && navigator.language ? navigator.language : '';
+  const primary = language.split('-')[0].toLowerCase();
+  return SUPPORTED_WIKIPEDIA_LANGUAGES.includes(primary) ? primary : DEFAULT_WIKIPEDIA_LANGUAGE;
+};
+
+/**
+ * Builds the Wikipedia article URL for a team, in the reader's language.
+ *
+ * Spaces become underscores (Wikipedia's own article-name convention) and the
+ * result is `encodeURIComponent`-escaped so names containing an apostrophe
+ * ("St. Louis City SC"), a dot or a slash still produce a valid URL.
+ * Returns `null` when there is no team name to link to, so callers can skip the
+ * press handler entirely.
+ */
+export const getTeamWikipediaUrl = (teamName?: string | null): string | null => {
+  if (!teamName) return null;
+
+  const formattedTeamName = teamName.trim().replace(/\s+/g, '_');
+  if (!formattedTeamName) return null;
+
+  return `https://${getWikipediaLanguage()}.wikipedia.org/wiki/${encodeURIComponent(formattedTeamName)}`;
+};
+
 export const translateFilterLabel = (context: 'league' | 'team' | 'date' | 'filter' | 'league_team') => {
   const language = (typeof navigator !== 'undefined' ? navigator.language : 'en').split('-')[0];
 

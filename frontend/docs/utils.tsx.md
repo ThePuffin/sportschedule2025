@@ -49,6 +49,24 @@ Returns a localized label for filter sections (`league`, `team`, `date`, `league
 
 Returns a localized translation for a word/key. Supports the same languages as `translateFilterLabel`. Used for UI text like `all`, `gamesOfDay`, `filterTeams`, `inProgress`, etc.
 
+### `getWikipediaLanguage()`
+
+Resolves which Wikipedia edition to link to, based on `navigator.language` (the same locale source as `translateWord()` / `translateFilterLabel()`).
+
+- Takes the **primary subtag** of the device locale: `fr-CA` → `fr`.
+- Returns it only when Wikipedia actually publishes an edition for it, using the explicit `SUPPORTED_WIKIPEDIA_LANGUAGES` list — which is exactly the app's 11 translated languages (`en, fr, de, es, it, ja, ko, nl, pt, ru, zh`), all of which have an edition.
+- Falls back to `en` otherwise (`DEFAULT_WIKIPEDIA_LANGUAGE`), so a device set to an untranslated language (e.g. `sv`, `pl`, `ar`) still gets a working URL instead of an empty subdomain.
+
+The list is deliberately explicit rather than derived from the locale: it is the guarantee that *every* language the app is translated into resolves to a valid Wikipedia domain.
+
+### `getTeamWikipediaUrl(teamName?)`
+
+Builds `https://{language}.wikipedia.org/wiki/{team}` and returns `null` when there is no usable team name, so callers can make the interaction inert instead of opening a broken page.
+
+- Trims the name and replaces **runs of spaces with underscores**, Wikipedia's own article-name convention.
+- Applies `encodeURIComponent` so names containing characters invalid in a URL path stay well-formed (e.g. `"St. Louis City SC"` → `St._Louis_City_SC`).
+- Used by `GameModal.openWikipediaTeam()` for both team logos.
+
 ### `getFilterAccordionLabel({ prefix, fallbackLabel, activeFilter, selectedTeam, expanded })`
 
 Builds an accordion label for filter sections, only showing the dynamic selection when the accordion is **closed** (collapsed). Reusable across screens (e.g. index, schedule).
