@@ -1,5 +1,5 @@
 import DateRangePicker, { DatePickerHandle } from '@/components/DatePicker';
-import FilterAccordion from '@/components/FilterAccordion';
+import FilterAccordion, { ACCORDION_MAX_WIDTH } from '@/components/FilterAccordion';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
 import PageHeader from '@/components/PageHeader';
@@ -125,6 +125,9 @@ const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
 const GameofTheDayContent = () => {
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 768;
+  // Filter sections collapse into accordions on phones AND tablets (portrait), so the
+  // games list keeps enough vertical room on smaller screens
+  const useFilterAccordion = width < ACCORDION_MAX_WIDTH;
   const { user, firestoreReady } = useAuth();
   const router = useRouter();
   const { date: dateParam } = useLocalSearchParams<{ date: string }>();
@@ -842,30 +845,24 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       if (!teamsMap.has(game.homeTeamId)) {
         teamsMap.set(game.homeTeamId, {
           uniqueId: game.homeTeamId,
-          value: game.homeTeamId,
           id: game.homeTeamId,
           label: game.homeTeam,
           teamLogo: game.homeTeamLogo,
           teamCommonName: game.homeTeam,
           league: game.league,
           abbrev: game.homeTeamShort,
-          conferenceName: '',
-          divisionName: '',
           updateDate: '',
         });
       }
       if (!teamsMap.has(game.awayTeamId)) {
         teamsMap.set(game.awayTeamId, {
           uniqueId: game.awayTeamId,
-          value: game.awayTeamId,
           id: game.awayTeamId,
           label: game.awayTeam,
           teamLogo: game.awayTeamLogo,
           teamCommonName: game.awayTeam,
           league: game.league,
           abbrev: game.awayTeamShort,
-          conferenceName: '',
-          divisionName: '',
           updateDate: '',
         });
       }
@@ -880,7 +877,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       : null;
     const { prefix, value } = getFilterAccordionLabel({
       prefix: translateFilterLabel('league_team'),
-      fallbackLabel: translateFilterLabel(isSmallDevice ? 'league_team' : 'league'),
+      fallbackLabel: translateFilterLabel(useFilterAccordion ? 'league_team' : 'league'),
       activeFilter,
       selectedTeam,
       expanded: leagueAccordionExpanded,
@@ -896,7 +893,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       );
     }
     return prefix;
-  }, [teamSelectedId, teamsOfTheDay, activeFilter, isSmallDevice, leagueAccordionExpanded]);
+  }, [teamSelectedId, teamsOfTheDay, activeFilter, useFilterAccordion, leagueAccordionExpanded]);
 
   const displayScoreToggle = useCallback(() => {
     return <PageHeader rightElement={<ScoreToggle value={showScores} onValueChange={handleScoreToggle} />} />;
@@ -1209,7 +1206,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                 {displayScoreToggle()}
                 <div
                   style={
-                    !isSmallDevice
+                    !useFilterAccordion
                       ? {
                           width: windowWidth < 1200 ? '95%' : '100%',
                           margin: '0 auto',
@@ -1224,7 +1221,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                     <FilterAccordion
                       label={leagueAccordionLabel}
                       defaultOpen={false}
-                      isSmallDevice={isSmallDevice}
+                      isSmallDevice={useFilterAccordion}
                       expanded={leagueAccordionExpanded}
                       onExpandedChange={setLeagueAccordionExpanded}
                     >
@@ -1249,17 +1246,17 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                         ]}
                         disabledValues={disabledFilters}
                       />
-                      {isSmallDevice && (
+                      {useFilterAccordion && (
                         <div style={{ marginTop: 10, marginBottom: 10 }}>
                           <Separator />
                         </div>
                       )}
 
-                      {isSmallDevice && displayFilters()}
+                      {useFilterAccordion && displayFilters()}
                     </FilterAccordion>
                   </ThemedElements>
 
-                  {!isSmallDevice && (
+                  {!useFilterAccordion && (
                     <ThemedElements>
                       <FilterAccordion label={translateFilterLabel('team')} defaultOpen={true} isSmallDevice={false}>
                         {displayFilters()}
@@ -1270,7 +1267,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                   <ThemedElements>
                     <FilterAccordion
                       label={
-                        isSmallDevice && !dateAccordionExpanded ? (
+                        useFilterAccordion && !dateAccordionExpanded ? (
                           <span>
                             {translateFilterLabel('date')} :{' '}
                             <i>
@@ -1288,7 +1285,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                         )
                       }
                       defaultOpen={false}
-                      isSmallDevice={isSmallDevice}
+                      isSmallDevice={useFilterAccordion}
                       onExpandedChange={handleDateAccordionExpanded}
                     >
                       <div>

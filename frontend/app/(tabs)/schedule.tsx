@@ -1,4 +1,4 @@
-import FilterAccordion from '@/components/FilterAccordion';
+import FilterAccordion, { ACCORDION_MAX_WIDTH } from '@/components/FilterAccordion';
 import FilterSlider from '@/components/FilterSlider';
 import NoResults from '@/components/NoResults';
 import PageHeader from '@/components/PageHeader';
@@ -76,6 +76,9 @@ export default function Schedule() {
   const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   const isSmallDevice = width <= 768;
+  // Filter sections collapse into accordions on phones AND tablets (portrait), so the
+  // games list keeps enough vertical room on smaller screens
+  const useFilterAccordion = width < ACCORDION_MAX_WIDTH;
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [leagueOfSelectedTeam, setleagueOfSelectedTeam] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -123,11 +126,8 @@ export default function Schedule() {
     uniqueId: 'all',
     label: 'All',
     id: 'all',
-    value: 'all',
     teamLogo: '',
     teamCommonName: 'All',
-    conferenceName: '',
-    divisionName: '',
     league: leagueOfSelectedTeam,
     abbrev: 'ALL',
     updateDate: '',
@@ -607,12 +607,13 @@ export default function Schedule() {
   }, [isLoading, showPreviousScores, visibleGamesByMonth.length, teamSelected, leagueOfSelectedTeam, leaguesAvailable]);
 
   const stickyFiltersHeight = useMemo(() => {
-    if (!isSmallDevice) return 0;
+    // Accordion filters exist on phones AND tablets, so the sticky offset applies to both
+    if (!useFilterAccordion) return 0;
 
     const accordionOpenCount = [isTeamAccordionOpen, isDateAccordionOpen].filter(Boolean).length;
     const baseHeight = 180;
     return baseHeight + accordionOpenCount * 126;
-  }, [isDateAccordionOpen, isSmallDevice, isTeamAccordionOpen]);
+  }, [isDateAccordionOpen, useFilterAccordion, isTeamAccordionOpen]);
 
   const uniqueTeamsFromGames = useMemo(() => {
     if (teamSelected === 'all' && monthFilter.length === 0) {
@@ -641,12 +642,9 @@ export default function Schedule() {
             label: homeTeam,
             league,
             uniqueId: homeTeamId,
-            value: homeTeamId,
             id: homeTeamId,
             teamLogo: '',
             teamCommonName: homeTeam,
-            conferenceName: '',
-            divisionName: '',
             abbrev: '',
             updateDate: '',
           });
@@ -657,12 +655,9 @@ export default function Schedule() {
             label: awayTeam,
             league,
             uniqueId: awayTeamId,
-            value: awayTeamId,
             id: awayTeamId,
             teamLogo: '',
             teamCommonName: awayTeam,
-            conferenceName: '',
-            divisionName: '',
             abbrev: '',
             updateDate: '',
           });
@@ -777,8 +772,8 @@ export default function Schedule() {
                   <PreviousScoreToggle value={showPreviousScores} onValueChange={handlePreviousScoreToggle} />
                 }
               />
-              <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
-                {isSmallDevice ? (
+              <div style={{ width: '100%', padding: useFilterAccordion ? 0 : 10, boxSizing: 'border-box' }}>
+                {useFilterAccordion ? (
                   <FilterAccordion
                     label={teamAccordionLabel}
                     defaultOpen={true}
@@ -914,7 +909,7 @@ export default function Schedule() {
                   <FilterAccordion
                     label={dateAccordionLabel}
                     defaultOpen={false}
-                    isSmallDevice={isSmallDevice}
+                    isSmallDevice={useFilterAccordion}
                     onExpandedChange={setIsDateAccordionOpen}
                   >
                     <ThemedElements style={{ width: '100%' }}>
@@ -950,7 +945,8 @@ export default function Schedule() {
                     </ThemedElements>
                   </FilterAccordion>
                 )}
-                {!isSmallDevice || (visibleGamesByMonth.length > 1 ? isDateAccordionOpen : isTeamAccordionOpen) ? (
+                {!useFilterAccordion ||
+                (visibleGamesByMonth.length > 1 ? isDateAccordionOpen : isTeamAccordionOpen) ? (
                   <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 }}>
                     <Separator />
                   </ThemedElements>

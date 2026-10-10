@@ -100,12 +100,9 @@ const buildGame = (overrides: Partial<GameFormatted> = {}): GameFormatted => ({
   teamSelectedId: "",
   // Far in the future so the live-score effect skips its network call.
   startTimeUTC: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-  show: true,
   selectedTeam: false,
   league: "NHL",
   urlLive: "https://example.com/live",
-  color: "#000000",
-  backgroundColor: "#ffffff",
   awayTeamColor: "#000000",
   awayTeamBackgroundColor: "#ffffff",
   homeTeamColor: "#000000",

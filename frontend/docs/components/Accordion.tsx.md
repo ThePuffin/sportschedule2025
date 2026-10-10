@@ -10,7 +10,7 @@ The **Accordion** component displays a collapsible section with a title, an even
 - **Event count badge** — shows the number of games; can be hidden (along with the divider bar under the title) via the `hideEventCount` prop
 - **Responsive grid** — 3 columns on desktop, 1 column on mobile
 - **Game cards** — renders `CardLarge` for each game
-- **Scroll offset** — accounts for sticky filter header height
+- **Scroll offset** — accounts for the sticky filter header height. `getScheduleScrollOffset` is called with the **accordion** breakpoint (`width < ACCORDION_MAX_WIDTH`, i.e. phones *and* tablets), not the `isSmallDevice` card-layout breakpoint, because the sticky filter band is an accordion on both
 - **Selection support** — highlights selected games
 - **No results** — shows `NoResults` component when empty
 

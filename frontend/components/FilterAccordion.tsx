@@ -1,8 +1,17 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { ListItem } from '@rneui/themed';
 import React, { ReactNode, useEffect, useState } from 'react';
+import { useWindowDimensions } from 'react-native';
 import Separator from './Separator';
 import { ThemedElements } from './ThemedElements';
+
+/**
+ * Below this width (px) the filter sections render as collapsible accordions.
+ * Covers phones and tablets in portrait, where the always-expanded filter band
+ * leaves too little vertical space for the games list. Above it, the sections
+ * render as static labelled blocks.
+ */
+export const ACCORDION_MAX_WIDTH = 1024;
 
 interface FilterAccordionProps {
   readonly label: string | ReactNode;
@@ -25,6 +34,9 @@ export default function FilterAccordion({
   const [internalExpanded, setInternalExpanded] = useState(defaultOpen);
   const isControlled = expanded !== undefined;
   const isExpanded = isControlled ? expanded : internalExpanded;
+  const { width } = useWindowDimensions();
+  // Accordion up to 1024px (phones + tablets in portrait), static sections above
+  const useAccordion = width < ACCORDION_MAX_WIDTH;
   const titleColor = useThemeColor({ light: '#48484A', dark: '#8E8E93' }, 'text');
   const borderColor = useThemeColor({ light: '#D1D1D6', dark: '#38383A' }, 'text');
 
@@ -42,8 +54,8 @@ export default function FilterAccordion({
     }
   };
 
-  // On mobile, use accordion. On desktop, show normally
-  if (!isSmallDevice) {
+  // Accordion on phones and tablets (portrait): static labelled section on large screens
+  if (!useAccordion) {
     return (
       <>
         {/* The label separator must sit on the same background as the filter content below it (ThemedElements), not the page background */}

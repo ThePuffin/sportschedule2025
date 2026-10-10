@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { maxFavoritesNumber } from '@/constants/Constants';
 import { GameStatus, leagueLogos } from '@/constants/enum';
 import { useAuth } from '@/context/AuthContext';
-import { getGamesStatus } from '@/utils/date';
+import { getGamesStatus, isGameAwaitingFinalization } from '@/utils/date';
 import { getCache, saveCache } from '@/utils/fetchData';
 import { syncToFirestore } from '@/utils/syncService';
 import { CardsProps, GameFormatted, Team } from '@/utils/types';
@@ -88,6 +88,7 @@ export default function CardLarge({
     gameStatus,
     gameClock,
     gamePeriod,
+    dataChangedAt,
   } = data;
 
   if (league.includes('OLYMPICS')) {
@@ -422,7 +423,18 @@ export default function CardLarge({
       gameStatus !== 'FINAL' &&
       gameStatus !== 'FINISHED' &&
       gameStatus !== 'ENDED');
-  const showFinalization = !hasScore && serviceReportsNotTerminated && isStarted4hAgo;
+  // "Finalisation" (the provider never sent a score) is only shown once the
+  // expected end of the match has passed AND the feed tells us nothing more:
+  // no time left on the clock, or a feed frozen since `dataChangedAt`.
+  const showFinalization =
+    !hasScore &&
+    serviceReportsNotTerminated &&
+    isGameAwaitingFinalization({
+      startTimeUTC,
+      league,
+      gameClock,
+      dataChangedAt,
+    });
 
   if (showFinalization) {
     timeText = translateWord('final');

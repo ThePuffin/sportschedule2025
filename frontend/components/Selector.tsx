@@ -139,7 +139,8 @@ export default function Selector({
       .map((item) => {
         const id = typeof item === 'string' ? item : item.uniqueId;
         const labelRaw = typeof item === 'string' ? item : item.label;
-        const league = typeof item === 'string' ? item : item.league || item.value;
+        const league =
+          typeof item === 'string' ? item : item.league || item.uniqueId;
 
         const label = labelRaw === 'All' ? translateWord('all') : labelRaw;
 

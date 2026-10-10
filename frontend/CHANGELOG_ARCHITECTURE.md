@@ -2,6 +2,168 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Fixed: dependency vulnerabilities via non-breaking `npm audit fix`
+
+`npm audit fix` (no `--force`) was run to avoid the breaking upgrades that `npm audit fix --force` would impose on an Expo/React Native project (it wants to jump `expo` 52 → 57 and `react-native` 0.76.7 → 0.75.5, which would break the Metro/babel toolchain).
+
+Result: **120 → 94 vulnerabilities**, and **criticals 4 → 1**:
+
+- ✅ removed criticals: `protobufjs` (arbitrary code execution), `shell-quote` (newline injection), `websocket-driver` (compression resource-limit bypass)
+- ✅ removed a large batch of highs (brace-expansion, semver-reDoS, `@react-navigation/*`, `@typescript-eslint/*`, `@grpc/grpc-js`, `nanoid`, etc.)
+- **no direct dependency version changed** (`expo ~52.0.38`, `react-native 0.76.7`, `react 18.3.1` all intact) — only transitive entries in `package-lock.json` were refreshed.
+
+The one remaining critical is **`tar <=7.5.20`** (hardlink path traversal). Its only listed fix is a nonsensical `expo@44.0.6` downgrade, so it is intentionally **not** applied. It comes in transitively through the Expo/React Native native build tooling (dev-time, not shipped to the app bundle). It will be resolved by a future `expo`/`expo-template` upgrade rather than a forced install here.
+
+> Note: `npx tsc --noEmit` reports ~21 pre-existing errors in `app/refresh.tsx`, `components/Accordion.tsx`, `components/Selector.tsx`, `utils/dateRange.test.ts`, etc. These are unrelated to this change (none reference `node_modules` or any package touched by the audit fix) and existed before it.
+
+## Removed: `game.show`, `game.color`, `game.backgroundColor`, dead `Cards.tsx`, and `Team.value`
+
+### Problem
+
+A second field audit showed more dead code left behind by earlier refactors:
+
+- **`GameFormatted.show`** — always written as `homeTeam.abbrev === teamId`, i.e. an exact duplicate
+  of `selectedTeam`, and read by no component.
+- **`GameFormatted.color` / `backgroundColor`** — per-game copies of the team colors, only ever read
+  by the dead `Cards.tsx`; every live card uses `homeTeamColor`/`awayTeamColor` instead.
+- **`components/Cards.tsx`** — the small card variant, superseded by `CardLarge` (rendered by
+  `Accordion`/`GamesSelected`), was imported nowhere. Its 17 TypeScript errors were part of the
+  pre-existing error count.
+- **`Team.value`** — was always written as `value: uniqueId`, so it was a redundant alias of
+  `uniqueId`; the only reader was `Selector.tsx`'s league fallback.
+
+### Changes
+
+- **`frontend/utils/types.tsx`** — dropped `show`, `color`, `backgroundColor` from `GameFormatted`
+  and `value` from `Team` (`CardsProps` stays: it is the props interface used by `CardLarge`).
+- **`frontend/app/(tabs)/schedule.tsx`**, **`frontend/app/(tabs)/index.tsx`**,
+  **`frontend/components/FavModal.tsx`** — dropped the `value: …` initializers from the synthesized
+  `Team` literals (the "All" option, teams derived from games, and the favorites list).
+- **`frontend/components/Selector.tsx`** — the league fallback now uses `item.uniqueId` instead of
+  `item.value` (same value, since `value` was always `uniqueId`).
+- **`frontend/components/Cards.tsx`** — deleted (no importer). Its documentation file
+  `docs/components/Cards.tsx.md` was deleted with it.
+- **`frontend/components/__tests__/GameModal-test.tsx`** — fixture no longer sets `show`/`color`/
+  `backgroundColor`.
+- **`frontend/docs/types.tsx.md`**, **`frontend/docs/components/GameModal.tsx.md`** — table rows
+  and the `Cards`/`CardLarge` placeholder mention updated accordingly.
+
+**Impact:** none on behavior — `show` duplicated `selectedTeam`, `color`/`backgroundColor` were
+never rendered, `Cards.tsx` was unreachable, and `value === uniqueId` everywhere. Existing cached
+payloads may still carry the removed keys; they are simply ignored.
+
+## Removed: unused fields `divisionName`, `conferenceName` (Team) and `venueTimezone` (Game)
+
+### Problem
+
+The type audit showed `Team.divisionName`, `Team.conferenceName` and `Game.venueTimezone` were never
+read by any component: they were declared in `utils/types.tsx` and initialized to `''` in a few
+object literals, but no UI or logic consumed them. They have been dropped from the backend schemas at
+the same time.
+
+### Changes
+
+- **`frontend/utils/types.tsx`** — removed `conferenceName` and `divisionName` from `Team`, and
+  `venueTimezone?` from `GameFormatted`.
+- **`frontend/app/(tabs)/schedule.tsx`**, **`frontend/app/(tabs)/index.tsx`**,
+  **`frontend/components/FavModal.tsx`** — dropped the `conferenceName: ''` / `divisionName: ''`
+  initializers from the synthesized `Team` literals (the "All" option, teams derived from games, and
+  the favorites list).
+- **`frontend/docs/types.tsx.md`** — table rows removed accordingly.
+
+**Impact:** none on behavior — the fields were never rendered or filtered on.
+
+## Feature: Filter accordions on tablets (breakpoint raised to 1024px)
+
+### Problem
+
+On a tablet (typically 768–1024px wide in portrait), the filters were always fully expanded: the filter band (league slider, team filters, opponent filter, month slider) took a large part of the screen height, leaving too little room to see the games.
+
+### Solution
+
+`FilterAccordion` decided between accordion and static section from the `isSmallDevice` prop (`width < 768`), so anything wider than 768px got the always-expanded layout. The breakpoint has been raised to **1024px**, which covers tablets in portrait:
+
+1. `frontend/components/FilterAccordion.tsx` — new exported constant `ACCORDION_MAX_WIDTH = 1024`. The component now reads the width itself with `useWindowDimensions` and renders the accordion when `width < ACCORDION_MAX_WIDTH`, regardless of the `isSmallDevice` prop (prop kept for API compatibility).
+2. `frontend/app/(tabs)/schedule.tsx`, `index.tsx`, `calendar.tsx` — each screen now derives `useFilterAccordion = width < ACCORDION_MAX_WIDTH` from the imported constant and uses it for every filter-layout branch (padding, accordion vs static markup, separator visibility, accordion labels). `isSmallDevice` (`< 768`) is kept for the non-filter layouts (column counts, single-match accordion, sticky offset).
+
+At 1024px and above nothing changes: filters stay expanded and labelled as before.
+
+### Files
+
+- `frontend/components/FilterAccordion.tsx` — `ACCORDION_MAX_WIDTH`, internal width check.
+- `frontend/app/(tabs)/schedule.tsx`, `index.tsx`, `calendar.tsx` — `useFilterAccordion`.
+- `frontend/components/Accordion.tsx` — scroll offset (`getScheduleScrollOffset`) now uses the accordion breakpoint instead of `< 768`, so anchor scrolling stays correct on tablets.
+- `frontend/docs/components/FilterAccordion.tsx.md`, `frontend/docs/components/Accordion.tsx.md` — docs updated.
+
+## Changed: "Finalisation" also covers a live feed that went silent (`dataChangedAt`)
+
+### Problem
+
+Once "Finalisation" became clock-based, one case was left uncovered: the expected end had passed, the
+clock still read `"02:00"`, and the provider had simply stopped sending anything new for minutes. The
+card kept showing a live-looking `02:00 - 3rd` for a match that was in fact over.
+
+The obvious fix — using the existing `updateDate` — is wrong: `syncGameWithScore()` rewrites
+`updateDate` on **every** live sync whether or not anything moved, so it means "last time we polled the
+provider", not "last time the data changed". It can never detect a stuck feed.
+
+### Changes
+
+- **`backend/src/games/schemas/game.schema.ts`** — new optional `dataChangedAt` prop: ISO-8601 instant
+  of the last actual **value change** of `gameClock` / `gamePeriod` / scores / `gameStatus`.
+- **`backend/src/games/games.service.ts`** — `syncGameWithScore()` now captures the previous clock,
+  period, both scores and the previous status before overwriting them, keeps writing `updateDate` every
+  sync, and refreshes `dataChangedAt` **only** when one of those values differs (or when the field is
+  still missing, so existing documents are backfilled on their first sync).
+- **`backend/src/games/dto/create-game.dto.ts` / `update-game.dto.ts`** — `dataChangedAt?: string`.
+- **`frontend/utils/date.ts`** — new `STALE_FEED_MINUTES` (`15`) and `isLiveFeedStale(dataChangedAt, now?)`.
+  15 minutes is deliberate: past a game's expected end a live clock never legitimately stands still that
+  long, and the app polls every 30 s, so a shorter threshold would fire on a slow provider rather than on
+  a stuck one. A missing/unparsable `dataChangedAt` returns `false` — absence is not evidence, so the UI
+  keeps trusting the clock instead of guessing (documents synced before this field existed).
+- **`frontend/utils/date.ts` (`isGameAwaitingFinalization`)** — the second condition is now
+  `hasNoTimeLeftOnClock(gameClock) || isLiveFeedStale(dataChangedAt)`, so a frozen clock past the
+  expected end qualifies.
+- **`frontend/components/CardLarge.tsx` / `GameModal.tsx`** — destructure `dataChangedAt` and forward it
+  to `isGameAwaitingFinalization()`. `!hasScore` still gates everything, so a finished game **with** a
+  score keeps its existing behavior (`"Score"` / `"Final"` / date) — unchanged.
+- **`frontend/utils/types.tsx`** — `dataChangedAt?: string` on `GameFormatted`.
+- **`frontend/utils/date.test.ts`** — 9 new tests: fresh vs. frozen feed at/beyond the threshold, an
+  absent/invalid timestamp, a frozen clock past the expected end (`true`), the same clock inside the
+  threshold or before the expected end (`false`), and the clock-less-sport case.
+- Docs updated: `docs/date.ts.md`, `docs/types.tsx.md`, `docs/components/CardLarge.tsx.md`,
+  `docs/components/GameModal.tsx.md`.
+
+## Changed: "Finalisation" only appears once the match is really over
+
+### Problem
+
+The `"Finalisation"` fallback (shown when the provider never sent a score) was gated by a flat
+elapsed-time rule — `diffHours > 4` in `CardLarge`, `> 3` in `GameModal` — which had nothing to do with
+the state of the match itself. A game 4h01 in that was legitimately still running (a long overtime, a
+rain delay, extra periods) was announced as "Finalisation" while it was being played, and the two
+screens disagreed on when the label appeared.
+
+### Changes
+
+- **`frontend/utils/date.ts`** — two new exports:
+  - `hasNoTimeLeftOnClock(gameClock?)`: a missing/empty/placeholder clock (a sport with no running
+    clock at all) and a non-clock string such as `"Final"` count as "no time left"; an `M:SS` clock
+    only when it is `"00:00"` / `"0:00"`.
+  - `isGameAwaitingFinalization({ startTimeUTC, league?, gameClock? })`: `true` only when the
+    **expected end of the match has passed** (`now > start + timeDurationEnum[league]`, the same
+    duration table as `getGamesStatus()`) **and** the clock reports no time left. Invalid dates return
+    `false`.
+- **`frontend/components/CardLarge.tsx`** — `showFinalization` now uses
+  `isGameAwaitingFinalization({ startTimeUTC, league, gameClock })` instead of `isStarted4hAgo`.
+- **`frontend/components/GameModal.tsx`** — same replacement; the now-unused `diffHours` /
+  `isStarted3hAgo` locals were removed.
+- **`frontend/utils/date.test.ts`** — new suites for both helpers: zeroed/missing/placeholder clocks,
+  a running clock, an overtime game past its duration, a match before its expected end, an
+  invalid start time.
+- Docs updated: `docs/date.ts.md`, `docs/components/CardLarge.tsx.md`,
+  `docs/components/GameModal.tsx.md`.
+
 ## Changed: the GameModal "form" row draws bare icons instead of circles
 
 ### Problem

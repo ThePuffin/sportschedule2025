@@ -91,13 +91,10 @@ const FavModal = ({
   const teamsForFavorites: Team[] = Object.entries(TeamsEnum).map(([id, name]) => ({
     label: name,
     uniqueId: id,
-    value: id,
     league: id.split('-')[0],
     id: '',
     teamLogo: '',
     teamCommonName: name,
-    conferenceName: '',
-    divisionName: '',
     abbrev: '',
     updateDate: '',
   }));

@@ -75,6 +75,81 @@ export const getGamesStatus = (game: GameFormatted) => {
   return GameStatus.SCHEDULED;
 };
 
+/**
+ * Whether the game clock shows no time left.
+ *
+ * `gameClock` comes from the providers as `"12:34"`, `"0:00"` or `"00:00"`, and is
+ * simply absent for sports that have no running clock (golf, tennis, racing...).
+ * All of those "no time left" shapes are accepted; anything else (a running clock)
+ * means the game is still being played.
+ */
+export const hasNoTimeLeftOnClock = (gameClock?: string): boolean => {
+  if (!gameClock) return true;
+  const normalized = gameClock.trim().toLowerCase();
+  if (normalized === "" || normalized === "-" || normalized === "--") return true;
+  const match = normalized.match(/^(\d+):([0-5]?\d)$/);
+  if (!match) return true;
+  return Number(match[1]) === 0 && Number(match[2]) === 0;
+};
+
+/**
+ * How long a live feed may report the exact same clock/score before we consider it
+ * gone silent. 15 minutes is deliberate: a live clock never legitimately stands
+ * still that long once a game is past its expected end, while the app itself polls
+ * every 30 s, so a much shorter threshold would fire on a slow provider rather
+ * than on a stuck one.
+ */
+export const STALE_FEED_MINUTES = 15;
+
+/**
+ * Whether the provider's live data has been frozen for longer than
+ * `STALE_FEED_MINUTES`, based on `dataChangedAt` — the instant the clock, period,
+ * scores or status last actually changed value (`updateDate` is refreshed on every
+ * sync and therefore says nothing about staleness).
+ *
+ * Returns `false` when `dataChangedAt` is absent (games synced before the field
+ * existed): absence is not evidence of a stuck feed, so the UI keeps trusting the
+ * clock instead of guessing.
+ */
+export const isLiveFeedStale = (
+  dataChangedAt?: string,
+  now: Date = new Date(),
+): boolean => {
+  if (!dataChangedAt) return false;
+  const lastChange = new Date(dataChangedAt);
+  if (Number.isNaN(lastChange.getTime())) return false;
+  return now.getTime() - lastChange.getTime() > STALE_FEED_MINUTES * 60 * 1000;
+};
+
+/**
+ * A game is *awaiting finalization* when the expected end of the match has passed
+ * **and** the feed no longer gives us anything to show: either it reports no time
+ * left on the clock (clock at zero, or no clock at all for clock-less sports), or
+ * it has gone silent (`isLiveFeedStale`). Only then may the UI fall back to the
+ * "Finalisation" label, which means: the provider never sent the score.
+ *
+ * The expected end time alone is never enough — a match in overtime, on a rain
+ * delay or with extra periods runs past its duration and is still being played.
+ */
+export const isGameAwaitingFinalization = (game: {
+  startTimeUTC: string;
+  league?: string;
+  gameClock?: string;
+  dataChangedAt?: string;
+}): boolean => {
+  const startTime = new Date(game.startTimeUTC);
+  if (Number.isNaN(startTime.getTime())) return false;
+  const duration =
+    timeDurationEnum[game.league as keyof typeof timeDurationEnum] ?? 2.5;
+  const endTime = new Date(startTime);
+  endTime.setHours(endTime.getHours() + duration);
+  if (new Date() <= endTime) return false;
+  return (
+    hasNoTimeLeftOnClock(game.gameClock) ||
+    isLiveFeedStale(game.dataChangedAt)
+  );
+};
+
 /** Outcome of one finished game, from a given team's point of view. */
 export type GameOutcome = "W" | "L" | "D";
 

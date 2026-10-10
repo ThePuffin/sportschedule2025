@@ -61,7 +61,7 @@ export class GameService {
     private readonly refreshTimestampService: RefreshTimestampService,
   ) {}
 
-  maxYearBeforeDelete = 10;
+  maxYearBeforeDelete = 6;
   // Purge games that are still active/resolved-less several months after their start
   // (e.g. a PWHL game stuck on 2026-05-11 whose final result can never be fetched).
   staleGameMaxAgeDays = 90;
@@ -96,9 +96,31 @@ export class GameService {
   // Capacity-based purge configuration
   private readonly DISK_USAGE_THRESHOLD = 0.97; // 97%
   private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  // Minimum spacing between two *forced* (no-space) purges. A forced purge
+  // bypasses the 1-hour CHECK_INTERVAL_MS guard, so without this floor a tight
+  // insert loop (getLeagueGames / getOldiesGames call create() repeatedly)
+  // whose disk stays full could purge a month on every failed write and delete
+  // large amounts of history within seconds. One forced purge per minute is the
+  // safe ceiling: it still frees space promptly, but never in an unbounded burst.
+  private readonly FORCED_PURGE_MIN_INTERVAL_MS = 30 * 1000; // 30 seconds
   private readonly DISK_USAGE_CACHE_TTL_MS = 60 * 1000; // 60 seconds cache for disk usage stats
   private readonly CLUSTER_TOTAL_MB = 512; // Total cluster storage in MB (adjust to your Atlas plan)
   private lastDiskCheck = 0;
+  // Timestamp (ms) of the last forced (no-space) purge, for FORCED_PURGE_MIN_INTERVAL_MS.
+  private lastForcedPurgeAt = 0;
+  // Timestamp (ms) of the last forced purge triggered from inside a getOldiesGames
+  // run, for the per-step rate limit (see the oldies finally block). Deleting a
+  // month does not immediately reclaim WiredTiger storage and the oldies backfill
+  // keeps re-inserting early-season games into the oldest months, so a disk stuck
+  // just above the threshold would otherwise purge on every one of the up-to-144
+  // steps and wipe large amounts of history in a tight loop.
+  private lastOldiesForcedPurgeAt = 0;
+  // Guards against two overlapping getOldiesGames() runs. A recovery is long (up
+  // to ~144 league × year steps) and two of them at once would double the
+  // third-party + Mongo load and — because every step marks its league as
+  // "manual refresh in progress" — silently no-op each other: each run would skip
+  // every step of the other and still report "completed".
+  private isOldiesRunning = false;
 
   // In-memory cache for disk usage to avoid spamming dbStats on every call
   private diskUsageCache: {
@@ -546,6 +568,15 @@ export class GameService {
       endDate,
       season,
       addMissingOnly = false,
+      // Lets the oldies recovery ignore the cross-league guard below. Oldies walks
+      // the leagues strictly one after the other and only *adds* missing games
+      // (`addMissingOnly: true`), so the same-league guard above
+      // (`isFetchingGames`) already prevents the only real conflict: two concurrent
+      // fetches for one and the same league. Without this bypass, a single unrelated
+      // manual refresh makes every remaining step of a 144-step recovery return
+      // immediately, and the run then claims "completed — no new games were added
+      // (all years already up to date)" while it fetched nothing at all.
+      ignoreOtherManualRefresh = false,
     } = params;
     const normalizedLeague = league.toUpperCase().trim();
     if (this.isFetchingGames[normalizedLeague]) {
@@ -565,7 +596,7 @@ export class GameService {
       const otherManualRefresh = Object.keys(this.manualRefreshInProgress).some(
         (k) => this.manualRefreshInProgress[k] && k !== normalizedLeague,
       );
-      if (otherManualRefresh) {
+      if (otherManualRefresh && !ignoreOtherManualRefresh) {
         console.info(
           `Skipping getLeagueGames for ${league} because another manual refresh is in progress.`,
         );
@@ -983,6 +1014,7 @@ export class GameService {
         }
       }
 
+      await this._deleteGamesOfPurgedTeams(normalizedLeague);
       await this._deleteUnlinkedTeams(normalizedLeague);
       return games;
     } catch (err) {
@@ -1372,7 +1404,7 @@ export class GameService {
         'uniqueId league homeTeamId awayTeamId homeTeamScore awayTeamScore gameStatus gamePeriod startTimeUTC teamSelectedId',
       )
       .lean()
-      .exec()) as Array<Partial<Game>>;
+      .exec()) as unknown as Array<Partial<Game>>;
 
     // Keep one row per match. `uniqueId` cannot be used as the key: it is prefixed
     // with the team the upstream feed was asked about, so the two documents of
@@ -1547,7 +1579,7 @@ export class GameService {
       minDate = new Date(startDate);
     if (endDate && new Date(endDate) > maxDate) maxDate = new Date(endDate);
 
-    for (let date = minDate; date <= maxDate; ) {
+    for (let date = minDate; date <= maxDate;) {
       const currentDate = readableDate(date);
       const gamesOfDay = [];
       uniqueTeamSelectedIds.forEach((teamSelectedId) => {
@@ -1573,10 +1605,8 @@ export class GameService {
             placeName: '',
             gameDate: currentDate,
             teamSelectedId: teamSelectedId,
-            show: false,
             selectedTeam: false,
             league: '',
-            venueTimezone: '',
             isActive: true,
             startTimeUTC: '',
             updateDate: '',
@@ -1587,8 +1617,6 @@ export class GameService {
             homeTeamLogoDark: '',
             homeTeamRecord: '',
             awayTeamRecord: '',
-            color: undefined,
-            backgroundColor: undefined,
           });
         } else {
           gamesOfDay.push(...gameOfDay);
@@ -2480,7 +2508,27 @@ export class GameService {
       game.gamePeriod = matchedScore.gamePeriod;
     }
 
-    game.updateDate = new Date().toISOString();
+    // `updateDate` is rewritten on every sync; `dataChangedAt` only when a value the
+    // user actually sees moved. A provider that keeps answering with the exact same
+    // clock ("02:00" frozen) leaves `dataChangedAt` untouched, which is what lets
+    // the frontend detect a game whose feed went silent.
+    const previousClock = game.gameClock;
+    const previousPeriod = game.gamePeriod;
+    const previousHomeScore = game.homeTeamScore;
+    const previousAwayScore = game.awayTeamScore;
+    const now = new Date().toISOString();
+
+    game.updateDate = now;
+    if (
+      !game.dataChangedAt ||
+      previousClock !== game.gameClock ||
+      previousPeriod !== game.gamePeriod ||
+      previousHomeScore !== game.homeTeamScore ||
+      previousAwayScore !== game.awayTeamScore ||
+      previousStatus !== resolvedStatus
+    ) {
+      game.dataChangedAt = now;
+    }
     game.gameStatus = resolvedStatus;
     game.seriesSummary = matchedScore.seriesSummary;
     game.seriesStatus = matchedScore.seriesStatus;
@@ -3065,6 +3113,38 @@ export class GameService {
       .exec();
   }
 
+  /**
+   * Deletes the games that reference teams purged as non-D1 by the last
+   * `TeamService.getTeams()` run (see `takeLastPurgedNonD1Ids()`).
+   *
+   * A game is deleted when one of its team references (`teamSelectedId`,
+   * `homeTeamId`, `awayTeamId`) matches a purged id. This removes BOTH the
+   * non-D1 team's own rows AND the D1-side twin of a D1-vs-D2 match (both
+   * describe the same non-D1 fixture), keeping the D1 record clean.
+   * Historical teams are never purged upstream, so no guard is needed here.
+   */
+  private async _deleteGamesOfPurgedTeams(league: string): Promise<void> {
+    const normalizedLeague = league.toUpperCase().trim();
+    // Drain only this league's purged ids: the queue can hold several leagues
+    // (a full `POST /teams/refresh` purges them all) and each league's refresh
+    // must cascade its own purge — a global drain would be consumed here with
+    // a `league` filter that never matches the other leagues' ids.
+    const purgedIds = this.teamService.takeLastPurgedNonD1Ids(normalizedLeague);
+    if (purgedIds.length === 0) return;
+
+    const result = await this.gameModel.deleteMany({
+      league: normalizedLeague,
+      $or: [
+        { teamSelectedId: { $in: purgedIds } },
+        { homeTeamId: { $in: purgedIds } },
+        { awayTeamId: { $in: purgedIds } },
+      ],
+    });
+    console.info(
+      `[purgeNonD1] ${normalizedLeague}: deleted ${result.deletedCount ?? 0} game(s) referencing ${purgedIds.length} purged non-D1 team(s).`,
+    );
+  }
+
   private async _deleteUnlinkedTeams(league: string): Promise<void> {
     const normalizedLeague = league.toUpperCase().trim();
 
@@ -3567,37 +3647,89 @@ export class GameService {
   }
 
   /**
-   * Handles a "no space" error by purging the oldest month of games.
-   * Returns true if the error was a no-space error and purge was triggered.
+   * Handles a "no space" error by forcing a one-shot purge of the oldest month.
+   *
+   * Uses `purgeOldestMonthIfNeeded(force = true)` so the decision is based on a
+   * fresh measurement (`force` bypasses the 1-hour `CHECK_INTERVAL_MS` guard and
+   * invalidates the 60s disk-usage cache). Because a "no space left" error is
+   * authoritative — the database is full *right now* — if the forced check still
+   * reports `action: 'none'` (measurement lag, or a storage quota that differs
+   * from the `dbStats` estimate), it falls back to a direct single-month purge so
+   * space is actually freed before the caller retries.
+   *
+   * Rate-limited: a forced purge happens at most once per
+   * `FORCED_PURGE_MIN_INTERVAL_MS` (1 minute). Without this floor, a tight insert
+   * loop whose disk stays full would purge a month on every failed write and could
+   * delete large amounts of history in seconds. Between purges the error is
+   * re-thrown so the caller fails loudly instead of silently cascading deletions.
+   *
+   * Returns true only when at least one month was actually purged, i.e. when it
+   * is worth retrying the failed operation.
    */
   private async handleNoSpaceError(error: unknown): Promise<boolean> {
     if (!this.isNoSpaceError(error)) return false;
 
+    const now = Date.now();
+    if (now - this.lastForcedPurgeAt < this.FORCED_PURGE_MIN_INTERVAL_MS) {
+      const waitSec = Math.ceil(
+        (this.FORCED_PURGE_MIN_INTERVAL_MS - (now - this.lastForcedPurgeAt)) /
+          1000,
+      );
+      console.warn(
+        `[Capacity Manager] No space left error detected, but a forced purge ran ${Math.floor((now - this.lastForcedPurgeAt) / 1000)}s ago — waiting ${waitSec}s before purging again (to avoid deleting too much data too fast). Re-throwing the error.`,
+      );
+      return false;
+    }
+    this.lastForcedPurgeAt = now;
+
     console.warn(
-      '[Capacity Manager] No space left error detected — triggering automatic purge of oldest month...',
+      '[Capacity Manager] No space left error detected — forcing a one-shot purge of the oldest month...',
     );
     try {
-      const result = await this.purgeOldestMonth();
+      let result = await this.purgeOldestMonthIfNeeded(true);
+
+      // A no-space error is authoritative: the DB is full. If the fresh
+      // measurement still reports usage below the threshold, fall back to a
+      // direct single-month purge so space is actually freed before the retry.
+      if (result.action === 'none') {
+        console.warn(
+          '[Capacity Manager] Forced check reported no purge needed despite a no-space error — purging the oldest month directly.',
+        );
+        const direct = await this.purgeOldestMonth();
+        result = {
+          action: direct.action,
+          diskUsage: result.diskUsage,
+          purgedYear: direct.purgedYear,
+          purgedMonth: direct.purgedMonth,
+          deletedCount: direct.deletedCount,
+          remainingYears: direct.remainingYears,
+        };
+      }
+
       if (result.action === 'purged') {
         console.info(
-          `[Capacity Manager] Auto-purge completed: deleted ${result.deletedCount} games from ${result.purgedYear}-${result.purgedMonth?.toString().padStart(2, '0')}.`,
+          `[Capacity Manager] Purge completed: deleted ${result.deletedCount} games from ${result.purgedYear}-${result.purgedMonth?.toString().padStart(2, '0')}.`,
         );
-      } else {
-        console.warn('[Capacity Manager] Auto-purge: no games to purge.');
+        return true;
       }
+
+      console.warn('[Capacity Manager] Purge: no games could be deleted.');
+      return false;
     } catch (purgeErr) {
       console.error(
         '[Capacity Manager] Auto-purge failed:',
         purgeErr instanceof Error ? purgeErr.message : String(purgeErr),
       );
+      return false;
     }
-    return true;
   }
 
   /**
    * Wraps an async operation with automatic capacity management.
    * If the operation fails with a "no space left" error from MongoDB,
-   * triggers the oldest-month purge and re-throws the original error.
+   * forces a one-shot purge of the oldest month and retries the operation
+   * once so the failed insert/update can succeed on the freed space. If the
+   * retry still fails (or nothing could be purged), the error is re-thrown.
    */
   private async executeWithCapacityGuard<T>(
     operation: () => Promise<T>,
@@ -3606,11 +3738,19 @@ export class GameService {
     try {
       return await operation();
     } catch (error) {
-      const wasNoSpace = await this.handleNoSpaceError(error);
-      if (wasNoSpace) {
-        console.warn(
-          `[Capacity Manager] ${context} failed due to no-space — purge triggered, re-throwing error.`,
+      const purged = await this.handleNoSpaceError(error);
+      if (purged) {
+        console.info(
+          `[Capacity Manager] ${context} failed due to no-space — oldest month purged, retrying once.`,
         );
+        try {
+          return await operation();
+        } catch (retryError) {
+          console.warn(
+            `[Capacity Manager] ${context} still failed after purge — re-throwing error.`,
+          );
+          throw retryError;
+        }
       }
       throw error;
     }
@@ -3808,6 +3948,32 @@ export class GameService {
     leagueParam?: string,
     options: { forceCapacityCheck?: boolean } = {},
   ) {
+    // Two overlapping recoveries would silently no-op each other (each step marks
+    // its league as "manual refresh in progress", so the other run skips it) while
+    // both report success. Refuse the second one instead of faking a completion.
+    if (this.isOldiesRunning) {
+      console.warn(
+        '[Oldies] Skipping: another history recovery is already in progress.',
+      );
+      return {
+        message:
+          'History recovery skipped — another recovery is already in progress.',
+        yearsWithAdditions: [],
+      };
+    }
+    this.isOldiesRunning = true;
+    try {
+      return await this._runOldiesRecovery(yearStr, leagueParam, options);
+    } finally {
+      this.isOldiesRunning = false;
+    }
+  }
+
+  private async _runOldiesRecovery(
+    yearStr?: string,
+    leagueParam?: string,
+    options: { forceCapacityCheck?: boolean } = {},
+  ) {
     const { forceCapacityCheck = true } = options;
     const currentYear = new Date().getFullYear();
     const minYear = currentYear - this.maxYearBeforeDelete;
@@ -3815,12 +3981,13 @@ export class GameService {
     let years: number[];
     if (yearStr === undefined || yearStr === null || yearStr.trim() === '') {
       // No year specified -> loop over the last N seasons (years), from the
-      // last finished year to the oldest allowed by the historical limit.
+      // oldest year allowed by the historical limit up to the last finished
+      // year.
       // The current year is excluded: it is still in progress and already
       // covered by the normal refresh (getLeagueGames / rotation cron).
       // Use the endpoint with an explicit ?year= to force the current year.
       years = [];
-      for (let y = currentYear - 1; y > minYear; y--) {
+      for (let y = minYear + 1; y <= currentYear - 1; y++) {
         years.push(y);
       }
     } else {
@@ -3885,6 +4052,7 @@ export class GameService {
             skipCascade: true, // true to avoid concurrent refresh conflicts
             season: year,
             addMissingOnly: true, // Oldies: do not overwrite, only add missing games.
+            ignoreOtherManualRefresh: true, // Oldies owns this run: never skip a step.
           });
           // Track years where at least one game was actually added
           if (
@@ -3906,19 +4074,41 @@ export class GameService {
           // Capacity check after EVERY league x year step, forced by default:
           // without `force`, the 1-hour guard would skip every check after the
           // first one and the DB could reach 100% during a long oldies run.
-          try {
-            const purge =
-              await this.purgeOldestMonthIfNeeded(forceCapacityCheck);
-            if (purge.action === 'purged') {
-              console.info(
-                `[Oldies] Capacity purge after ${league} ${year}: removed ${purge.deletedCount} games from ${purge.purgedYear}-${String(purge.purgedMonth).padStart(2, '0')}.`,
+          //
+          // But a forced purge is rate-limited to at most one per
+          // FORCED_PURGE_MIN_INTERVAL_MS. A long oldies run has up to ~144 steps
+          // and, when the disk sits just above the threshold, deleting a month
+          // does not immediately reclaim WiredTiger storage (dataSize barely
+          // moves) while the backfill keeps re-inserting early-season games into
+          // the oldest months — so a forced check on every step would purge the
+          // same oldest month over and over and wipe history in a tight loop.
+          // Steps inside the cooldown still measure (cheap, cached) but skip the
+          // delete, so space is still freed promptly without cascading purges.
+          const now = Date.now();
+          const sinceOldiesPurge = now - this.lastOldiesForcedPurgeAt;
+          if (sinceOldiesPurge < this.FORCED_PURGE_MIN_INTERVAL_MS) {
+            const waitSec = Math.ceil(
+              (this.FORCED_PURGE_MIN_INTERVAL_MS - sinceOldiesPurge) / 1000,
+            );
+            console.info(
+              `[Oldies] Capacity purge throttled after ${league} ${year}: a forced purge ran ${Math.floor(sinceOldiesPurge / 1000)}s ago (next allowed in ~${waitSec}s).`,
+            );
+          } else {
+            this.lastOldiesForcedPurgeAt = now;
+            try {
+              const purge =
+                await this.purgeOldestMonthIfNeeded(forceCapacityCheck);
+              if (purge.action === 'purged') {
+                console.info(
+                  `[Oldies] Capacity purge after ${league} ${year}: removed ${purge.deletedCount} games from ${purge.purgedYear}-${String(purge.purgedMonth).padStart(2, '0')}.`,
+                );
+              }
+            } catch (error) {
+              console.error(
+                `[Oldies] Capacity check failed after ${league} ${year}:`,
+                error instanceof Error ? error.message : String(error),
               );
             }
-          } catch (error) {
-            console.error(
-              `[Oldies] Capacity check failed after ${league} ${year}:`,
-              error instanceof Error ? error.message : String(error),
-            );
           }
         }
       }

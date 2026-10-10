@@ -40,6 +40,45 @@ Determines the status of a game based on the current time and the game's league 
 
 Uses `timeDurationEnum[game.league]` to determine the game duration (defaults to 2.5 hours).
 
+### `hasNoTimeLeftOnClock(gameClock?)`
+
+Whether the game clock reports **no time left**. A missing clock (`undefined`, empty, `-`) means the
+sport has no running clock (golf, tennis, racing...) and counts as "no time left"; a non-clock string
+(`"Final"`) does too. A clock matching `M:SS` counts as "no time left" only when both parts are `0`
+(`"00:00"`, `"0:00"`); any other value (`"12:34"`, `"0:01"`) is a running clock.
+
+### `STALE_FEED_MINUTES`
+
+`15` — how long a live feed may keep reporting the exact same clock/score before it is considered gone
+silent. 15 minutes is deliberate: a live clock never legitimately stands still that long once a game is
+past its expected end, while the app polls every 30 s, so a much shorter threshold would fire on a slow
+provider rather than on a stuck one.
+
+### `isLiveFeedStale(dataChangedAt?, now = new Date())`
+
+Whether the provider's data has been frozen for longer than `STALE_FEED_MINUTES`, based on
+`dataChangedAt` — the instant `gameClock` / `gamePeriod` / scores / status last **actually changed
+value** (`updateDate` is rewritten on every sync and therefore says nothing about staleness).
+
+Returns `false` when `dataChangedAt` is absent or unparsable (documents synced before the field
+existed): absence is not evidence of a stuck feed, so the UI keeps trusting the clock instead of
+guessing.
+
+### `isGameAwaitingFinalization({ startTimeUTC, league?, gameClock?, dataChangedAt? })`
+
+`true` when **both** conditions hold:
+
+1. the **expected end of the match** has passed — `now > startTimeUTC + timeDurationEnum[league]`
+   (defaults to 2.5 h), with the same duration table as `getGamesStatus()`;
+2. **the feed tells us nothing more**, i.e. either `hasNoTimeLeftOnClock(gameClock)` is `true`
+   (clock at zero, or no clock at all for clock-less sports) **or** `isLiveFeedStale(dataChangedAt)`
+   is `true` (the clock is frozen at `"02:00"` because the provider stopped updating).
+
+Returns `false` on an unparsable `startTimeUTC`. This is what gates the `"Finalisation"` label (the
+provider never sent a score) in `CardLarge` and `GameModal`: a game still running its overtime or
+interrupted by a rain delay past its duration is **not** awaiting finalization, and neither is a game
+whose feed simply updated 2 minutes ago.
+
 ### `getRecentForm(results, teamId, limit = RECENT_FORM_LENGTH, excludeUniqueId?)`
 
 Builds the last `limit` results of `teamId`, **oldest first**, as `('W' | 'L' | 'D')[]`. Accepts both

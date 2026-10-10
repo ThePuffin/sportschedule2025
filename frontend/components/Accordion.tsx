@@ -4,6 +4,7 @@ import { ListItem } from '@rneui/themed';
 import React, { useEffect, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import CardLarge from './CardLarge';
+import { ACCORDION_MAX_WIDTH } from './FilterAccordion';
 
 import { getScheduleScrollOffset } from '@/utils/scroll';
 import { GameFormatted } from '@/utils/types';
@@ -71,9 +72,11 @@ export default function Accordion({
           d1.getUTCHours() === d2.getUTCHours()
         );
       });
+      // The sticky filter band is an accordion on phones AND tablets, so the scroll offset
+      // must follow the accordion breakpoint (not the < 768 card layout breakpoint)
       const scrollMarginTopValue = getScheduleScrollOffset({
-        isSmallDevice,
-        filtersHeaderHeight: isSmallDevice ? filtersHeaderHeight : 0,
+        isSmallDevice: width < ACCORDION_MAX_WIDTH,
+        filtersHeaderHeight: width < ACCORDION_MAX_WIDTH ? filtersHeaderHeight : 0,
       });
 
       return (

@@ -750,6 +750,7 @@ describe('GameService', () => {
 
     it('should only list years where games were actually added (added > 0)', async () => {
       const currentYear = new Date().getFullYear();
+      const oldestYear = currentYear - service.maxYearBeforeDelete + 1;
 
       // Simulate: first year adds games, second year adds nothing
       let callCount = 0;
@@ -765,11 +766,11 @@ describe('GameService', () => {
 
       const result = await service.getOldiesGames(undefined, League.NHL);
 
-      // Only the first year (currentYear - 1) should appear in the message since it had added > 0
-      expect(result.yearsWithAdditions).toContain(currentYear - 1);
-      expect(result.message).toContain(String(currentYear - 1));
+      // Only the first year (the oldest allowed) should appear in the message since it had added > 0
+      expect(result.yearsWithAdditions).toContain(oldestYear);
+      expect(result.message).toContain(String(oldestYear));
       // The second year should NOT appear
-      expect(result.message).not.toContain(String(currentYear - 2));
+      expect(result.message).not.toContain(String(oldestYear + 1));
     });
 
     it('should still allow forcing the current year explicitly via year param', async () => {
@@ -843,6 +844,32 @@ describe('GameService', () => {
       purgeSpy.mockRestore();
     });
 
+    it('should throttle forced capacity purges to one per FORCED_PURGE_MIN_INTERVAL_MS across steps', async () => {
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockResolvedValue({
+          action: 'purged',
+          diskUsage: { usedMB: 499, totalMB: 512, percentage: 0.975 },
+          purgedYear: 2016,
+          purgedMonth: 11,
+          deletedCount: 7,
+          remainingYears: [2017],
+        });
+
+      // No explicit year -> loops over every finished season (several steps),
+      // all within the same wall-clock second, so the 1-minute floor applies
+      // after the very first step.
+      await service.getOldiesGames(undefined, League.NHL);
+
+      // Despite many league x year steps, the forced purge runs only once:
+      // the remaining steps are throttled so a stuck-full disk cannot wipe a
+      // month on every step.
+      expect(purgeSpy).toHaveBeenCalledTimes(1);
+      expect(purgeSpy).toHaveBeenCalledWith(true);
+
+      purgeSpy.mockRestore();
+    });
+
     it('should keep processing seasons when the capacity check throws', async () => {
       const purgeSpy = jest
         .spyOn(service, 'purgeOldestMonthIfNeeded')
@@ -866,6 +893,81 @@ describe('GameService', () => {
 
       purgeSpy.mockRestore();
       consoleErrorSpy.mockRestore();
+    });
+
+    it('should pass ignoreOtherManualRefresh so an unrelated manual refresh cannot skip every step', async () => {
+      const currentYear = new Date().getFullYear();
+      await service.getOldiesGames(String(currentYear - 1), League.NHL);
+
+      expect(getLeagueGamesSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          league: League.NHL,
+          season: currentYear - 1,
+          addMissingOnly: true,
+          ignoreOtherManualRefresh: true,
+        }),
+      );
+    });
+
+    it('should still fetch every step when another league has a manual refresh in progress', async () => {
+      const currentYear = new Date().getFullYear();
+      // Simulate an unrelated league whose manual refresh never got released.
+      (service as any).manualRefreshInProgress[League.MLS] = true;
+
+      const result = await service.getOldiesGames(undefined, League.NHL);
+
+      // Every season is still fetched instead of being skipped in one second.
+      const expectedYears = [];
+      for (
+        let y = currentYear - 1;
+        y > currentYear - service.maxYearBeforeDelete;
+        y--
+      ) {
+        expectedYears.push(y);
+      }
+      expect(getLeagueGamesSpy).toHaveBeenCalledTimes(expectedYears.length);
+      expect(result.message).toContain('History recovery');
+
+      delete (service as any).manualRefreshInProgress[League.MLS];
+    });
+
+    it('should refuse a second overlapping recovery instead of no-oping both runs', async () => {
+      const currentYear = new Date().getFullYear();
+      const consoleWarnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      // A first recovery is already running (never released).
+      (service as any).isOldiesRunning = true;
+
+      const result = await service.getOldiesGames(
+        String(currentYear - 1),
+        League.NHL,
+      );
+
+      expect(result.message).toContain(
+        'another recovery is already in progress',
+      );
+      expect(result.yearsWithAdditions).toHaveLength(0);
+      expect(getLeagueGamesSpy).not.toHaveBeenCalled();
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[Oldies] Skipping: another history recovery is already in progress.',
+      );
+
+      (service as any).isOldiesRunning = false;
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should release the overlap guard even when the recovery throws', async () => {
+      const currentYear = new Date().getFullYear();
+      getLeagueGamesSpy.mockRejectedValue(new Error('ESPN down'));
+
+      await expect(
+        service.getOldiesGames(String(currentYear - 1), League.NHL),
+      ).resolves.toBeDefined();
+
+      // The guard must not stay stuck, otherwise no recovery could ever run again.
+      expect((service as any).isOldiesRunning).toBe(false);
     });
   });
 
@@ -1314,6 +1416,228 @@ describe('GameService', () => {
 
       expect(existingGame.homeTeamRecord).toBe('33-39-10');
       expect(existingGame.awayTeamRecord).toBe('42-32-7');
+    });
+  });
+
+  describe('create: capacity guard (no-space retry)', () => {
+    const makeNoSpaceError = () =>
+      Object.assign(new Error('no space left on device'), { code: 68 });
+
+    beforeEach(() => {
+      jest.spyOn(console, 'warn').mockImplementation();
+      jest.spyOn(console, 'info').mockImplementation();
+      jest.spyOn(console, 'error').mockImplementation();
+    });
+
+    it('forces a purge and retries once when a no-space error occurs', async () => {
+      const existingGame: any = {
+        uniqueId: 'NHL-BOS-NHL-TOR',
+        homeTeamScore: 3,
+        awayTeamScore: 1,
+        homeTeamRecord: '33-39-10',
+        awayTeamRecord: '42-32-7',
+      };
+      const saveMock = jest
+        .fn()
+        .mockRejectedValueOnce(makeNoSpaceError())
+        .mockResolvedValueOnce(undefined);
+      existingGame.save = saveMock;
+      jest.spyOn(service, 'findOne').mockResolvedValue(existingGame as any);
+
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockResolvedValue({
+          action: 'purged',
+          diskUsage: { usedMB: 99, totalMB: 100, percentage: 0.99 },
+          purgedYear: 2016,
+          purgedMonth: 9,
+          deletedCount: 296,
+          remainingYears: [2017],
+        });
+
+      await service.create({
+        uniqueId: 'NHL-BOS-NHL-TOR',
+        homeTeamScore: 4,
+        awayTeamScore: 1,
+        homeTeamRecord: '33-39-10',
+        awayTeamRecord: '42-32-7',
+      } as any);
+
+      // Forced purge: force === true bypasses the 1-hour guard.
+      expect(purgeSpy).toHaveBeenCalledWith(true);
+      // The operation is retried exactly once after the purge.
+      expect(saveMock).toHaveBeenCalledTimes(2);
+      // The refreshed score from the retry is applied.
+      expect(existingGame.homeTeamScore).toBe(4);
+
+      purgeSpy.mockRestore();
+    });
+
+    it('falls back to a direct purge when the forced check reports no purge needed', async () => {
+      const existingGame: any = {
+        uniqueId: 'NHL-BOS-NHL-TOR',
+        homeTeamScore: 3,
+        awayTeamScore: 1,
+        homeTeamRecord: '33-39-10',
+        awayTeamRecord: '42-32-7',
+      };
+      const saveMock = jest
+        .fn()
+        .mockRejectedValueOnce(makeNoSpaceError())
+        .mockResolvedValueOnce(undefined);
+      existingGame.save = saveMock;
+      jest.spyOn(service, 'findOne').mockResolvedValue(existingGame as any);
+
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockResolvedValue({
+          action: 'none',
+          diskUsage: { usedMB: 50, totalMB: 100, percentage: 0.5 },
+        });
+      const directPurgeSpy = jest.spyOn(service, 'purgeOldestMonth').mockResolvedValue({
+        action: 'purged',
+        purgedYear: 2016,
+        purgedMonth: 9,
+        deletedCount: 120,
+        remainingYears: [2017],
+      });
+
+      await service.create({
+        uniqueId: 'NHL-BOS-NHL-TOR',
+        homeTeamScore: 4,
+        awayTeamScore: 1,
+        homeTeamRecord: '33-39-10',
+        awayTeamRecord: '42-32-7',
+      } as any);
+
+      expect(purgeSpy).toHaveBeenCalledWith(true);
+      expect(directPurgeSpy).toHaveBeenCalledTimes(1);
+      expect(saveMock).toHaveBeenCalledTimes(2);
+
+      purgeSpy.mockRestore();
+      directPurgeSpy.mockRestore();
+    });
+
+    it('re-throws the error when nothing could be purged', async () => {
+      const existingGame: any = {
+        uniqueId: 'NHL-BOS-NHL-TOR',
+        homeTeamScore: 3,
+        awayTeamScore: 1,
+        homeTeamRecord: '33-39-10',
+        awayTeamRecord: '42-32-7',
+      };
+      const saveMock = jest.fn().mockRejectedValue(makeNoSpaceError());
+      existingGame.save = saveMock;
+      jest.spyOn(service, 'findOne').mockResolvedValue(existingGame as any);
+
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockResolvedValue({
+          action: 'none',
+          diskUsage: { usedMB: 50, totalMB: 100, percentage: 0.5 },
+        });
+      const directPurgeSpy = jest
+        .spyOn(service, 'purgeOldestMonth')
+        .mockResolvedValue({ action: 'none' });
+
+      await expect(
+        service.create({
+          uniqueId: 'NHL-BOS-NHL-TOR',
+          homeTeamScore: 4,
+          awayTeamScore: 1,
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        } as any),
+      ).rejects.toThrow('no space left');
+
+      // No retry because nothing was purged.
+      expect(saveMock).toHaveBeenCalledTimes(1);
+
+      purgeSpy.mockRestore();
+      directPurgeSpy.mockRestore();
+    });
+
+    it('does not purge again within FORCED_PURGE_MIN_INTERVAL_MS (never deletes data in an unbounded burst)', async () => {
+      const existingGame: any = {
+        uniqueId: 'NHL-BOS-NHL-TOR',
+        homeTeamScore: 3,
+        awayTeamScore: 1,
+        homeTeamRecord: '33-39-10',
+        awayTeamRecord: '42-32-7',
+      };
+      const saveMock = jest.fn().mockRejectedValue(makeNoSpaceError());
+      existingGame.save = saveMock;
+      jest.spyOn(service, 'findOne').mockResolvedValue(existingGame as any);
+
+      const purgeSpy = jest
+        .spyOn(service, 'purgeOldestMonthIfNeeded')
+        .mockResolvedValue({
+          action: 'purged',
+          diskUsage: { usedMB: 99, totalMB: 100, percentage: 0.99 },
+          purgedYear: 2016,
+          purgedMonth: 9,
+          deletedCount: 296,
+          remainingYears: [2017],
+        });
+
+      // First no-space error: the forced purge runs and clears the cooldown.
+      await expect(
+        service.create({
+          uniqueId: 'NHL-BOS-NHL-TOR',
+          homeTeamScore: 4,
+          awayTeamScore: 1,
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        } as any),
+      ).rejects.toThrow('no space left');
+      expect(purgeSpy).toHaveBeenCalledTimes(1);
+
+      // Second no-space error within the 1-minute floor: no second purge, and
+      // the error is re-thrown so a stuck-full disk cannot cascade deletions.
+      await expect(
+        service.create({
+          uniqueId: 'NHL-BOS-NHL-TOR',
+          homeTeamScore: 4,
+          awayTeamScore: 1,
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        } as any),
+      ).rejects.toThrow('no space left');
+      expect(purgeSpy).toHaveBeenCalledTimes(1); // still 1 — not purged again
+
+      purgeSpy.mockRestore();
+    });
+
+    it('does not purge or retry for a non-no-space error', async () => {
+      const existingGame: any = {
+        uniqueId: 'NHL-BOS-NHL-TOR',
+        homeTeamScore: 3,
+        awayTeamScore: 1,
+        homeTeamRecord: '33-39-10',
+        awayTeamRecord: '42-32-7',
+      };
+      const saveMock = jest
+        .fn()
+        .mockRejectedValue(new Error('validation failed'));
+      existingGame.save = saveMock;
+      jest.spyOn(service, 'findOne').mockResolvedValue(existingGame as any);
+
+      const purgeSpy = jest.spyOn(service, 'purgeOldestMonthIfNeeded');
+
+      await expect(
+        service.create({
+          uniqueId: 'NHL-BOS-NHL-TOR',
+          homeTeamScore: 4,
+          awayTeamScore: 1,
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        } as any),
+      ).rejects.toThrow('validation failed');
+
+      expect(purgeSpy).not.toHaveBeenCalled();
+      expect(saveMock).toHaveBeenCalledTimes(1);
+
+      purgeSpy.mockRestore();
     });
   });
 

@@ -1,5 +1,5 @@
 import DateRangePicker from '@/components/DatePicker';
-import FilterAccordion from '@/components/FilterAccordion';
+import FilterAccordion, { ACCORDION_MAX_WIDTH } from '@/components/FilterAccordion';
 import HomeGameToggle, { HomeGameFilter } from '@/components/HomeGameToggle';
 import PageHeader from '@/components/PageHeader';
 import { ThemedElements } from '@/components/ThemedElements';
@@ -65,6 +65,9 @@ export default function Calendar() {
   const textColor = useThemeColor({}, 'text');
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 768;
+  // Filter sections collapse into accordions on phones AND tablets (portrait), so the
+  // games list keeps enough vertical room on smaller screens
+  const useFilterAccordion = width < ACCORDION_MAX_WIDTH;
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
@@ -680,11 +683,11 @@ export default function Calendar() {
       >
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView style={{ backgroundColor }}>
-            <div style={{ width: '100%', padding: isSmallDevice ? 0 : 10, boxSizing: 'border-box' }}>
+            <div style={{ width: '100%', padding: useFilterAccordion ? 0 : 10, boxSizing: 'border-box' }}>
               <FilterAccordion
                 label={teamAccordionLabel}
                 defaultOpen={true}
-                isSmallDevice={isSmallDevice}
+                isSmallDevice={useFilterAccordion}
                 onExpandedChange={setIsTeamAccordionOpen}
               >
                 <ThemedElements>
@@ -773,7 +776,7 @@ export default function Calendar() {
               <FilterAccordion
                 label={dateAccordionLabel}
                 defaultOpen={true}
-                isSmallDevice={isSmallDevice}
+                isSmallDevice={useFilterAccordion}
                 onExpandedChange={setIsDateAccordionOpen}
               >
                 <ThemedElements style={{ zIndex: 20 }}>
@@ -782,7 +785,7 @@ export default function Calendar() {
                   </div>
                 </ThemedElements>
               </FilterAccordion>
-              {!isSmallDevice || isDateAccordionOpen ? (
+              {!useFilterAccordion || isDateAccordionOpen ? (
                 <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 , zIndex: 50, opacity: datepickerOpen ? 0 : 1, transition: 'opacity 200ms ease-in-out' } as any}>
                   <Separator opacity={datepickerOpen ? 0 : undefined} />
                 </ThemedElements>

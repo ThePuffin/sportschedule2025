@@ -70,28 +70,13 @@ export class Game extends Document {
   placeName: string;
 
   @Prop()
-  venueTimezone: string;
-
-  @Prop()
   updateDate: string;
-
-  @Prop()
-  divisionName: string;
 
   @Prop()
   urlLive: string;
 
   @Prop()
-  show: boolean;
-
-  @Prop()
   selectedTeam: boolean;
-
-  @Prop()
-  color: string;
-
-  @Prop()
-  backgroundColor: string;
 
   @Prop()
   gameStatus: string;
@@ -107,6 +92,16 @@ export class Game extends Document {
 
   @Prop()
   seriesStatus: string;
+
+  /**
+   * ISO-8601 string (UTC) of when `gameClock` / `gamePeriod` / scores / status last
+   * actually **changed value**, as opposed to `updateDate`, which is rewritten on
+   * every live sync whether or not anything moved. The frontend needs this to tell
+   * a genuinely finished game from a live one whose feed has gone silent (clock
+   * frozen for minutes while the match is really over).
+   */
+  @Prop()
+  dataChangedAt?: string;
 
   /**
    * Internal guard for the grace period: set when a *future* game (e.g. a playoff

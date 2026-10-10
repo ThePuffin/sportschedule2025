@@ -1,4 +1,10 @@
-import { getRecentForm } from "@/utils/date";
+import {
+  getRecentForm,
+  hasNoTimeLeftOnClock,
+  isGameAwaitingFinalization,
+  isLiveFeedStale,
+  STALE_FEED_MINUTES,
+} from "@/utils/date";
 import type { GameFormatted } from "@/utils/types";
 
 // Default fixture: the queried team (NHL-A) is away and WINS 2-1.
@@ -140,5 +146,145 @@ describe("getRecentForm", () => {
     expect(getRecentForm(null, "NHL-A")).toEqual([]);
     expect(getRecentForm([], "NHL-A")).toEqual([]);
     expect(getRecentForm([game()], "")).toEqual([]);
+  });
+});
+
+describe("hasNoTimeLeftOnClock", () => {
+  it("treats a missing or zeroed clock as no time left", () => {
+    expect(hasNoTimeLeftOnClock(undefined)).toBe(true);
+    expect(hasNoTimeLeftOnClock("")).toBe(true);
+    expect(hasNoTimeLeftOnClock("00:00")).toBe(true);
+    expect(hasNoTimeLeftOnClock("0:00")).toBe(true);
+  });
+
+  it("treats a non-clock value (clock-less sport) as no time left", () => {
+    expect(hasNoTimeLeftOnClock("Final")).toBe(true);
+    expect(hasNoTimeLeftOnClock("-")).toBe(true);
+  });
+
+  it("rejects a clock still running", () => {
+    expect(hasNoTimeLeftOnClock("12:34")).toBe(false);
+    expect(hasNoTimeLeftOnClock("0:01")).toBe(false);
+  });
+});
+
+describe("isGameAwaitingFinalization", () => {
+  const hoursAgo = (hours: number) =>
+    new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+  it("is true once the expected end passed with no time left", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(4),
+        league: "NHL",
+        gameClock: "00:00",
+      }),
+    ).toBe(true);
+  });
+
+  it("is true for a clock-less sport once the expected end passed", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(4),
+        league: "GOLF",
+      }),
+    ).toBe(true);
+  });
+
+  it("is false while the clock still runs (overtime past the duration)", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(5),
+        league: "NHL",
+        gameClock: "04:12",
+      }),
+    ).toBe(false);
+  });
+
+  it("is false before the expected end of the match", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(1),
+        league: "NHL",
+        gameClock: "00:00",
+      }),
+    ).toBe(false);
+  });
+
+  it("is false on an invalid start time", () => {
+    expect(
+      isGameAwaitingFinalization({ startTimeUTC: "not-a-date", gameClock: "" }),
+    ).toBe(false);
+  });
+});
+
+describe("isLiveFeedStale", () => {
+  const now = new Date("2025-01-15T20:00:00.000Z");
+  const minutesAgo = (minutes: number) =>
+    new Date(now.getTime() - minutes * 60 * 1000).toISOString();
+
+  it("is false while the data keeps changing", () => {
+    expect(isLiveFeedStale(minutesAgo(1), now)).toBe(false);
+    expect(isLiveFeedStale(minutesAgo(STALE_FEED_MINUTES), now)).toBe(false);
+  });
+
+  it("is true once the data is frozen past the threshold", () => {
+    expect(isLiveFeedStale(minutesAgo(STALE_FEED_MINUTES + 1), now)).toBe(true);
+  });
+
+  it("is false without a timestamp, so a missing field is not a guess", () => {
+    expect(isLiveFeedStale(undefined, now)).toBe(false);
+    expect(isLiveFeedStale("", now)).toBe(false);
+    expect(isLiveFeedStale("not-a-date", now)).toBe(false);
+  });
+});
+
+describe("isGameAwaitingFinalization with a silent feed", () => {
+  const hoursAgo = (hours: number) =>
+    new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const minutesAgo = (minutes: number) =>
+    new Date(Date.now() - minutes * 60 * 1000).toISOString();
+
+  it("is true when the clock is frozen past the threshold", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(4),
+        league: "NHL",
+        gameClock: "02:00",
+        dataChangedAt: minutesAgo(STALE_FEED_MINUTES + 1),
+      }),
+    ).toBe(true);
+  });
+
+  it("stays false on a frozen clock inside the threshold", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(4),
+        league: "NHL",
+        gameClock: "02:00",
+        dataChangedAt: minutesAgo(2),
+      }),
+    ).toBe(false);
+  });
+
+  it("stays false on a frozen clock before the expected end of the match", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(1),
+        league: "NHL",
+        gameClock: "02:00",
+        dataChangedAt: minutesAgo(STALE_FEED_MINUTES + 5),
+      }),
+    ).toBe(false);
+  });
+
+  it("never invents staleness without a dataChangedAt", () => {
+    expect(
+      isGameAwaitingFinalization({
+        startTimeUTC: hoursAgo(4),
+        league: "NHL",
+        gameClock: "02:00",
+      }),
+    ).toBe(false);
   });
 });

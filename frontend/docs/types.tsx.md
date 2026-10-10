@@ -33,15 +33,12 @@ Represents a formatted game object returned by the API:
 | `gameDate`                | `string`         | Game date (YYYY-MM-DD)                   |
 | `teamSelectedId`          | `string`         | Team ID used for selection               |
 | `startTimeUTC`            | `string`         | Start time in UTC                        |
-| `show`                    | `boolean`        | Whether to show the game                 |
 | `selectedTeam`            | `boolean`        | Whether the team is selected             |
 | `league`                  | `string`         | League name                              |
 | `updateDate?`             | `Date`           | Last update timestamp                    |
-| `venueTimezone?`          | `string`         | Venue timezone                           |
+| `dataChangedAt?`          | `string`         | Last time the clock/scores/status actually **changed value** (absent on documents synced before it existed); drives the "Finalisation" staleness rule |
 | `isActive?`               | `boolean`        | Whether the game is active               |
 | `urlLive?`                | `string`         | Live stream URL                          |
-| `color`                   | `string`         | Team color                               |
-| `backgroundColor`         | `string`         | Team background color                    |
 | `awayTeamColor`           | `string`         | Away team color                          |
 | `awayTeamBackgroundColor` | `string`         | Away team background color               |
 | `homeTeamColor`           | `string`         | Home team color                          |
@@ -69,13 +66,10 @@ Represents a team with metadata:
 | Field                      | Type     | Description      |
 | -------------------------- | -------- | ---------------- |
 | `uniqueId`                 | `string` | Unique team ID   |
-| `value`                    | `string` | Team value       |
 | `id`                       | `string` | Team ID          |
 | `label`                    | `string` | Display label    |
 | `teamLogo`                 | `string` | Logo URL         |
 | `teamCommonName`           | `string` | Common name      |
-| `conferenceName`           | `string` | Conference       |
-| `divisionName`             | `string` | Division         |
 | `league`                   | `string` | League name      |
 | `abbrev`                   | `string` | Abbreviation     |
 | `updateDate`               | `string` | Last update      |

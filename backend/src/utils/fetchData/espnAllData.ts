@@ -42,6 +42,45 @@ const fetchWithRetry = async (url: string, retries = 1) => {
   throw lastError;
 };
 
+// Fetches ESPN with the global timeout + one retry, then parses JSON only when
+// the response is a successful JSON payload. Fails open (returns null) for
+// non-2xx or non-JSON responses (e.g. ESPN HTML rate-limit / bot-block pages or
+// team-not-found redirects) so a single bad response can never abort the whole
+// refresh. A 429 is retried once, honouring the `Retry-After` header when
+// present, before falling back to the safe path.
+export const fetchJsonOrNull = async (url: string): Promise<any> => {
+  const res = await fetchWithRetry(url);
+  const ct = res.headers.get('content-type') || '';
+  if (res.ok && ct.includes('json')) {
+    return res.json();
+  }
+  if (res.status === 429) {
+    const retryAfter = res.headers.get('retry-after');
+    const ms =
+      retryAfter && !Number.isNaN(Number(retryAfter))
+        ? Number(retryAfter) * 1000
+        : 500;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(ms, 15000)));
+    const again = await fetchWithRetry(url);
+    if (again.ok && again.headers.get('content-type')?.includes('json')) {
+      return again.json();
+    }
+    const body = await again.text().catch(() => '');
+    const snippet = body.slice(0, 160).replace(/\s+/g, ' ');
+    console.warn(
+      `[ESPN] Skipping 429 for ${url} — body preview: ${snippet}`,
+    );
+    return null;
+  }
+  const body = await res.text().catch(() => '');
+  const snippet = body.slice(0, 160).replace(/\s+/g, ' ');
+  console.warn(
+    `[ESPN] Skipping ${res.status} ${res.statusText} ${ct ? 'non-JSON' : 'HTTP'} for ${url} — body preview: ${snippet}`,
+  );
+  return null;
+};
+
+
 const formatSeriesSummary = (summary?: string): string => {
   if (!summary) return '';
   if (summary.length > 30) return summary.substring(0, 27) + '...';
@@ -438,7 +477,7 @@ const leaguesData = Object.fromEntries(
       key,
       {
         leagueName: key,
-        fetchTeam: teamBase,
+        fetchTeam: `${teamBase}?limit=1000`,
         fetchGames: `${teamBase}/\${id}/schedule`,
         fetchDetails: `${teamBase}/`,
         fetchStandings: `${base}/standings`,
@@ -447,20 +486,53 @@ const leaguesData = Object.fromEntries(
   }),
 );
 
-const getDivision = async (
+/**
+ * Division-1 parent group ids per college league, as exposed by ESPN's
+ * per-team detail endpoint (`groups: { id, parent: { id }, isConference }`).
+ * A team is Division 1 when its group sits under one of these parents.
+ * Football covers both FBS (80) and FCS (81), which are both D1.
+ * `isConference` is intentionally NOT part of the test: ESPN sets it to
+ * `false` for legitimate D1 teams (e.g. every NCCABB team, LSU included)
+ * and for independent D1 programs, so only the parent id is reliable.
+ * Women's college hockey (NCAAWH) is intentionally absent: ESPN exposes no
+ * such marker there, so it is kept as-is.
+ */
+export const D1_PARENT_IDS: Record<string, string[]> = {
+  [CollegeLeague.NCAAF]: ['80', '81'],
+  [CollegeLeague.NCAAB]: ['50'],
+  [CollegeLeague.WNCAAB]: ['50'],
+  [CollegeLeague.NCCABB]: ['27'],
+  [CollegeLeague.NCAAMH]: ['51'],
+};
+
+/**
+ * Whether an ESPN team-detail `groups` object marks a Division 1 team.
+ * Returns `true` when there is no `groups` info (transient fetch failure):
+ * a team must never be dropped on a network error, only on positive proof
+ * that it plays outside D1.
+ */
+export const isD1Groups = (
+  leagueName: string,
+  groups?: { id: string; parent?: { id: string }; isConference?: boolean },
+): boolean => {
+  const d1Parents = D1_PARENT_IDS[leagueName];
+  if (!d1Parents) return true;
+  if (!groups) return true;
+  return !!(groups.parent?.id && d1Parents.includes(groups.parent.id));
+};
+
+const getTeamRecord = async (
   leagueName: string,
   id: string,
 ): Promise<{
-  conferenceName: string;
-  divisionName: string;
   record?: { wins: number; losses: number; ties?: number; otLosses?: number };
+  groups?: { id: string; parent?: { id: string }; isConference?: boolean };
 }> => {
   try {
     const url = leaguesData[leagueName].fetchDetails + id;
     const fetchedTeams = await fetchWithRetry(url);
     const fetchTeams = await fetchedTeams.json();
     const team = fetchTeams?.team || {};
-    const { standingSummary = '' } = team;
 
     let record;
     if (team.record?.items) {
@@ -474,36 +546,9 @@ const getDivision = async (
       }
     }
 
-    if (standingSummary === '') {
-      return { conferenceName: '', divisionName: '', record };
-    }
-    const cut = standingSummary.split(' ');
-    if (leagueName === League.NFL || leagueName === League.MLB) {
-      return {
-        conferenceName: cut[3] || '',
-        divisionName: cut[2] || '',
-        record,
-      };
-    } else if (leagueName === League.NBA) {
-      const divisionName = cut[2] || '';
-      const conference = {
-        Atlantic: 'East',
-        Central: 'East',
-        Northwest: 'West',
-        Pacific: 'West',
-      };
-      return {
-        conferenceName: conference[divisionName] || '',
-        divisionName,
-        record,
-      };
-    } else if (leagueName.includes('OLYMPICS')) {
-      return { conferenceName: standingSummary, divisionName: '', record };
-    } else {
-      return { conferenceName: '', divisionName: '', record };
-    }
+    return { record, groups: team.groups };
   } catch {
-    return { conferenceName: '', divisionName: '' };
+    return {};
   }
 };
 
@@ -596,7 +641,7 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
       const currentYear = new Date().getFullYear();
       try {
         const { sport, league } = leagueConfigs[leagueName];
-        const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${currentYear}`;
+        const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${currentYear}&limit=1000`;
         const res = await fetchWithRetry(url);
         const data = await res.json();
         const events = data.events || [];
@@ -682,15 +727,12 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
 
         return {
           uniqueId,
-          value: uniqueId,
           id: id,
           abbrev: teamID,
           label: capitalize(displayName),
           teamLogo,
           teamLogoDark,
           teamCommonName: capitalize(nickname || displayName),
-          conferenceName: '',
-          divisionName: '',
           league: normalizedLeagueName.toUpperCase(),
           color: colorTeam,
           backgroundColor: backgroundColorTeam,
@@ -700,13 +742,14 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
         };
       });
 
+    // College leagues: keep Division 1 teams only. `getTeamRecord()` hits the
+    // per-team detail endpoint, which exposes `groups`; a team is dropped only
+    // on positive proof it plays outside D1 (see `isD1Groups()`). NCAAWH is
+    // excluded (ESPN exposes no D1 marker there) and non-college leagues are
+    // unaffected.
+    const filteredTeams: TeamType[] = [];
     for (const team of activeTeams) {
-      const { conferenceName, divisionName, record } = await getDivision(
-        leagueName,
-        team.id,
-      );
-      team.conferenceName = conferenceName;
-      team.divisionName = divisionName;
+      const { record, groups } = await getTeamRecord(leagueName, team.id);
       if (record) {
         (team as any).wins = record.wins;
         (team as any).losses = record.losses;
@@ -715,9 +758,16 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
           (team as any).otLosses = record.otLosses;
         }
       }
+      if (isD1Groups(leagueName, groups)) {
+        filteredTeams.push(team);
+      } else {
+        console.info(
+          `[Teams] ${leagueName}: skipping non-D1 team ${team.uniqueId} (group ${groups?.id}, parent ${groups?.parent?.id}).`,
+        );
+      }
     }
 
-    return activeTeams;
+    return filteredTeams;
   } catch (error) {
     console.error('Error fetching data =>', error);
     return [];
@@ -738,25 +788,21 @@ export const getTeamsSchedule = async (
   for (let start = 0; start < activeTeams.length; start += concurrencyLimit) {
     const batch = activeTeams.slice(start, start + concurrencyLimit);
     await Promise.all(
-      batch.map(
-        async ({ id, abbrev, value, uniqueId, color, backgroundColor }) => {
-          const leagueID = `${uniqueId}`;
-          allGames[leagueID] = await getEachTeamSchedule(
-            {
-              id,
-              abbrev,
-              value,
-              leagueName,
-              leagueLogos,
-              color,
-              backgroundColor,
-            },
-            forceUpdate,
-            season,
-            teamRecords,
-          );
-        },
-      ),
+      batch.map(async ({ id, abbrev, uniqueId }) => {
+        const leagueID = `${uniqueId}`;
+        allGames[leagueID] = await getEachTeamSchedule(
+          {
+            id,
+            abbrev,
+            teamUniqueId: uniqueId,
+            leagueName,
+            leagueLogos,
+          },
+          forceUpdate,
+          season,
+          teamRecords,
+        );
+      }),
     );
   }
 
@@ -770,7 +816,7 @@ export const getTeamsSchedule = async (
 };
 
 const getEachTeamSchedule = async (
-  { id, abbrev, value, leagueName, leagueLogos, color, backgroundColor },
+  { id, abbrev, teamUniqueId, leagueName, leagueLogos },
   forceUpdate = false,
   season?: number,
   teamRecords?: Map<string, string>,
@@ -784,11 +830,9 @@ const getEachTeamSchedule = async (
           {
             id,
             abbrev,
-            value,
+            teamUniqueId,
             leagueName: subLeague,
             leagueLogos,
-            color,
-            backgroundColor,
           },
           forceUpdate,
           season,
@@ -806,7 +850,7 @@ const getEachTeamSchedule = async (
     // catch below would swallow into an `undefined` return.
     if (!leaguesData[leagueName]) {
       console.error(
-        `No ESPN schedule config for league "${leagueName}" (team ${value}) — skipped.`,
+        `No ESPN schedule config for league "${leagueName}" (team ${teamUniqueId}) — skipped.`,
       );
       return [];
     }
@@ -832,8 +876,11 @@ const getEachTeamSchedule = async (
             let hasMore = true;
             while (hasMore) {
               const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${year}&limit=1000&page=${page}`;
-              const res = await fetchWithRetry(url);
-              const data = await res.json();
+              const data = await fetchJsonOrNull(url);
+              if (!data) {
+                hasMore = false;
+                break;
+              }
               const events = data.events || [];
               const eventsFiltered = events.filter((ev) =>
                 ev.competitions?.[0]?.competitors?.some(
@@ -849,11 +896,11 @@ const getEachTeamSchedule = async (
             }
           }
         } catch (error) {
-          console.info('no games found ' + leagueName, value, error);
+          console.info('no games found ' + leagueName, teamUniqueId, error);
         }
       }
       // Scoreboard path: read the tally before anything is filtered out.
-      collectTeamRecord(games, value, id, teamRecords);
+      collectTeamRecord(games, teamUniqueId, id, teamRecords);
     } else {
       try {
         const baseUrl = leaguesData[leagueName].fetchGames.replace('${id}', id);
@@ -864,10 +911,9 @@ const getEachTeamSchedule = async (
           try {
             const seasonParam = season ? `&season=${season}` : '';
             const link = `${baseUrl}?seasontype=${type}${seasonParam}`;
-            const fetchedGames = await fetchWithRetry(link);
-            const fetchGamesData = await fetchedGames.json();
+            const fetchGamesData = await fetchJsonOrNull(link);
 
-            if (fetchGamesData.events && fetchGamesData.events.length > 0) {
+            if (fetchGamesData && fetchGamesData.events && fetchGamesData.events.length > 0) {
               games = [...games, ...fetchGamesData.events];
             }
           } catch (err) {
@@ -885,7 +931,7 @@ const getEachTeamSchedule = async (
         // Harvest the tally of the latest played game BEFORE the cutoff below
         // throws those games away — it is the only place some leagues (college
         // hockey) expose it at all.
-        collectTeamRecord(games, value, id, teamRecords);
+        collectTeamRecord(games, teamUniqueId, id, teamRecords);
 
         const gamesFilter = season
           ? games
@@ -893,7 +939,7 @@ const getEachTeamSchedule = async (
 
         games = gamesFilter;
       } catch (error) {
-        console.info('no', value, error);
+        console.info('no', teamUniqueId, error);
         games = [];
       }
     }
@@ -923,9 +969,9 @@ const getEachTeamSchedule = async (
         const homeTeamScore = getScore(homeCompetitor);
         const awayTeamScore = getScore(awayCompetitor);
 
-        const venueTimezone = 'America/Los_Angeles';
+        const displayTimezone = 'America/Los_Angeles';
         const currentDate = new Date(
-          new Date(date).toLocaleString('en-US', { timeZone: venueTimezone }),
+          new Date(date).toLocaleString('en-US', { timeZone: displayTimezone }),
         );
 
         const gameDate = readableDate(new Date(currentDate));
@@ -970,8 +1016,6 @@ const getEachTeamSchedule = async (
           awayTeamLogo,
           awayTeamLogoDark,
           awayTeamShort,
-          backgroundColor: backgroundColor ?? undefined,
-          color: color ?? undefined,
           gameDate: gameDate,
           homeTeam: capitalize(homeTeam.displayName),
           homeTeamId: `${leagueName}-${homeAbbrev}`,
@@ -994,15 +1038,15 @@ const getEachTeamSchedule = async (
           league: normalizedLeagueName.toUpperCase(),
           placeName: capitalize(venue?.address?.city) ?? '',
           selectedTeam: homeAbbrev === abbrev,
-          show: homeAbbrev === abbrev,
           startTimeUTC: new Date(date).toISOString(),
           gameStatus: resolveScheduleGameStatus(
             comp?.status?.type?.name || game?.status?.type?.name,
           ),
-          teamSelectedId: value,
+          teamSelectedId: teamUniqueId,
           isActive,
-          uniqueId: id ? `${value}-${id}` : `${value}-${gameDate}-${number}`,
-          venueTimezone,
+          uniqueId: id
+            ? `${teamUniqueId}-${id}`
+            : `${teamUniqueId}-${gameDate}-${number}`,
           urlLive:
             links?.find(
               (l) => l.rel?.includes('boxscore') && l.rel?.includes('desktop'),
@@ -1023,7 +1067,7 @@ const getEachTeamSchedule = async (
     gamesData = gamesData.filter((game) => game !== undefined && game !== null);
     return gamesData;
   } catch (error) {
-    console.error(`Error in getEachTeamSchedule for ${value}:`, error);
+    console.error(`Error in getEachTeamSchedule for ${teamUniqueId}:`, error);
     // Always hand back an array: the aggregate-league recursion spreads the
     // result (`[...allGames, ...games]`), and `getTeamsSchedule()` stores it,
     // so an `undefined` here propagates as a TypeError in both callers.

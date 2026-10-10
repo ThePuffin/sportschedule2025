@@ -5,6 +5,7 @@ import {
   getGamesStatus,
   getRecentForm,
   GameOutcome,
+  isGameAwaitingFinalization,
   RECENT_FORM_LENGTH,
 } from "@/utils/date";
 import { fetchLiveScores, fetchRecentFormGames } from "@/utils/fetchData";
@@ -247,16 +248,13 @@ export default function GameModal({
     gameStatus,
     gameClock,
     gamePeriod,
+    dataChangedAt,
   } = displayData;
 
   const hasScore = homeTeamScore != null && awayTeamScore != null;
   const status = getGamesStatus(displayData);
   const isToday =
     new Date().toDateString() === new Date(startTimeUTC).toDateString();
-  const diffHours =
-    (new Date().getTime() - new Date(startTimeUTC).getTime()) /
-    (1000 * 60 * 60);
-  const isStarted3hAgo = diffHours > 3;
   const isLive =
     (status as GameStatus) !== GameStatus.DELAYED &&
     ((status as GameStatus) === GameStatus.IN_PROGRESS ||
@@ -310,8 +308,18 @@ export default function GameModal({
       !gameStatus.toUpperCase().includes("FINAL") &&
       gameStatus.toUpperCase() !== "FINISHED" &&
       gameStatus.toUpperCase() !== "ENDED");
+  // "Finalisation" (the provider never sent a score) is only shown once the
+  // expected end of the match has passed AND the feed tells us nothing more:
+  // no time left on the clock, or a feed frozen since `dataChangedAt`.
   const showFinalization =
-    !hasScore && serviceReportsNotTerminated && isStarted3hAgo;
+    !hasScore &&
+    serviceReportsNotTerminated &&
+    isGameAwaitingFinalization({
+      startTimeUTC,
+      league,
+      gameClock,
+      dataChangedAt,
+    });
 
   const dateOptions: Intl.DateTimeFormatOptions = {
     weekday: "long",

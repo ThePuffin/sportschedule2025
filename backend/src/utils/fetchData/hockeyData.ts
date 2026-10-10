@@ -127,12 +127,46 @@ export class HockeyData {
           .map((s) => s.season_id);
       }
 
+      // No year: resolve the season phases for the season that is currently active (or upcoming).
       const nowStr = new Date().toISOString().slice(0, 10);
-      const ongoing = seasons.find(
+
+      const baseKey = (s: PWHLSeason): string => {
+        const name = s.season_name || '';
+        const parts = name.split(' ');
+        return parts.length > 0 ? parts[0] : '';
+      };
+
+      const isRegular = (s: PWHLSeason) =>
+        /regular season/i.test(s.season_name);
+      const rank = (s: PWHLSeason) =>
+        isRegular(s) ? 0 : /playoff/i.test(s.season_name) ? 1 : 2;
+
+      // 1) If any season already covers today, fetch all phases of that season.
+      const covering = seasons.filter(
         (s) => s.start_date <= nowStr && s.end_date >= nowStr,
       );
-      if (ongoing) return [ongoing.season_id];
+      if (covering.length > 0) {
+        // Choose the "most important" covering season (regular → playoffs → pre‑season)
+        const best = covering.sort((a, b) => rank(a) - rank(b))[0];
+        const currentBase = baseKey(best);
+        return seasons
+          .filter((s) => baseKey(s) === currentBase)
+          .map((s) => s.season_id);
+      }
 
+      // 2) No season covers today: pick the earliest season that starts later.
+      const upcoming = seasons
+        .filter((s) => s.start_date > nowStr)
+        .sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+      if (upcoming.length > 0) {
+        const upcomingBase = baseKey(upcoming[0]);
+        return seasons
+          .filter((s) => baseKey(s) === upcomingBase)
+          .map((s) => s.season_id);
+      }
+
+      // 3) Fallback to the previous behaviour: most recent ended regular season.
       const latestReg = seasons.find((s) =>
         s.season_name.toLowerCase().includes('regular season'),
       );
@@ -162,14 +196,7 @@ export class HockeyData {
       });
 
       const activeTeams = allTeams.map((team: TeamNHL) => {
-        const {
-          teamAbbrev,
-          teamName,
-          teamLogo,
-          divisionName,
-          teamCommonName,
-          conferenceName,
-        } = team;
+        const { teamAbbrev, teamName, teamLogo, teamCommonName } = team;
         const teamID = teamAbbrev.default;
         const uniqueId = `${leagueName}-${teamID}`;
 
@@ -185,15 +212,12 @@ export class HockeyData {
 
         return {
           uniqueId,
-          value: uniqueId,
           id: teamID,
           abbrev: teamID,
           label: capitalize(teamName?.default),
           teamLogo: teamLogo,
           teamLogoDark: teamLogo,
           teamCommonName: capitalize(teamCommonName.default),
-          conferenceName,
-          divisionName,
           league: leagueName.toUpperCase(),
           color: colorTeam,
           backgroundColor: backgroundColorTeam,
@@ -219,11 +243,19 @@ export class HockeyData {
       );
       const fetchTeams: PWHLResponse = await fetchedTeams.json();
       const allTeams: TeamPWHL[] = await fetchTeams?.SiteKit?.Teamsbyseason;
-      const seasonId = fetchTeams?.SiteKit?.Parameters?.season_id;
-      const standings = await this.getPWHLStandings(seasonId);
+      // Resolve the season that should provide standings. Use the regular
+      // season covering today when one exists (so pre‑season requests do not
+      // accidentally read the default pre‑season feed); otherwise use the most
+      // recent regular season that has ended.
+      const nowStr = new Date().toISOString().slice(0, 10);
+      const dateResolution = await this.getPWHLSeasonsForDate(nowStr);
+      const standingsSeasonId =
+        dateResolution.recordSeason?.season_id ??
+        fetchTeams?.SiteKit?.Parameters?.season_id;
+      const standings = await this.getPWHLStandings(standingsSeasonId);
 
       const activeTeams = allTeams.map((team: TeamPWHL) => {
-        const { code, name, team_logo_url, division_long_name } = team;
+        const { code, name, team_logo_url } = team;
         const teamID = code;
         const uniqueId = `${leagueName}-${teamID}`;
 
@@ -250,15 +282,12 @@ export class HockeyData {
 
         return {
           uniqueId,
-          value: uniqueId,
           id: teamID,
           abbrev: teamID,
           label: capitalize(name),
           teamLogo: team_logo_url,
           teamLogoDark: team_logo_url,
           teamCommonName: capitalize(name),
-          conferenceName: '',
-          divisionName: division_long_name,
           league: leagueName.toUpperCase(),
           color: colorTeam,
           backgroundColor: backgroundColorTeam,
@@ -361,26 +390,22 @@ export class HockeyData {
       activeTeams.map(async (team) => {
         try {
           if (league === League.NHL) {
-            const { id, value, color, backgroundColor } = team;
+            const { id, uniqueId } = team;
             const leagueID = `${league}-${id}`;
             allGames[leagueID] = await this.getNHLTeamschedule(
               id,
-              value,
+              uniqueId,
               leagueLogos,
-              color,
-              backgroundColor,
               season,
             );
           }
           if (league === League.PWHL) {
-            const { id, value, color, backgroundColor } = team;
+            const { id, uniqueId } = team;
             const leagueID = `${league}-${id}`;
             allGames[leagueID] = await this.getPWHLTeamschedule(
               id,
-              value,
+              uniqueId,
               leagueLogos,
-              color,
-              backgroundColor,
               forceUpdate,
               season,
             );
@@ -435,7 +460,10 @@ export class HockeyData {
         );
         fetchGames = allFetchGames.filter(
           (game) =>
-            game.home_team_code === id || game.visiting_team_code === id,
+            (game.home_team_code || '').toLowerCase() ===
+              (id || '').toLowerCase() ||
+            (game.visiting_team_code || '').toLowerCase() ===
+              (id || '').toLowerCase(),
         );
         return (await fetchGames.games) || fetchGames;
       }
@@ -524,10 +552,8 @@ export class HockeyData {
 
   getPWHLTeamschedule = async (
     id: string,
-    value: string,
+    teamUniqueId: string,
     leagueLogos: { string },
-    color: string | undefined,
-    backgroundColor: string | undefined,
     forceUpdate = false,
     season?: number,
   ) => {
@@ -556,7 +582,6 @@ export class HockeyData {
           venue_name,
           date_played,
           GameDateISO8601,
-          timezone,
           home_goal_count,
           visiting_goal_count,
           venue_location,
@@ -596,8 +621,6 @@ export class HockeyData {
           awayTeamLogo: leagueLogos[visiting_team_code],
           awayTeamLogoDark: leagueLogos[visiting_team_code],
           awayTeamShort: visiting_team_code,
-          backgroundColor: backgroundColor || undefined,
-          color: color || undefined,
           gameDate: date_played,
           homeTeam: capitalize(homeTeamName),
           homeTeamId: `${leagueName}-${home_team_code}`,
@@ -610,12 +633,10 @@ export class HockeyData {
           league: leagueName,
           placeName: capitalize(venue_location),
           selectedTeam: home_team_code === id,
-          show: home_team_code === id,
           startTimeUTC: new Date(GameDateISO8601).toISOString(),
-          teamSelectedId: value,
+          teamSelectedId: teamUniqueId,
           isActive,
-          uniqueId: `${value}-${date_played}-${game.id}`,
-          venueTimezone: timezone,
+          uniqueId: `${teamUniqueId}-${date_played}-${game.id}`,
           urlLive: `https://www.thepwhl.com/en/stats/game-center/${game.id}`,
         };
       })
@@ -625,10 +646,8 @@ export class HockeyData {
 
   getNHLTeamschedule = async (
     id: string,
-    value: string,
+    teamUniqueId: string,
     leagueLogos: { string },
-    color: string | undefined,
-    backgroundColor: string | undefined,
     season?: number,
   ) => {
     const games: NHLGameAPI[] = await this.fetchGamesData(
@@ -646,7 +665,6 @@ export class HockeyData {
         homeTeam,
         venue,
         gameDate,
-        venueTimezone,
         startTimeUTC,
         gameCenterLink,
       } = game;
@@ -665,8 +683,6 @@ export class HockeyData {
         awayTeamLogo: leagueLogos[awayTeam.abbrev],
         awayTeamLogoDark: leagueLogos[awayTeam.abbrev],
         awayTeamShort: awayTeam.abbrev,
-        backgroundColor: backgroundColor || undefined,
-        color: color || undefined,
         gameDate: gameDate,
         homeTeam: capitalize(homeTeamName),
         homeTeamId: `${leagueName}-${homeTeam.abbrev}`,
@@ -681,12 +697,10 @@ export class HockeyData {
         league: leagueName,
         placeName: capitalize(homeTeam.placeName.default),
         selectedTeam: homeTeam.abbrev === id,
-        show: homeTeam.abbrev === id,
         startTimeUTC: new Date(startTimeUTC).toISOString(),
-        teamSelectedId: value,
+        teamSelectedId: teamUniqueId,
         isActive,
-        uniqueId: `${value}-${gameDate}-1`,
-        venueTimezone: venueTimezone,
+        uniqueId: `${teamUniqueId}-${gameDate}-1`,
         urlLive: `https://www.nhl.com/${gameCenterLink}`,
       };
     });
