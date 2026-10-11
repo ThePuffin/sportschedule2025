@@ -809,18 +809,106 @@ const getTeamRecord = async (
 };
 
 /**
- * Division-1 verdict for one team, cached for six hours only once ESPN has
- * actually verified it (a `groups.parent.id` was returned, or an allowlist
- * decided).
+ * Full ESPN roster of a college league (`teams?limit=1000`), keyed by ESPN
+ * team id with each team's `groups`. Second source of truth used when the
+ * per-team detail endpoint cannot verify an opponent (it answers 404 for ids
+ * it does not know). The roster is cached for six hours; a failed fetch is
+ * remembered for one minute so a whole crawl does not storm ESPN during an
+ * outage. Returns `null` when the roster could not be fetched, so callers can
+ * tell "the roster says the id is unknown" from "the roster was unavailable".
+ */
+const ESPN_ROSTER_GROUPS_TTL_MS = 6 * 60 * 60 * 1000;
+const ESPN_ROSTER_RETRY_AFTER_FAILURE_MS = 60 * 1000;
+type ESPNTeamGroups = {
+  id: string;
+  parent?: { id: string };
+  isConference?: boolean;
+};
+const espnRosterGroupsCache = new Map<
+  string,
+  { groupsById: Map<string, ESPNTeamGroups> | null; checkedAt: number }
+>();
+
+const getLeagueTeamGroups = async (
+  leagueName: string,
+): Promise<Map<string, ESPNTeamGroups> | null> => {
+  if (!leaguesData[leagueName]) return null;
+
+  const cached = espnRosterGroupsCache.get(leagueName);
+  if (cached) {
+    const ttl = cached.groupsById
+      ? ESPN_ROSTER_GROUPS_TTL_MS
+      : ESPN_ROSTER_RETRY_AFTER_FAILURE_MS;
+    if (Date.now() - cached.checkedAt < ttl) return cached.groupsById;
+  }
+
+  try {
+    const res = await fetchWithRetry(leaguesData[leagueName].fetchTeam);
+    if (!res.ok) {
+      espnRosterGroupsCache.set(leagueName, {
+        groupsById: null,
+        checkedAt: Date.now(),
+      });
+      return null;
+    }
+    const data = await res.json();
+    const teams = data?.sports?.[0]?.leagues?.[0]?.teams;
+    if (!Array.isArray(teams)) {
+      espnRosterGroupsCache.set(leagueName, {
+        groupsById: null,
+        checkedAt: Date.now(),
+      });
+      return null;
+    }
+    const groupsById = new Map<string, ESPNTeamGroups>();
+    for (const entry of teams) {
+      const team = entry?.team;
+      if (!team?.id) continue;
+      groupsById.set(String(team.id), team.groups);
+    }
+    espnRosterGroupsCache.set(leagueName, {
+      groupsById,
+      checkedAt: Date.now(),
+    });
+    return groupsById;
+  } catch {
+    espnRosterGroupsCache.set(leagueName, {
+      groupsById: null,
+      checkedAt: Date.now(),
+    });
+    return null;
+  }
+};
+
+/**
+ * Test hook: clears the module-level division / roster caches so each spec can
+ * start from a known state. NEVER call from production code.
+ */
+export const resetESPNDivisionCachesForTests = (): void => {
+  espnDivisionCache.clear();
+  espnRosterGroupsCache.clear();
+};
+
+/**
+ * Division-1 verdict for one team, cached for six hours once it has been
+ * actually verified (ESPN's detail endpoint, the league roster fallback, or an
+ * allowlist decided).
  *
  * Never throws when ESPN cannot verify the team: the per-team detail endpoint
  * answers HTTP 404 for ids it does not know (small non-D1 opponents such as
  * St. Francis IL, or programs too recent for the endpoint such as Little Rock)
  * and a transient fetch failure is indistinguishable downstream. Throwing there
  * aborted the WHOLE league refresh and lost every valid schedule of that
- * league, so — the same rule as `isD1Groups()` — the team is kept (fail-open:
- * never dropped on missing info, only on positive proof of non-D1) and the
- * verdict is NOT cached, leaving the next refresh free to verify it for real.
+ * league. Instead the verification degrades in three steps:
+ *   1. detail endpoint has a `groups.parent.id` → decided (D1 or not);
+ *   2. detail fails → the league roster (`teams?limit=1000`, also carrying
+ *      `groups`) is consulted: found there, the roster's groups decide;
+ *      absent from a successfully fetched roster the team is treated as
+ *      non-D1 (no D1 program of a college league is unknown to both ESPN
+ *      sources) and its games are excluded;
+ *   3. even the roster is unreachable (network outage) → the team is kept
+ *      (fail-open: never dropped on missing info) and nothing is cached, so
+ *      the next refresh re-verifies it.
  */
 export const isD1ScheduleTeam = async (
   leagueName: string,
@@ -840,15 +928,28 @@ export const isD1ScheduleTeam = async (
     isD1 = isD1Groups(leagueName, undefined, undefined, id);
   } else {
     const { groups, fetchFailed } = await getTeamRecord(leagueName, id);
-    if (!groups?.parent?.id) {
-      console.warn(
-        `[Schedule] ${leagueName} team ${id}: ESPN returned no group parent` +
-          (fetchFailed ? ' (team detail fetch failed)' : '') +
-          '; assuming Division I (fail-open) and not caching the verdict.',
-      );
-      return true;
+    if (groups?.parent?.id) {
+      isD1 = isD1Groups(leagueName, groups, abbrev, id);
+    } else {
+      // Detail endpoint inconclusive: consult the league roster.
+      const rosterGroups = await getLeagueTeamGroups(leagueName);
+      const rosterEntry = rosterGroups?.get(id);
+      if (rosterEntry?.parent?.id) {
+        isD1 = isD1Groups(leagueName, rosterEntry, abbrev, id);
+      } else if (rosterGroups) {
+        console.warn(
+          `[Schedule] ${leagueName} team ${id}: not verified by the team detail endpoint nor present in the league roster; treating as non-D1 and excluding its game(s).`,
+        );
+        isD1 = false;
+      } else {
+        console.warn(
+          `[Schedule] ${leagueName} team ${id}: ESPN returned no group parent` +
+            (fetchFailed ? ' (team detail fetch failed)' : '') +
+            ' and the league roster was unavailable; assuming Division I (fail-open) and not caching the verdict.',
+        );
+        return true;
+      }
     }
-    isD1 = isD1Groups(leagueName, groups, abbrev, id);
   }
 
   espnDivisionCache.set(cacheKey, { isD1, checkedAt: Date.now() });
