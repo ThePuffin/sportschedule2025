@@ -773,12 +773,22 @@ const getTeamRecord = async (
 ): Promise<{
   record?: { wins: number; losses: number; ties?: number; otLosses?: number };
   groups?: { id: string; parent?: { id: string }; isConference?: boolean };
+  // True when ESPN could not be reached or answered a non-2xx / team-less
+  // payload (e.g. `{"code":404}` for an id the detail endpoint does not know).
+  // Lets callers tell a fetch failure apart from "the payload has no groups".
+  fetchFailed?: boolean;
 }> => {
   try {
     const url = leaguesData[leagueName].fetchDetails + id;
     const fetchedTeams = await fetchWithRetry(url);
+    if (!fetchedTeams.ok) {
+      return { fetchFailed: true };
+    }
     const fetchTeams = await fetchedTeams.json();
-    const team = fetchTeams?.team || {};
+    const team = fetchTeams?.team;
+    if (!team) {
+      return { fetchFailed: true };
+    }
 
     let record;
     if (team.record?.items) {
@@ -794,11 +804,25 @@ const getTeamRecord = async (
 
     return { record, groups: team.groups };
   } catch {
-    return {};
+    return { fetchFailed: true };
   }
 };
 
-const isD1ScheduleTeam = async (
+/**
+ * Division-1 verdict for one team, cached for six hours only once ESPN has
+ * actually verified it (a `groups.parent.id` was returned, or an allowlist
+ * decided).
+ *
+ * Never throws when ESPN cannot verify the team: the per-team detail endpoint
+ * answers HTTP 404 for ids it does not know (small non-D1 opponents such as
+ * St. Francis IL, or programs too recent for the endpoint such as Little Rock)
+ * and a transient fetch failure is indistinguishable downstream. Throwing there
+ * aborted the WHOLE league refresh and lost every valid schedule of that
+ * league, so — the same rule as `isD1Groups()` — the team is kept (fail-open:
+ * never dropped on missing info, only on positive proof of non-D1) and the
+ * verdict is NOT cached, leaving the next refresh free to verify it for real.
+ */
+export const isD1ScheduleTeam = async (
   leagueName: string,
   id: string,
   abbrev?: string,
@@ -815,11 +839,14 @@ const isD1ScheduleTeam = async (
   } else if (leagueName === CollegeLeague.NCAAWH) {
     isD1 = isD1Groups(leagueName, undefined, undefined, id);
   } else {
-    const { groups } = await getTeamRecord(leagueName, id);
+    const { groups, fetchFailed } = await getTeamRecord(leagueName, id);
     if (!groups?.parent?.id) {
-      throw new Error(
-        `[Schedule] Cannot verify Division I status for ${leagueName} team ${id}: ESPN did not return a group parent.`,
+      console.warn(
+        `[Schedule] ${leagueName} team ${id}: ESPN returned no group parent` +
+          (fetchFailed ? ' (team detail fetch failed)' : '') +
+          '; assuming Division I (fail-open) and not caching the verdict.',
       );
+      return true;
     }
     isD1 = isD1Groups(leagueName, groups, abbrev, id);
   }
