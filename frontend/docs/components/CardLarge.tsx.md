@@ -14,7 +14,7 @@ The **CardLarge** component displays a single game as a card with team logos, sc
 - **Live badge** — pulsing red dot for live games
 - **Game status** — displays period, clock, final, postponed, etc.
 - **Favorite stars** — add/remove favorite teams
-- **Bookmark** — select/deselect games (max 10)
+- **Bookmark** — select/deselect games (max 10), including games that have already started or finished
 - **Arena link** — clickable Google Maps link
 - **Game modal** — opens `GameModal` on card press
 - **Entry animation** — fade/scale/slide with IntersectionObserver
@@ -32,6 +32,11 @@ The **CardLarge** component displays a single game as a card with team logos, sc
   the bookmark) and the details modal exposes a trash button that removes the game from the
   favorites. The bookmark pill in the top-right corner still removes the game directly
   (with the exit animation).
+- **Bulk favorites selection** — when `onToggleBulkSelection` is provided, a checkbox appears
+  beside the league logo in the top-left header, with an enlarged icon and touch target, and
+  toggles selection; tapping elsewhere on the card continues to open game details.
+  `isBulkSelected` controls the checkbox shape. Its color matches the game bookmark beside it
+  (`#0f172a` in light mode and `#ffffff` in dark mode).
 
 ## Props
 
@@ -43,6 +48,8 @@ The **CardLarge** component displays a single game as a card with team logos, sc
 | `forceShowScores`       | `boolean`               | `false` | Always show scores                                      |
 | `onSelection`           | `(game) => void`        | —       | Selection callback                                      |
 | `onRemoveFromFavorites` | `(game) => void`        | —       | Favorites mode: card press opens details, removal button |
+| `onToggleBulkSelection` | `(game) => void`        | —       | Shows a checkbox for bulk selection                       |
+| `isBulkSelected`        | `boolean`               | `false` | Whether this game is selected for bulk removal            |
 | `isSelected`            | `boolean`               | —       | Override selection state                                |
 | `animateExit`           | `boolean`               | `false` | Animate on exit                                         |
 | `animateEntry`          | `boolean`               | `false` | Animate on entry                                        |
@@ -69,6 +76,7 @@ Toggles the game in the bookmarked selection:
 
 - Matches games by teams + exact UTC date/time
 - Max 10 games
+- Available for past games as well as scheduled games
 - Saves to cache, dispatches `gamesSelectedUpdated`, syncs to Firestore
 
 ### `animateExitThen(action)`
@@ -112,5 +120,6 @@ Interrupted/delayed games (`GameStatus.DELAYED`) are excluded from the live badg
 3. Renders card with team logos, scores, time, arena
 4. Handles user interactions (favorite, bookmark, modal). In favorites-details mode
    (`onRemoveFromFavorites` set) a card press opens `GameModal` whose trash button removes the
-   game, while the bookmark pill removes it directly.
+   game, while the bookmark pill removes it directly. When bulk selection is enabled, only the
+   checkbox toggles the selection; the rest of the card still opens details.
 5. Syncs selections to cache and Firestore

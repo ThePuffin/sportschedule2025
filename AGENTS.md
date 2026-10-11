@@ -61,6 +61,7 @@ Each file in `frontend/docs/` (and `frontend/docs/components/`) contains AI-read
    - If a source file has been **deleted**, delete its documentation file too and remove its row from the Documentation Index below.
    - Documentation must never describe functionality that is absent from the code: outdated docs are treated as bugs, not as harmless leftovers.
 8. **English only**: all code comments, commit messages, documentation files (`.md`), and changelog entries MUST be written in English — no French or other languages. The only exception is user-facing translated strings (e.g. the 11-language support in `frontend/utils/utils.tsx`).
+9. **Preserve schedule-refresh observability**: backend refreshes must keep the per-team fetched-game count and per-league distinct-game summary logs for every league provider (ESPN, NHL, PWHL, and others). Keep the final saved/upserted-game count in `GameService.getLeagueGames()`. Do not remove, silence, or consolidate these logs in a way that hides which teams were processed or how many games were fetched/saved unless the user explicitly requests that change. When changing the refresh pipeline, preserve equivalent progress and completion visibility and update its tests and backend documentation.
 
 ## Architecture Notes
 

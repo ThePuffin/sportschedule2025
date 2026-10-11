@@ -4,7 +4,7 @@ import { auth } from './firebaseConfig';
 import { syncToFirestore } from './syncService';
 import { Team } from './types';
 
-export const randomNumber = (max) => {
+export const randomNumber = (max: number) => {
   return Math.floor(Math.random() * (max - 0 + 1) + 0);
 };
 
@@ -274,6 +274,9 @@ export const translateWord = (word: string) => {
         register: 'Sauvegarder',
         cancel: 'Annuler',
         deleteSelection: 'Supprimer la sélection',
+        selectGame: 'Sélectionner le match',
+        deselectGame: 'Désélectionner le match',
+        deleteAllFavorites: 'Supprimer tous les favoris',
         addColumn: 'Ajouter une colonne',
         removeColumn: 'Supprimer une colonne',
         select: 'Faites votre choix',
@@ -364,6 +367,9 @@ export const translateWord = (word: string) => {
         register: 'Speichern',
         cancel: 'Abbrechen',
         deleteSelection: 'Auswahl löschen',
+        selectGame: 'Spiel auswählen',
+        deselectGame: 'Spiel abwählen',
+        deleteAllFavorites: 'Alle Favoriten löschen',
         addColumn: 'Spalte hinzufügen',
         removeColumn: 'Spalte entfernen',
         select: 'Wähle deine Auswahl',
@@ -454,6 +460,9 @@ export const translateWord = (word: string) => {
         register: 'Guardar',
         cancel: 'Cancelar',
         deleteSelection: 'Eliminar selección',
+        selectGame: 'Seleccionar partido',
+        deselectGame: 'Deseleccionar partido',
+        deleteAllFavorites: 'Eliminar todos los favoritos',
         addColumn: 'Añadir columna',
         removeColumn: 'Eliminar columna',
         select: 'Selecciona tu opción',
@@ -545,6 +554,9 @@ export const translateWord = (word: string) => {
         register: 'Salva',
         cancel: 'Annulla',
         deleteSelection: 'Elimina selezione',
+        selectGame: 'Seleziona partita',
+        deselectGame: 'Deseleziona partita',
+        deleteAllFavorites: 'Elimina tutti i preferiti',
         addColumn: 'Aggiungi colonna',
         removeColumn: 'Rimuovi colonna',
         select: 'Seleziona la tua scelta',
@@ -633,6 +645,9 @@ export const translateWord = (word: string) => {
         register: '保存',
         cancel: 'キャンセル',
         deleteSelection: '選択を削除',
+        selectGame: '試合を選択',
+        deselectGame: '試合の選択を解除',
+        deleteAllFavorites: 'すべてのお気に入りを削除',
         addColumn: '列を追加',
         removeColumn: '列を削除',
         select: 'あなたの選択を選択してください',
@@ -722,6 +737,9 @@ export const translateWord = (word: string) => {
         register: '저장',
         cancel: '취소',
         deleteSelection: '선택 삭제',
+        selectGame: '경기 선택',
+        deselectGame: '경기 선택 해제',
+        deleteAllFavorites: '모든 즐겨찾기 삭제',
         addColumn: '열 추가',
         removeColumn: '열 제거',
         select: '선택하세요',
@@ -810,6 +828,9 @@ export const translateWord = (word: string) => {
         register: 'Opslaan',
         cancel: 'Annuleren',
         deleteSelection: 'Selectie verwijderen',
+        selectGame: 'Wedstrijd selecteren',
+        deselectGame: 'Wedstrijd deselecteren',
+        deleteAllFavorites: 'Alle favorieten verwijderen',
         addColumn: 'Kolom toevoegen',
         removeColumn: 'Kolom verwijderen',
         select: 'Selecteer uw keuze',
@@ -899,6 +920,9 @@ export const translateWord = (word: string) => {
         register: 'Salvar',
         cancel: 'Cancelar',
         deleteSelection: 'Excluir seleção',
+        selectGame: 'Selecionar jogo',
+        deselectGame: 'Desmarcar jogo',
+        deleteAllFavorites: 'Excluir todos os favoritos',
         addColumn: 'Adicionar coluna',
         removeColumn: 'Remover coluna',
         select: 'Selecione sua opção',
@@ -988,6 +1012,9 @@ export const translateWord = (word: string) => {
         register: 'Сохранить',
         cancel: 'Отмена',
         deleteSelection: 'Удалить выделение',
+        selectGame: 'Выбрать матч',
+        deselectGame: 'Снять выбор матча',
+        deleteAllFavorites: 'Удалить все избранные матчи',
         addColumn: 'Добавить столбец',
         removeColumn: 'Удалить столбец',
         select: 'Выберите свой вариант',
@@ -1077,6 +1104,9 @@ export const translateWord = (word: string) => {
         register: '保存',
         cancel: '取消',
         deleteSelection: '删除选择',
+        selectGame: '选择比赛',
+        deselectGame: '取消选择比赛',
+        deleteAllFavorites: '删除所有收藏比赛',
         addColumn: '添加列',
         removeColumn: '删除列',
         select: '选择你的选择',
@@ -1165,6 +1195,9 @@ export const translateWord = (word: string) => {
         register: 'Save',
         cancel: 'Cancel',
         deleteSelection: 'Delete Selection',
+        selectGame: 'Select game',
+        deselectGame: 'Deselect game',
+        deleteAllFavorites: 'Delete all favorites',
         addColumn: 'Add Column',
         removeColumn: 'Remove Column',
         select: 'Select your choice',
@@ -1288,14 +1321,14 @@ export const getFilterAccordionLabel = ({
   return { prefix: fallbackLabel, value: '' };
 };
 
-export const brightenColor = (color, amount = 100) => {
+export const brightenColor = (color: string, amount = 100) => {
   if (!color || !color.startsWith('#')) return color;
 
   let hex = color.replace('#', '');
   if (hex.length === 3)
     hex = hex
       .split('')
-      .map((c) => c + c)
+      .map((c: string) => c + c)
       .join('');
 
   const r = Math.min(255, Math.max(0, parseInt(hex.substring(0, 2), 16) + amount));

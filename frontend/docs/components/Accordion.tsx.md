@@ -10,6 +10,10 @@ The **Accordion** component displays a collapsible section with a title, an even
 - **Event count badge** — shows the number of games; can be hidden (along with the divider bar under the title) via the `hideEventCount` prop
 - **Responsive grid** — 3 columns on desktop, 1 column on mobile
 - **Game cards** — renders `CardLarge` for each game
+- **Past favorites** — when `onRemoveFromFavorites` is provided, cards for games whose start time
+  has passed are shown at 55% opacity
+- **Bulk selection** — optional selection callback and predicate are forwarded to favorite cards;
+  the checkbox toggles selection without changing the card's normal press behavior
 - **Scroll offset** — accounts for the sticky filter header height. `getScheduleScrollOffset` is called with the **accordion** breakpoint (`width < ACCORDION_MAX_WIDTH`, i.e. phones *and* tablets), not the `isSmallDevice` card-layout breakpoint, because the sticky filter band is an accordion on both
 - **Selection support** — highlights selected games
 - **No results** — shows `NoResults` component when empty
@@ -28,10 +32,12 @@ The **Accordion** component displays a collapsible section with a title, an even
 | `gamesSelected`       | `GameFormatted[]` | —       | Bookmarked games                       |
 | `onSelection`         | `(game) => void`  | —       | Selection callback                     |
 | `onRemoveFromFavorites` | `(game) => void` | —      | Favorites modal: card press opens details |
+| `onToggleBulkSelection` | `(game) => void` | —      | Enables a card to be selected for bulk removal |
+| `isBulkSelected`        | `(game) => boolean` | —   | Reports whether a card is bulk-selected |
 | `showTime`            | `boolean`         | `false` | Show time on cards                     |
 | `forceShowScores`     | `boolean`         | `false` | Always show scores                     |
 | `filtersHeaderHeight` | `number`          | `0`     | Sticky header height for scroll offset |
-| `homeGameVisibility`  | `HomeGameFilter`  | `false` | Home/away filter                       |
+| `homeGameVisibility`  | `HomeGameFilter`  | `'all'` | Home/away filter                       |
 | `hideEventCount`      | `boolean`         | `false` | Hide the count badge and divider bar   |
 
 ## Key Functions

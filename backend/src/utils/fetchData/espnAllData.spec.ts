@@ -2,8 +2,12 @@ import {
   applySeasonFinalRecords,
   extractCompetitorRecord,
   fetchJsonOrNull,
+  getOlympicTeamLogo,
+  getOlympicSeasonTeams,
   getSeasonFinals,
   getTeamsSchedule,
+  isD1Groups,
+  NCAAMH_D1_TEAMS,
   resolveScheduleGameStatus,
 } from './espnAllData';
 
@@ -304,107 +308,356 @@ describe('getTeamsSchedule (leagues with no ESPN schedule config)', () => {
   });
 });
 
+describe('getOlympicSeasonTeams', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('discovers separate hockey and basketball teams from that season scoreboard', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            get: (name) =>
+              name === 'content-type' ? 'application/json' : null,
+          },
+          json: async () => ({
+            events: [
+              {
+                competitions: [
+                  {
+                    competitors: [
+                      {
+                        team: {
+                          id: '2193',
+                          abbreviation: 'CAN',
+                          displayName: 'Canada',
+                          logos: [],
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }),
+        }) as Response,
+    );
+
+    const teams = await getOlympicSeasonTeams('OLYMPICS-MEN', 2021);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(teams.map(({ uniqueId }) => uniqueId)).toEqual(
+      expect.arrayContaining([
+        'OLYMPICS-HOCKEY-MEN-CAN',
+        'OLYMPICS-BASKETBALL-MEN-CAN',
+      ]),
+    );
+    expect(teams).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: '2193',
+          abbrev: 'CAN',
+          league: 'OLYMPICS-MEN',
+          isActive: false,
+        }),
+      ]),
+    );
+  });
+
+  it('uses the valid ESPN basketball slugs (mens-/womens-olympics-basketball)', async () => {
+    // Regression: the scoreboard slugs were `olympics-mens-basketball` /
+    // `olympics-womens-basketball`, which ESPN answers with 400 Bad Request
+    // ("Failed to get events endpoint"), so the whole oldies basketball crawl
+    // returned nothing. The valid slugs swap the word order.
+    // Return an empty scoreboard so the pagination loop ends after one call
+    // per sub-league; we only assert on the URLs that were requested.
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: { get: () => 'application/json' },
+          json: async () => ({ events: [] }),
+        }) as any,
+    );
+
+    await getOlympicSeasonTeams('OLYMPICS-MEN', 2024);
+    await getOlympicSeasonTeams('OLYMPICS-WOMEN', 2024);
+
+    const urls = fetchSpy.mock.calls.map(([u]) => String(u));
+    const basketballUrls = urls.filter((u) => u.includes('/basketball/'));
+    expect(basketballUrls.length).toBeGreaterThan(0);
+    for (const url of basketballUrls) {
+      // Every basketball scoreboard call must use a valid slug and never the
+      // old, word-order-reversed ones that ESPN rejects with 400.
+      expect(url).toMatch(
+        /\/basketball\/(mens|womens)-olympics-basketball\/scoreboard/,
+      );
+      expect(url).not.toMatch(/olympics-(mens|womens)-basketball/);
+    }
+    expect(urls.some((u) => u.includes('/basketball/mens-olympics-basketball/'))).toBe(
+      true,
+    );
+    expect(
+      urls.some((u) => u.includes('/basketball/womens-olympics-basketball/')),
+    ).toBe(true);
+  });
+});
+
+describe('getOlympicTeamLogo', () => {
+  it.each([
+    ['OLYMPICS-MEN', 'KOR-W', 'kor'],
+    ['OLYMPICS-WOMEN', 'KOR-W', 'kor'],
+    ['OLYMPICS-MEN', 'CHN-M', 'chn'],
+    ['OLYMPICS-WOMEN', 'CHN-W', 'chn'],
+    ['OLYMPICS-WOMEN', 'ROC-W', 'roc'],
+  ])('resolves %s team code %s to its ESPN flag', (league, abbrev, code) => {
+    expect(getOlympicTeamLogo(league, abbrev)).toBe(
+      `https://a.espncdn.com/i/teamlogos/countries/500/${code}.png`,
+    );
+  });
+
+  it('does not apply country-flag fallbacks outside Olympic leagues', () => {
+    expect(getOlympicTeamLogo('NHL', 'KOR')).toBe('');
+    expect(getOlympicTeamLogo('OLYMPICS-MEN', 'UNKNOWN')).toBe('');
+  });
+});
+
 describe('fetchJsonOrNull', () => {
   let fetchSpy;
 
   const jsonResponse = { events: [{ id: '1', date: '2026-01-01T00:00:00Z' }] };
 
+  const jsonRes = {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      get: (name) =>
+        name === 'content-type' ? 'application/json; charset=UTF-8' : null,
+    },
+    json: () => Promise.resolve(jsonResponse),
+  };
+
+  // A retryable block: ESPN's Akamai edge returns an HTML "Access Denied" page
+  // with either 403 (bot-block) or 429 (explicit rate-limit).
+  const blocked = (status, retryAfter = null) => ({
+    ok: false,
+    status,
+    statusText: status === 403 ? 'Forbidden' : 'Too Many Requests',
+    headers: {
+      get: (name) =>
+        name === 'content-type'
+          ? 'text/html'
+          : name === 'retry-after'
+            ? retryAfter
+            : null,
+    },
+    text: () => Promise.resolve('<HTML><HEAD><TITLE>Access Denied</TITLE>'),
+  });
+
+  // fetchJsonOrNull backs off with real setTimeout between retries. Drive fake
+  // timers so those waits fire instantly (flushing microtasks in between) until
+  // the promise settles, instead of sleeping for the actual backoff duration.
+  const settle = async (promise) => {
+    let done = false;
+    promise.then(
+      () => (done = true),
+      () => (done = true),
+    );
+    for (let i = 0; i < 200 && !done; i++) {
+      await jest.advanceTimersByTimeAsync(1000);
+    }
+    return promise;
+  };
+
   beforeEach(() => {
+    jest.useFakeTimers();
     fetchSpy = jest
       .spyOn(global, 'fetch')
       .mockImplementation(() => Promise.resolve(new Response(null)));
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     fetchSpy.mockRestore();
+    jest.restoreAllMocks();
   });
 
   it('returns parsed JSON for a 2xx response with a JSON content-type', async () => {
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: { get: (name) => (name === 'content-type' ? 'application/json; charset=UTF-8' : null) },
-      json: () => Promise.resolve(jsonResponse),
-    });
+    fetchSpy.mockResolvedValueOnce(jsonRes);
 
-    const result = await fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2');
+    const result = await settle(
+      fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2'),
+    );
 
     expect(result).toBe(jsonResponse);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('returns null instead of throwing when the response is 4xx/5xx with an HTML body', async () => {
-    fetchSpy.mockResolvedValueOnce({
-      ok: false,
-      status: 403,
-      statusText: 'Forbidden',
-      headers: { get: (name) => (name === 'content-type' ? 'text/html' : null) },
-      text: () => Promise.resolve('<HTML><HEA</HTML>'),
-    });
+  it('fails open (null) without retrying on a genuine non-retryable error (404)', async () => {
+    fetchSpy.mockResolvedValueOnce(blocked(404));
 
-    const result = await fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=1');
+    const result = await settle(
+      fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=1'),
+    );
 
     expect(result).toBeNull();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('retries once on 429, then returns null when still rate limited', async () => {
-    const rateLimited = {
-      ok: false,
-      status: 429,
-      statusText: 'Too Many Requests',
-      headers: {
-        get: (name) =>
-          name === 'content-type' ? 'text/html' : name === 'retry-after' ? '1' : null,
-      },
-      text: () => Promise.resolve('<html>rate limited</html>'),
-    };
-    fetchSpy
-      .mockResolvedValueOnce(rateLimited)
-      .mockResolvedValueOnce(rateLimited);
+  it('retries a transient 403 bot-block and returns JSON once it lifts', async () => {
+    fetchSpy.mockResolvedValueOnce(blocked(403)).mockResolvedValueOnce(jsonRes);
 
-    const result = await fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2');
-
-    expect(result).toBeNull();
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns parsed JSON on the retry when the 429 is lifted', async () => {
-    const rateLimited = {
-      ok: false,
-      status: 429,
-      statusText: 'Too Many Requests',
-      headers: {
-        get: (name) =>
-          name === 'content-type' ? 'text/html' : name === 'retry-after' ? '1' : null,
-      },
-      text: () => Promise.resolve('<html>rate limited</html>'),
-    };
-    fetchSpy
-      .mockResolvedValueOnce(rateLimited)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        headers: { get: (name) => (name === 'content-type' ? 'application/json; charset=UTF-8' : null) },
-        json: () => Promise.resolve(jsonResponse),
-      });
-
-    const result = await fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2');
+    const result = await settle(
+      fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2'),
+    );
 
     expect(result).toBe(jsonResponse);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient 429 rate-limit and returns JSON once it lifts', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(blocked(429, '0'))
+      .mockResolvedValueOnce(jsonRes);
+
+    const result = await settle(
+      fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2'),
+    );
+
+    expect(result).toBe(jsonResponse);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up (null) after exhausting retries on a persistent 403', async () => {
+    fetchSpy.mockImplementation(() => Promise.resolve(blocked(403)));
+
+    const result = await settle(
+      fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2'),
+    );
+
+    expect(result).toBeNull();
+    // 1 initial call + ESPN_MAX_RETRIES (2) retries.
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('throttles the skip warning instead of logging one line per blocked URL', async () => {
+    fetchSpy.mockImplementation(() => Promise.resolve(blocked(403)));
+    const warnSpy = console.warn as jest.Mock;
+
+    for (let i = 0; i < 30; i++) {
+      await settle(
+        fetchJsonOrNull(`https://site.api.espn.com/teams/${i}/schedule?seasontype=2`),
+      );
+    }
+
+    // The module-level skip counter means we can't assert an exact number here,
+    // but any window of 30 consecutive skips contains at most one "first" log
+    // plus the multiples of 25 (at most two) — never one line per URL.
+    expect(warnSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(warnSpy.mock.calls.length).toBeLessThanOrEqual(3);
   });
 
   it('throws after exhausting retries on a network-level failure', async () => {
-    fetchSpy.mockRejectedValueOnce(new Error('network down'));
-    fetchSpy.mockRejectedValueOnce(new Error('network down'));
+    fetchSpy.mockImplementation(() => Promise.reject(new Error('network down')));
 
     await expect(
-      fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2'),
+      settle(
+        fetchJsonOrNull('https://site.api.espn.com/teams/302/schedule?seasontype=2'),
+      ),
     ).rejects.toThrow('network down');
+    // fetchWithRetry itself retries once (2 calls); the throw propagates.
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
 
+/**
+ * D1 filtering regression.
+ *
+ * For every college league except men's hockey, ESPN's `groups.parent.id` is a
+ * reliable D1 marker, so `isD1Groups()` keeps a team when its group parent id
+ * is one of the D1 parents and drops it otherwise (never on a missing group —
+ * a transient fetch failure must not drop a team).
+ *
+ * Men's college hockey (NCAAMH) is the exception: ESPN reports `parent.id = 51`
+ * for D1, D3 and Canadian U Sports programs alike, and `isConference` is true
+ * for several non-D1 programs too, so neither marker can be trusted. NCAAMH is
+ * therefore filtered by the explicit `NCAAMH_D1_TEAMS` allowlist.
+ */
+describe('isD1Groups', () => {
+  describe('parent-id leagues (NCAAF/NCAAB/WNCAAB/NCCABB)', () => {
+    it('keeps a D1 team (NCAAB parent 50)', () => {
+      expect(
+        isD1Groups('NCAAB', { id: '100', parent: { id: '50' } }, 'DUKE'),
+      ).toBe(true);
+    });
+
+    it('drops a non-D1 team (NCAAB under a non-50 parent)', () => {
+      expect(
+        isD1Groups('NCAAB', { id: '99', parent: { id: '49' } }, 'D3TEAM'),
+      ).toBe(false);
+    });
+
+    it('keeps FBS and FCS football (parents 80/81)', () => {
+      expect(isD1Groups('NCAAF', { id: '1', parent: { id: '80' } }, 'ALA')).toBe(true);
+      expect(isD1Groups('NCAAF', { id: '1', parent: { id: '81' } }, 'NDSU')).toBe(true);
+      expect(isD1Groups('NCAAF', { id: '1', parent: { id: '35' } }, 'D3')).toBe(false);
+    });
+
+    it('keeps a team with no groups info (transient fetch failure)', () => {
+      expect(isD1Groups('NCAAB', undefined, 'DUKE')).toBe(true);
+    });
+  });
+
+  describe('men\u2019s college hockey (NCAAMH) allowlist', () => {
+    it('keeps a D1 program even though ESPN reports parent.id 51 for it', () => {
+      // Adrian/Middlebury-style D3 teams also report parent 51, so the marker
+      // alone is not enough: the allowlist is what decides.
+      expect(
+        isD1Groups('NCAAMH', { id: '58', parent: { id: '51' } }, 'MIDB'),
+      ).toBe(false);
+      expect(
+        isD1Groups('NCAAMH', { id: '62', parent: { id: '51' } }, 'MICH'),
+      ).toBe(true);
+    });
+
+    it('drops known non-D1 programs (D3 / U Sports)', () => {
+      for (const ab of ['ADR', 'CORTLAND', 'LAUREN', 'TRNE', 'WORC', 'UWEC']) {
+        expect(NCAAMH_D1_TEAMS.has(ab)).toBe(false);
+        expect(
+          isD1Groups('NCAAMH', { id: '58', parent: { id: '51' } }, ab),
+        ).toBe(false);
+      }
+    });
+
+    it('keeps known D1 programs across every conference + independents', () => {
+      for (const ab of [
+        'MICH', // Big Ten
+        'DEN', // NCHC
+        'BC', // Hockey East
+        'QUIN', // ECAC
+        'MNST', // CCHA
+        'RIT', // Atlantic Hockey
+        'UAA', // Independent
+      ]) {
+        expect(NCAAMH_D1_TEAMS.has(ab)).toBe(true);
+      }
+    });
+
+    it('contains exactly the 64 D1 programs', () => {
+      expect(NCAAMH_D1_TEAMS.size).toBe(64);
+    });
+
+    it('keeps a team with no groups info (transient fetch failure)', () => {
+      expect(isD1Groups('NCAAMH', undefined, 'MICH')).toBe(true);
+      expect(isD1Groups('NCAAMH', undefined, undefined)).toBe(true);
+    });
+  });
+});

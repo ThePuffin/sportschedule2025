@@ -132,7 +132,7 @@ export default function GameofTheDay() {
             justifyContent: 'center',
             alignItems: 'center',
             width: '100%',
-            padding: '20px',
+            padding: 20,
           }}
         >
           <View
@@ -181,7 +181,7 @@ export default function GameofTheDay() {
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
                 <ThemedText
-                  style={{ color: '#fff', fontSize: '16px', marginRight: 10, textAlign: 'center', flexShrink: 1 }}
+                  style={{ color: '#fff', fontSize: 16, marginRight: 10, textAlign: 'center', flexShrink: 1 }}
                 >
                   TEAMS
                 </ThemedText>
@@ -220,7 +220,7 @@ export default function GameofTheDay() {
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
                 <ThemedText
-                  style={{ color: '#fff', fontSize: '16px', marginRight: 10, textAlign: 'center', flexShrink: 1 }}
+                  style={{ color: '#fff', fontSize: 16, marginRight: 10, textAlign: 'center', flexShrink: 1 }}
                 >
                   SCORES
                 </ThemedText>
@@ -290,7 +290,7 @@ export default function GameofTheDay() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
                     <ThemedText
-                      style={{ color: '#fff', fontSize: '16px', marginRight: 10, textAlign: 'center', flexShrink: 1 }}
+                      style={{ color: '#fff', fontSize: 16, marginRight: 10, textAlign: 'center', flexShrink: 1 }}
                     >
                       {league.replace('-', ' ').toUpperCase()}
                     </ThemedText>

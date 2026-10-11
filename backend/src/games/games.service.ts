@@ -18,6 +18,8 @@ import {
 import {
   getESPNGameScore,
   getESPNScores,
+  getOlympicTeamLogo,
+  getOlympicSeasonTeams,
   getSeasonFinals,
   getTeamRecordFromSchedule,
   getTeamsSchedule,
@@ -140,6 +142,29 @@ export class GameService {
     }, []);
   };
 
+  private expandOlympicTeamIds(teamSelectedIds: string[]): string[] {
+    const expandedIds = new Set<string>();
+    for (const teamSelectedId of teamSelectedIds) {
+      const match = teamSelectedId
+        .trim()
+        .toUpperCase()
+        .match(/^OLYMPICS-(?:HOCKEY|BASKETBALL)-(MEN|WOMEN)-(.+)$/);
+      if (!match) {
+        expandedIds.add(teamSelectedId.trim());
+        continue;
+      }
+
+      const [, gender, country] = match;
+      expandedIds.add(`OLYMPICS-HOCKEY-${gender}-${country}`);
+      expandedIds.add(`OLYMPICS-BASKETBALL-${gender}-${country}`);
+    }
+    return [...expandedIds];
+  }
+
+  private isOlympicTeamId(teamSelectedId: string): boolean {
+    return /^OLYMPICS-(?:HOCKEY|BASKETBALL)-(?:MEN|WOMEN)-/i.test(teamSelectedId);
+  }
+
   async getTeamsLogo(teams: TeamType[]): Promise<{ [key: string]: string }> {
     const logos: { [key: string]: string } = {};
     for (const { abbrev, teamLogo } of teams) {
@@ -207,18 +232,36 @@ export class GameService {
         homeTeam?.teamLogo ||
         game.homeTeamLogo ||
         UniversityLogos[homeTeam?.abbrev || game.homeTeamShort || ''] ||
-        '',
+        getOlympicTeamLogo(
+          game.homeTeamId,
+          homeTeam?.abbrev || game.homeTeamShort,
+        ),
       homeTeamLogoDark:
         homeTeam?.teamLogoDark ||
         game.homeTeamLogoDark ||
         UniversityLogos[homeTeam?.abbrev || game.homeTeamShort || ''] ||
-        '',
+        getOlympicTeamLogo(
+          game.homeTeamId,
+          homeTeam?.abbrev || game.homeTeamShort,
+        ),
       homeTeamColor: homeTeamColors.color,
       homeTeamBackgroundColor: homeTeamColors.backgroundColor,
       awayTeam: awayTeam?.label || game.awayTeam,
       awayTeamShort: awayTeam?.abbrev || game.awayTeamShort,
-      awayTeamLogo: awayTeam?.teamLogo || game.awayTeamLogo,
-      awayTeamLogoDark: awayTeam?.teamLogoDark || game.awayTeamLogoDark,
+      awayTeamLogo:
+        awayTeam?.teamLogo ||
+        game.awayTeamLogo ||
+        getOlympicTeamLogo(
+          game.awayTeamId,
+          awayTeam?.abbrev || game.awayTeamShort,
+        ),
+      awayTeamLogoDark:
+        awayTeam?.teamLogoDark ||
+        game.awayTeamLogoDark ||
+        getOlympicTeamLogo(
+          game.awayTeamId,
+          awayTeam?.abbrev || game.awayTeamShort,
+        ),
       awayTeamColor: awayTeamColors.color,
       awayTeamBackgroundColor: awayTeamColors.backgroundColor,
     };
@@ -355,6 +398,24 @@ export class GameService {
     teamRecords?: Map<string, string>,
   ) {
     const leagueTeams = await this.teamService.findAll([normalizedLeague]);
+    if (season && normalizedLeague.includes('OLYMPICS')) {
+      const existingIds = new Set(leagueTeams.map((team) => team.uniqueId));
+      const historicalTeams = await getOlympicSeasonTeams(
+        normalizedLeague,
+        season,
+      );
+      for (const team of historicalTeams) {
+        if (existingIds.has(team.uniqueId)) continue;
+        const historicalTeam = {
+          ...team,
+          isActive: false,
+          updateDate: new Date().toISOString(),
+        };
+        await this.teamService.create(historicalTeam, true);
+        leagueTeams.push(historicalTeam);
+        existingIds.add(team.uniqueId);
+      }
+    }
     const leagueLogos = await this.getTeamsLogo(leagueTeams);
 
     let gamesObj = {};
@@ -416,6 +477,60 @@ export class GameService {
     }
 
     return Array.from(uniqueGamesMap.values());
+  }
+
+  private async _persistMissingHistoricalGameTeams(
+    league: string,
+    games: any[],
+  ): Promise<number> {
+    const existingTeams = await this.teamService.findAll([league]);
+    const existingIds = new Set(existingTeams.map((team) => team.uniqueId));
+    const missingTeams = new Map<string, TeamType>();
+
+    for (const game of games) {
+      for (const side of ['home', 'away'] as const) {
+        const uniqueId = game?.[`${side}TeamId`];
+        const espnId = game?.[`${side}TeamESPNId`];
+        if (!uniqueId || existingIds.has(uniqueId) || !espnId) continue;
+
+        const historical = HistoricalTeams[uniqueId];
+        const teamColors = getTeamColors(uniqueId);
+        const abbrev =
+          game[`${side}TeamShort`] || historical?.abbrev || uniqueId;
+        missingTeams.set(uniqueId, {
+          uniqueId,
+          id: String(espnId),
+          abbrev,
+          label: game[`${side}Team`] || historical?.label || abbrev,
+          teamCommonName: game[`${side}Team`] || historical?.label || abbrev,
+          teamLogo: game[`${side}TeamLogo`] || historical?.teamLogo || '',
+          teamLogoDark:
+            game[`${side}TeamLogoDark`] ||
+            historical?.teamLogoDark ||
+            game[`${side}TeamLogo`] ||
+            historical?.teamLogo ||
+            '',
+          league,
+          color: historical?.color || teamColors.color,
+          backgroundColor:
+            historical?.backgroundColor || teamColors.backgroundColor,
+          isActive: false,
+          updateDate: new Date().toISOString(),
+        });
+      }
+    }
+
+    for (const team of missingTeams.values()) {
+      await this.teamService.create(team, true);
+      existingIds.add(team.uniqueId);
+    }
+
+    if (missingTeams.size > 0) {
+      console.info(
+        `[Oldies] ${league}: added ${missingTeams.size} missing historical team record(s).`,
+      );
+    }
+    return missingTeams.size;
   }
 
   /**
@@ -714,6 +829,12 @@ export class GameService {
         season,
         teamRecords,
       );
+      if (season && addMissingOnly && uniqueGames.length > 0) {
+        await this._persistMissingHistoricalGameTeams(
+          normalizedLeague,
+          uniqueGames,
+        );
+      }
 
       // Never write a stale tally over the current one while a season is in
       // progress: oldies (`season` given) are left alone on purpose, because
@@ -728,6 +849,7 @@ export class GameService {
       }
 
       const games = uniqueGames;
+      let savedGames = 0;
       // Only deactivate future games if we are not fetching an old season, and only the
       // ones that are absent from the freshly fetched season. This turns the previous
       // "deactivate everything, then rewrite" into a safe "replace" that cannot lose the
@@ -991,6 +1113,7 @@ export class GameService {
 
           await this.create(game);
           added++;
+          savedGames++;
           logInsertProgress(idx + 1);
         }
 
@@ -1016,6 +1139,9 @@ export class GameService {
 
       await this._deleteGamesOfPurgedTeams(normalizedLeague);
       await this._deleteUnlinkedTeams(normalizedLeague);
+      console.info(
+        `[Games] ${normalizedLeague} refresh complete: ${uniqueGames.length} distinct game(s) fetched, ${savedGames} game document(s) saved/upserted.`,
+      );
       return games;
     } catch (err) {
       // Never let a failing third-party API (ESPN / PWHL) propagate to the
@@ -1222,7 +1348,7 @@ export class GameService {
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
       if (teams.length > 0) {
-        filter.teamSelectedId = { $in: teams };
+        filter.teamSelectedId = { $in: this.expandOlympicTeamIds(teams) };
       }
     }
 
@@ -1274,7 +1400,12 @@ export class GameService {
       (keys.length === 0 ||
         (keys.length === 1 && !games[keys[0]]?.[0]?.awayTeamShort))
     ) {
-      const league = teamSelectedId.split('-')[0];
+      const olympicMatch = teamSelectedId
+        .toUpperCase()
+        .match(/^OLYMPICS-(?:HOCKEY|BASKETBALL)-(MEN|WOMEN)-/);
+      const league = olympicMatch
+        ? `OLYMPICS-${olympicMatch[1]}`
+        : teamSelectedId.split('-')[0];
       if (league) {
         const otherGamesInLeague = await this.findByLeague(league, 10);
         const games = Object.keys(otherGamesInLeague).filter((gameDate) => {
@@ -1527,8 +1658,11 @@ export class GameService {
     if (teamSelectedIds && teamSelectedIds.length > 0) {
       const teamSelected = teamSelectedIds
         .split(',')
-        .map((item) => item.trim());
-      filter.teamSelectedId = { $in: teamSelected };
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+      filter.teamSelectedId = {
+        $in: this.expandOlympicTeamIds(teamSelected),
+      };
     }
 
     if (isHome) {
@@ -1561,7 +1695,9 @@ export class GameService {
         )
       : [];
     const gamesByDay = {};
-    const uniqueTeamSelectedIds = this.getTeams(teamSelectedIds, games);
+    const uniqueTeamSelectedIds = teamSelectedIds
+      ? this.expandOlympicTeamIds(teamSelectedIds.split(',').map((item) => item.trim()).filter(Boolean))
+      : this.getTeams(undefined, games);
 
     // Use actual query results to define boundaries if dates aren't provided
     const resultDates = games.map((game) => new Date(game.gameDate).getTime());
@@ -1589,7 +1725,12 @@ export class GameService {
             game.teamSelectedId === teamSelectedId &&
             game.isActive === true,
         );
-        if (!gameOfDay.length && !league && !clean) {
+        if (
+          !gameOfDay.length &&
+          !league &&
+          !clean &&
+          !this.isOlympicTeamId(teamSelectedId)
+        ) {
           gamesOfDay.push({
             _id: new mongoose.Types.ObjectId().toString(),
             uniqueId: teamSelectedId + currentDate,

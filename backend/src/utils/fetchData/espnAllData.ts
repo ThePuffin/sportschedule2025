@@ -12,6 +12,20 @@ const espnAPI = 'https://site.api.espn.com/apis/site/v2/sports/';
 // refresh for an unbounded amount of time (undici's default is very long).
 const ESPN_FETCH_TIMEOUT_MS = 15000;
 
+// Small pacing gap between per-team batches in getTeamsSchedule(): without it
+// the oldies crawl fires hundreds of team-schedule requests back-to-back and
+// ESPN's Akamai edge starts answering with transient 403 "Access Denied" pages.
+const ESPN_TEAM_BATCH_DELAY_MS = 120;
+
+// A browser-like identity: ESPN's Akamai edge is known to answer some
+// headerless / bot-like requests with a 403 "Access Denied" HTML page. Sending a
+// normal User-Agent + Accept keeps us on the fast path.
+const ESPN_DEFAULT_HEADERS: Record<string, string> = {
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'application/json, text/plain, */*',
+};
+
 const fetchWithTimeout = (
   url: string,
   timeoutMs: number = ESPN_FETCH_TIMEOUT_MS,
@@ -19,7 +33,11 @@ const fetchWithTimeout = (
 ) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const mergedOptions: RequestInit = { ...options, signal: controller.signal };
+  const mergedOptions: RequestInit = {
+    ...options,
+    headers: { ...ESPN_DEFAULT_HEADERS, ...(options.headers || {}) },
+    signal: controller.signal,
+  };
   return fetch(url, mergedOptions).finally(() => clearTimeout(timeout));
 };
 
@@ -44,39 +62,65 @@ const fetchWithRetry = async (url: string, retries = 1) => {
 
 // Fetches ESPN with the global timeout + one retry, then parses JSON only when
 // the response is a successful JSON payload. Fails open (returns null) for
-// non-2xx or non-JSON responses (e.g. ESPN HTML rate-limit / bot-block pages or
-// team-not-found redirects) so a single bad response can never abort the whole
-// refresh. A 429 is retried once, honouring the `Retry-After` header when
-// present, before falling back to the safe path.
+// non-2xx or non-JSON responses so a single bad response can never abort the
+// whole refresh.
+//
+// ESPN sits behind Akamai, which answers request bursts (the oldies crawl fires
+// hundreds of team-schedule calls back-to-back) with a transient HTTP 403
+// "Access Denied" HTML page — functionally a soft rate-limit / bot-block, NOT a
+// real "not found". We therefore treat 403 exactly like 429: back off and retry
+// a couple of times before giving up, so a momentary block no longer silently
+// drops a whole team's games.
+const ESPN_RETRYABLE_STATUSES = new Set([403, 429]);
+const ESPN_MAX_RETRIES = 2;
+
+// Throttle the "Skipping" warning so a big crawl that really is blocked logs the
+// first failure in full, then only every Nth one instead of one line per team.
+let espnSkipCount = 0;
+const ESPN_SKIP_LOG_EVERY = 25;
+
 export const fetchJsonOrNull = async (url: string): Promise<any> => {
-  const res = await fetchWithRetry(url);
-  const ct = res.headers.get('content-type') || '';
-  if (res.ok && ct.includes('json')) {
-    return res.json();
-  }
-  if (res.status === 429) {
+  let res = await fetchWithRetry(url);
+
+  for (let attempt = 0; attempt < ESPN_MAX_RETRIES; attempt++) {
+    const ct = res.headers.get('content-type') || '';
+    if (res.ok && ct.includes('json')) {
+      return res.json();
+    }
+    if (!ESPN_RETRYABLE_STATUSES.has(res.status)) {
+      break;
+    }
+
+    // Rate-limited / bot-blocked: honour Retry-After when present, else a short
+    // exponential backoff. Cap the wait so a stubborn block can't stall the run.
     const retryAfter = res.headers.get('retry-after');
     const ms =
       retryAfter && !Number.isNaN(Number(retryAfter))
         ? Number(retryAfter) * 1000
-        : 500;
+        : 500 * (attempt + 1);
     await new Promise((resolve) => setTimeout(resolve, Math.min(ms, 15000)));
-    const again = await fetchWithRetry(url);
-    if (again.ok && again.headers.get('content-type')?.includes('json')) {
-      return again.json();
-    }
-    const body = await again.text().catch(() => '');
-    const snippet = body.slice(0, 160).replace(/\s+/g, ' ');
-    console.warn(
-      `[ESPN] Skipping 429 for ${url} — body preview: ${snippet}`,
-    );
-    return null;
+    res = await fetchWithRetry(url);
   }
+
+  const ct = res.headers.get('content-type') || '';
+  if (res.ok && ct.includes('json')) {
+    return res.json();
+  }
+
   const body = await res.text().catch(() => '');
   const snippet = body.slice(0, 160).replace(/\s+/g, ' ');
-  console.warn(
-    `[ESPN] Skipping ${res.status} ${res.statusText} ${ct ? 'non-JSON' : 'HTTP'} for ${url} — body preview: ${snippet}`,
-  );
+  espnSkipCount++;
+  if (
+    espnSkipCount === 1 ||
+    espnSkipCount % ESPN_SKIP_LOG_EVERY === 0
+  ) {
+    console.warn(
+      `[ESPN] Skipping ${res.status} ${res.statusText} ${ct ? 'non-JSON' : 'HTTP'} for ${url} — body preview: ${snippet}` +
+        (espnSkipCount > 1
+          ? ` (skip #${espnSkipCount}; further skips logged every ${ESPN_SKIP_LOG_EVERY})`
+          : ''),
+    );
+  }
   return null;
 };
 
@@ -421,6 +465,23 @@ const getNormalizedLeagueName = (leagueName: string) => {
   return leagueName;
 };
 
+export const getOlympicTeamLogo = (
+  leagueName: string,
+  abbreviation?: string,
+): string => {
+  if (!leagueName?.toUpperCase().includes('OLYMPICS') || !abbreviation) {
+    return '';
+  }
+
+  const countryCode = abbreviation
+    .trim()
+    .replace(/[-_](?:M|W)$/i, '')
+    .toLowerCase();
+  if (!/^[a-z]{3}$/.test(countryCode)) return '';
+
+  return `https://a.espncdn.com/i/teamlogos/countries/500/${countryCode}.png`;
+};
+
 const ESPNAbbrevs = {
   NHL: {
     UTAH: 'UTA',
@@ -461,11 +522,11 @@ const leagueConfigs = {
   },
   [OLYMPICS_BASKETBALL_MEN]: {
     sport: 'basketball',
-    league: 'olympics-mens-basketball',
+    league: 'mens-olympics-basketball',
   },
   [OLYMPICS_BASKETBALL_WOMEN]: {
     sport: 'basketball',
-    league: 'olympics-womens-basketball',
+    league: 'womens-olympics-basketball',
   },
 };
 
@@ -496,25 +557,72 @@ const leaguesData = Object.fromEntries(
  * and for independent D1 programs, so only the parent id is reliable.
  * Women's college hockey (NCAAWH) is intentionally absent: ESPN exposes no
  * such marker there, so it is kept as-is.
+ *
+ * Men's college hockey (NCAAMH) is a special case: ESPN's `parent.id = 51`
+ * there lumps D1, D3 and even non-NCAA (U Sports) programs together, and its
+ * `isConference` flag is unreliable too, so the parent id alone would admit
+ * non-D1 teams (Adrian, Middlebury, SUNY Cortland, Laurentian…). NCAAMH is
+ * therefore filtered by an explicit allowlist (`NCAAMH_D1_TEAMS`) instead —
+ * see `isD1Groups()`.
  */
 export const D1_PARENT_IDS: Record<string, string[]> = {
   [CollegeLeague.NCAAF]: ['80', '81'],
   [CollegeLeague.NCAAB]: ['50'],
   [CollegeLeague.WNCAAB]: ['50'],
   [CollegeLeague.NCCABB]: ['27'],
-  [CollegeLeague.NCAAMH]: ['51'],
 };
+
+/**
+ * The 64 Division-1 men's college hockey programs, by ESPN abbreviation.
+ *
+ * ESPN exposes no reliable D1 marker for men's college hockey: every team —
+ * D1, D3 and Canadian U Sports alike — reports `groups.parent.id = "51"`, and
+ * `groups.isConference` is `true` for several non-D1 programs (e.g. Findlay,
+ * Wayne State, St. Olaf). This allowlist is the source of truth instead. It is
+ * derived from the six D1 conferences (Big Ten, NCHC, Hockey East, ECAC, CCHA,
+ * Atlantic Hockey) plus the D1 independents (Alaska Anchorage/Fairbanks,
+ * Lindenwood, Long Island, Stonehill).
+ *
+ * Keep it in sync each season: promoted/relegated D1 programs must be added or
+ * removed here.
+ */
+export const NCAAMH_D1_TEAMS: ReadonlySet<string> = new Set([
+  // Big Ten
+  'MICH', 'MSU', 'MINN', 'ND', 'OSU', 'PSU', 'WIS',
+  // NCHC
+  'ASU', 'COLC', 'DEN', 'M-OH', 'OMA', 'UND', 'UMD', 'SCSU', 'WMU',
+  // Hockey East
+  'BC', 'BU', 'CONN', 'ME', 'MASS', 'MRMK', 'NE', 'UNH', 'PROV', 'UML', 'UVM',
+  // ECAC
+  'BRWN', 'CLAR', 'COLG', 'COR', 'DART', 'HARV', 'PRIN', 'QUIN', 'RPI', 'UNNY', 'USL', 'YALE',
+  // CCHA
+  'AUSD', 'BGSU', 'BST', 'FRST', 'LSS', 'MNST', 'MTU', 'NMI', 'STMN',
+  // Atlantic Hockey
+  'AIC', 'AF', 'ARMY', 'BENT', 'CAN', 'HC', 'MERC', 'NIA', 'RIT', 'RMU', 'SHU',
+  // Independents
+  'AKFB', 'UAA', 'LIN', 'LIU', 'STO',
+]);
 
 /**
  * Whether an ESPN team-detail `groups` object marks a Division 1 team.
  * Returns `true` when there is no `groups` info (transient fetch failure):
  * a team must never be dropped on a network error, only on positive proof
  * that it plays outside D1.
+ *
+ * For men's college hockey (NCAAMH) the group parent id is not trustworthy, so
+ * the decision is delegated to the explicit `NCAAMH_D1_TEAMS` allowlist; a
+ * team is kept only when its abbreviation is listed there.
  */
 export const isD1Groups = (
   leagueName: string,
   groups?: { id: string; parent?: { id: string }; isConference?: boolean },
+  teamAbbrev?: string,
 ): boolean => {
+  if (leagueName === CollegeLeague.NCAAMH) {
+    // No groups info (transient failure): keep, never drop on a network error.
+    if (!groups && !teamAbbrev) return true;
+    return !!teamAbbrev && NCAAMH_D1_TEAMS.has(teamAbbrev);
+  }
   const d1Parents = D1_PARENT_IDS[leagueName];
   if (!d1Parents) return true;
   if (!groups) return true;
@@ -688,10 +796,12 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
         // ESPN sometimes returns no logos; fall back to our manual list if we
         // have an entry for this abbreviation. the abbreviation is the second
         // part of the uniqueId when saved in the database.
-        let teamLogo = logos?.[2]?.href ?? logos?.[0]?.href;
-        if (!teamLogo) {
-          teamLogo = UniversityLogos[teamID] || '';
-        }
+        let teamLogo =
+          logos?.[2]?.href ??
+          logos?.[0]?.href ??
+          team.logo ??
+          UniversityLogos[teamID] ??
+          getOlympicTeamLogo(leagueName, teamID);
         const teamLogoDark =
           logos?.find(
             (l) => l.rel?.includes('dark') && l.rel?.includes('scoreboard'),
@@ -758,7 +868,7 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
           (team as any).otLosses = record.otLosses;
         }
       }
-      if (isD1Groups(leagueName, groups)) {
+      if (isD1Groups(leagueName, groups, team.abbrev)) {
         filteredTeams.push(team);
       } else {
         console.info(
@@ -774,6 +884,93 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
   }
 };
 
+/**
+ * Discovers every team that appeared in an Olympic scoreboard for a season.
+ * Olympic rosters change between editions, so the current team list is not a
+ * sufficient source for historical schedule recovery.
+ */
+export const getOlympicSeasonTeams = async (
+  leagueName: string,
+  season: number,
+): Promise<TeamType[]> => {
+  const sourceLeagues = aggregateLeagues[leagueName] || [leagueName];
+  const discovered = new Map<string, TeamType>();
+  const normalizedLeagueName =
+    getNormalizedLeagueName(leagueName).toUpperCase();
+
+  for (const sourceLeague of sourceLeagues) {
+    const config = leagueConfigs[sourceLeague];
+    if (!config) continue;
+
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const url = `${espnAPI}${config.sport}/${config.league}/scoreboard?dates=${season}&limit=1000&page=${page}`;
+      const data = await fetchJsonOrNull(url);
+      if (!data) break;
+
+      const events = data.events || [];
+      for (const event of events) {
+        for (const competitor of event.competitions?.[0]?.competitors || []) {
+          const team = competitor?.team;
+          if (!team?.id) continue;
+
+          const abbrev = team.abbreviation || team.id;
+          const uniqueId = `${sourceLeague}-${abbrev}`;
+          if (discovered.has(uniqueId)) continue;
+
+          const fallbackColors = getTeamColors(uniqueId);
+          let color = team.color ? `#${team.color}` : fallbackColors.color;
+          let backgroundColor = team.alternateColor
+            ? `#${team.alternateColor}`
+            : fallbackColors.backgroundColor;
+          if (color.toLowerCase() === backgroundColor.toLowerCase()) {
+            color = fallbackColors.color;
+            backgroundColor = fallbackColors.backgroundColor;
+          }
+          if (getLuminance(color) < getLuminance(backgroundColor)) {
+            [color, backgroundColor] = [backgroundColor, color];
+          }
+
+          const teamLogo =
+            team.logos?.[2]?.href ??
+            team.logos?.[0]?.href ??
+            team.logo ??
+            UniversityLogos[abbrev] ??
+            getOlympicTeamLogo(sourceLeague, abbrev);
+          discovered.set(uniqueId, {
+            uniqueId,
+            id: String(team.id),
+            abbrev,
+            label: capitalize(team.displayName || team.name || abbrev),
+            teamLogo,
+            teamLogoDark:
+              team.logos?.find(
+                (logo) =>
+                  logo.rel?.includes('dark') &&
+                  logo.rel?.includes('scoreboard'),
+              )?.href ||
+              teamLogo ||
+              '',
+            teamCommonName: capitalize(
+              team.nickname || team.displayName || team.name || abbrev,
+            ),
+            league: normalizedLeagueName,
+            color,
+            backgroundColor,
+            isActive: false,
+          });
+        }
+      }
+
+      hasMore = events.length === 1000;
+      page++;
+    }
+  }
+
+  return [...discovered.values()];
+};
+
 export const getTeamsSchedule = async (
   activeTeams,
   leagueName,
@@ -786,11 +983,19 @@ export const getTeamsSchedule = async (
   const concurrencyLimit = 2;
 
   for (let start = 0; start < activeTeams.length; start += concurrencyLimit) {
+    // Pace the crawl: a short gap between batches keeps ESPN's Akamai edge from
+    // rate-limiting / bot-blocking us (transient 403 "Access Denied" pages) when
+    // the oldies recovery fires hundreds of team-schedule calls in a row.
+    if (start > 0 && ESPN_TEAM_BATCH_DELAY_MS > 0) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, ESPN_TEAM_BATCH_DELAY_MS),
+      );
+    }
     const batch = activeTeams.slice(start, start + concurrencyLimit);
     await Promise.all(
-      batch.map(async ({ id, abbrev, uniqueId }) => {
+      batch.map(async ({ id, abbrev, uniqueId, label }) => {
         const leagueID = `${uniqueId}`;
-        allGames[leagueID] = await getEachTeamSchedule(
+        const teamGames = await getEachTeamSchedule(
           {
             id,
             abbrev,
@@ -802,6 +1007,10 @@ export const getTeamsSchedule = async (
           season,
           teamRecords,
         );
+        allGames[leagueID] = teamGames;
+        console.info(
+          `[Schedule] ${leagueName} ${label || uniqueId}: ${teamGames.length} game(s) fetched.`,
+        );
       }),
     );
   }
@@ -811,7 +1020,17 @@ export const getTeamsSchedule = async (
   // recent team record is used) while the season is still running.
   applySeasonFinalRecords(allGames);
 
-  console.info(`updated ${leagueName}`);
+  const fetchedGames = Object.values(allGames).flat() as any[];
+  const distinctGames = new Set(
+    fetchedGames.map((game) =>
+      game?.startTimeUTC && game?.homeTeamId && game?.awayTeamId
+        ? `${game.startTimeUTC}|${game.homeTeamId}|${game.awayTeamId}`
+        : game?.uniqueId,
+    ),
+  );
+  console.info(
+    `[Schedule] ${leagueName}: fetched schedules for ${activeTeams.length} team(s), ${distinctGames.size} distinct game(s) across those schedules.`,
+  );
   return allGames;
 };
 
@@ -826,6 +1045,7 @@ const getEachTeamSchedule = async (
     if (aggregateLeagues[leagueName]) {
       let allGames = [];
       for (const subLeague of aggregateLeagues[leagueName]) {
+        if (!teamUniqueId.startsWith(`${subLeague}-`)) continue;
         const games = await getEachTeamSchedule(
           {
             id,
@@ -990,11 +1210,17 @@ const getEachTeamSchedule = async (
         const awayTeamLogo =
           awayTeam?.logos?.find(
             (l) => l.rel?.includes('full') && l.rel?.includes('scoreboard'),
-          )?.href || leagueLogos[awayAbbrev];
+          )?.href ||
+          awayTeam?.logo ||
+          leagueLogos[awayAbbrev] ||
+          getOlympicTeamLogo(leagueName, awayAbbrev);
         const homeTeamLogo =
           homeTeam?.logos?.find(
             (l) => l.rel?.includes('full') && l.rel?.includes('scoreboard'),
-          )?.href || leagueLogos[homeAbbrev];
+          )?.href ||
+          homeTeam?.logo ||
+          leagueLogos[homeAbbrev] ||
+          getOlympicTeamLogo(leagueName, homeAbbrev);
 
         const awayTeamLogoDark =
           awayTeam?.logos?.find(
@@ -1013,12 +1239,14 @@ const getEachTeamSchedule = async (
           arenaName: capitalize(venue?.fullName) ?? '',
           awayTeam: capitalize(awayTeam.displayName),
           awayTeamId: `${leagueName}-${awayAbbrev}`,
+          awayTeamESPNId: String(awayTeam.id),
           awayTeamLogo,
           awayTeamLogoDark,
           awayTeamShort,
           gameDate: gameDate,
           homeTeam: capitalize(homeTeam.displayName),
           homeTeamId: `${leagueName}-${homeAbbrev}`,
+          homeTeamESPNId: String(homeTeam.id),
           homeTeamLogo,
           homeTeamLogoDark,
           homeTeamShort,

@@ -1,22 +1,20 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { ListItem } from '@rneui/themed';
 import React, { ReactNode, useEffect, useState } from 'react';
-import { useWindowDimensions } from 'react-native';
-import Separator from './Separator';
 import { ThemedElements } from './ThemedElements';
 
 /**
- * Below this width (px) the filter sections render as collapsible accordions.
- * Covers phones and tablets in portrait, where the always-expanded filter band
- * leaves too little vertical space for the games list. Above it, the sections
- * render as static labelled blocks.
+ * Screen-width threshold (px) separating "medium" screens (phones and tablets in
+ * portrait) from "large" screens. Filter sections now render as collapsible
+ * accordions on **every** screen size; this constant only drives layout choices:
+ * below it the games list needs the vertical room saved by default-collapsed
+ * filters, at and above it every filter accordion defaults to open.
  */
 export const ACCORDION_MAX_WIDTH = 1024;
 
 interface FilterAccordionProps {
   readonly label: string | ReactNode;
   readonly children: React.ReactNode;
-  readonly isSmallDevice: boolean;
   readonly defaultOpen?: boolean;
   /** Controlled `expanded` value. When provided, the accordion uses this value instead of its internal state, and `onExpandedChange` is called on toggle (so the parent can force open/close). When omitted, the accordion is uncontrolled (`defaultOpen` + internal state). */
   readonly expanded?: boolean;
@@ -26,7 +24,6 @@ interface FilterAccordionProps {
 export default function FilterAccordion({
   label,
   children,
-  isSmallDevice,
   defaultOpen = false,
   expanded,
   onExpandedChange,
@@ -34,9 +31,6 @@ export default function FilterAccordion({
   const [internalExpanded, setInternalExpanded] = useState(defaultOpen);
   const isControlled = expanded !== undefined;
   const isExpanded = isControlled ? expanded : internalExpanded;
-  const { width } = useWindowDimensions();
-  // Accordion up to 1024px (phones + tablets in portrait), static sections above
-  const useAccordion = width < ACCORDION_MAX_WIDTH;
   const titleColor = useThemeColor({ light: '#48484A', dark: '#8E8E93' }, 'text');
   const borderColor = useThemeColor({ light: '#D1D1D6', dark: '#38383A' }, 'text');
 
@@ -54,19 +48,7 @@ export default function FilterAccordion({
     }
   };
 
-  // Accordion on phones and tablets (portrait): static labelled section on large screens
-  if (!useAccordion) {
-    return (
-      <>
-        {/* The label separator must sit on the same background as the filter content below it (ThemedElements), not the page background */}
-        <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 }}>
-          <Separator label={label} />
-        </ThemedElements>
-        {children}
-      </>
-    );
-  }
-
+  // Accordion on every screen size: on large screens it simply defaults to open
   return (
     <ThemedElements style={{ width: '100%' }}>
       <ListItem.Accordion
@@ -124,7 +106,6 @@ export default function FilterAccordion({
           paddingTop: 10,
           paddingBottom: 10,
         }}
-        underlayColor="transparent"
       >
         <div style={{ width: '100%', paddingTop: 10, paddingBottom: 10 }}>{children}</div>
       </ListItem.Accordion>

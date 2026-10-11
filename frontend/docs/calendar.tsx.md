@@ -12,11 +12,15 @@ The **Calendar** tab (also called "Agenda") displays games for multiple selected
 - **Home/Away game toggle** — filter to home games, away games, or all
 - **Swipe gesture** — swipe left/right on the page to cycle through home / all / away filters
 - **Hidden teams** — hide specific teams from the display
-- **Bookmarked games modal** — view and manage selected games. Tapping a card opens the game
+- **Bookmarked games modal** — view and manage selected games, including past games retained in
+  the selection. Past game cards are displayed with reduced opacity. Tapping a card opens the game
   details modal (`GameModal`), which offers a trash button (replacing "locate arena") to
   remove that single game from the favorites; the bookmark pill on the card removes it
-  directly. The header trash button still clears the whole selection.
+  directly. Selection mode allows multiple cards to be selected and removed together; a separate
+  labelled "delete selection" button removes those games, while the labelled "delete all favorites"
+  button clears the entire bookmarked list.
 - **Firestore sync** — teams, games, and date range synced to user account
+- **Uniform top bar** — the `PageHeader` is rendered inside the sticky filter zone (the `ThemedView` painted with the page `backgroundColor`: `#F0F0F0` light / `#121212` dark), exactly like `index.tsx` and `schedule.tsx`. It previously sat directly on the root `ThemedView`, so the area behind the logo bar used the raw theme background (`#fff` / `#151718`) and looked lighter than on the other tabs.
 
 ## State Variables
 
@@ -32,8 +36,9 @@ The **Calendar** tab (also called "Agenda") displays games for multiple selected
 | `dateRange`           | `{ startDate, endDate }` | Selected date range               |
 | `reorderModalVisible` | `boolean`                | Team reorder modal visibility     |
 | `gamesModalVisible`   | `boolean`                | Bookmarked games modal visibility |
-| `isTeamAccordionOpen` | `boolean`                | Team filter accordion state       |
-| `isDateAccordionOpen` | `boolean`                | Date range accordion state        |
+| `bulkSelectedGames`   | `GameFormatted[]`        | Bookmarked games selected for bulk removal |
+| `isTeamAccordionOpen` | `boolean`                | Team filter accordion state. Defaults to `true` (open on every screen size) |
+| `isDateAccordionOpen` | `boolean`                | Date range accordion state. Defaults to `true` (open on every screen size) |
 | `datepickerOpen`      | `boolean`                | Whether the calendar datepicker modal is open |
 
 ## Key Functions
@@ -50,6 +55,9 @@ Restores team selection from cache, favorites, or opens the reorder modal if emp
 
 Reads cached games and filters to dates >= today.
 
+The separately stored bookmarked-game selection (`gameSelected`) is restored without removing
+past games, so past bookmarks remain available in the FAVORIS modal.
+
 ### `getStoredTeams()`
 
 Restores teams and games from cache on load.
@@ -58,6 +66,8 @@ Restores teams and games from cache on load.
 
 Fetches all teams from the API and caches them.
 
+Olympic hockey and basketball teams are grouped into one selector option per country/gender, labelled with the country name only.
+
 ### `getGamesFromApi(startDate?, endDate?)`
 
 Fetches games for the selected teams within the date range from the API:
@@ -65,6 +75,10 @@ Fetches games for the selected teams within the date range from the API:
 ```
 GET /games/filter?startDate=...&endDate=...&teamSelectedIds=id1,id2,...
 ```
+
+Olympic teams are offered once per country/gender. The request expands each selected Olympic id
+to its hockey and basketball ids; returned rows are matched to the selected country regardless
+of which sport-specific id the game uses.
 
 ### `handleDateChange(startDate, endDate)`
 
@@ -81,6 +95,13 @@ details: the `GameModal` trash button and the card bookmark pill). Uses the modu
 `isSameGame(a, b)` helper (same teams + same UTC year/month/day/hour, so doubleheaders remain
 distinguishable), then updates the state, saves the `gameSelected` cache, dispatches
 `gamesSelectedUpdated` and syncs to Firestore. No-op when the game is not bookmarked.
+
+### `handleToggleBulkSelection(game)` / `handleRemoveBulkSelection()`
+
+Every favorite card has a checkbox beside its league logo. Clicking that checkbox builds a
+bulk-removal selection, while clicking elsewhere on the card continues to open game details.
+The selected-games trash removes only that selection from cache and Firestore; the separate
+all-games trash continues to clear every bookmark.
 
 ### `handleOpenReorder()`
 
@@ -108,6 +129,8 @@ Only horizontal swipes are captured (ignores vertical scroll) via `onMoveShouldS
 ### `filteredTeamsSelected`
 
 Teams selected that are in the user's allowed leagues.
+Olympic sport-specific ids are treated as one country/gender identity when filtering returned
+games and hidden teams.
 
 ### `filteredGamesSelected`
 

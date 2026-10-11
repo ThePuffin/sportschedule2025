@@ -24,7 +24,7 @@ The team selector uses the stable callback identifier `teamsOfDay`. `Selector` c
 - **Favorite teams sorting** — favorite team games appear first
 - **Bookmark selection** — select up to 10 games
 - **Retry mechanism** — auto-retries fetching when no games are found
-- **Cache management** — caches games by day, prunes old days
+- **Cache management** — caches games by day and removes persisted entries older than yesterday both when restoring the cache and before saving it
 
 ## State Variables
 
@@ -44,8 +44,8 @@ The team selector uses the stable callback identifier `teamsOfDay`. `Selector` c
 | `retryCount`              | `number`               | Auto-retry counter                                     |
 | `closestDates`            | `{ previousDate, nextDate }` | Closest days with games (from `closest` route) for the current filters |
 | `closestRequestRef`       | `Ref<string>`          | Dedupe key (date + leagues + team + filter) of the last `closest` request |
-| `dateAccordionExpanded`   | `boolean`              | Whether the date filter accordion is open (mobile)     |
-| `leagueAccordionExpanded` | `boolean`              | Whether the league filter accordion is open (mobile)   |
+| `dateAccordionExpanded`   | `boolean`              | Whether the date filter accordion is open. Defaults to `true` (open on every screen size) |
+| `leagueAccordionExpanded` | `boolean`              | Whether the league filter accordion is open. Defaults to `width >= ACCORDION_MAX_WIDTH` — closed on medium screens (so only the date filter is open there), open on large screens |
 | `leagueDayGroups`         | `LeagueDayGroup[]`     | League-grouped payload of a **past day** (from `/games/league-day`): one entry per league, plus a leading `FAVORITES` entry when a favorite team plays that day |
 | `favoriteTeamsRef`        | `Ref<string[]>`        | Mirror of `favoriteTeams` read at fetch time (the favorite team ids are sent to the backend, which builds the favorites section) |
 | `leagueDayFavoritesKeyRef`| `Ref<string>`          | Favorites key used by the last past-day fetch — prevents refetching the same day when the favorites did not change |
@@ -74,7 +74,7 @@ Fetches games for the next 5 days (used for prefetching/caching).
 
 ### `pruneOldGamesCache(cache)`
 
-Removes cached games older than yesterday.
+Removes cached games older than yesterday. The restored `gamesDay` cache is pruned during initialization and saved back only if stale date entries were removed; updates to the cache are pruned before being persisted.
 
 ### `fetchAndMergeLiveScores(currentGames)`
 
@@ -105,7 +105,9 @@ Called when the user changes the league/filter:
 
 ### `handleTeamSelectionChange(teamId)`
 
-Called when the user changes the team filter.
+Called when the user changes the team filter. Olympic hockey and basketball ids for the same country and gender are treated as one selection, so the day view filter follows that country across Olympic years.
+
+When both Olympic sports are represented, their team entries are grouped by country/gender and displayed as a single option using the country name only.
 
 ### Empty day → `closest` date navigation
 
@@ -145,6 +147,8 @@ Filters and groups games **for today / upcoming dates**:
 3. Categorizes games: `inProgress`, `scheduled`, `final`, `finished`
 4. Groups scheduled games by hour
 5. Sorts favorite team games first
+
+Olympic favorites match hockey and basketball ids for the same country/gender, so a favorite saved from one sport also highlights and filters the other sport's games.
 
 ### `visibleLeagueGroups`
 
@@ -209,12 +213,7 @@ The favorites section of a past day is computed by the **backend**, so the favor
 
 ## Date Accordion Label Behavior
 
-The date filter accordion's label (the `<span>` containing the formatted date) is only shown when:
-
-- The device is **mobile** (`isSmallDevice` is `true`), **and**
-- The accordion is **closed** (`dateAccordionExpanded` is `false`)
-
-When the accordion is open, or on desktop (no accordion), only the plain translated "Date" label is displayed. The `onExpandedChange` callback updates `dateAccordionExpanded` whenever the accordion toggles.
+The date filter accordion's label shows the formatted date whenever the accordion is closed (`dateAccordionExpanded` is `false`) at any screen size. When open, it displays the plain translated "Date" label. The `onExpandedChange` callback updates `dateAccordionExpanded` whenever the accordion toggles. The date accordion defaults to **open** on every screen size (`defaultOpen={true}`, `dateAccordionExpanded` initialised to `true`).
 
 ## League Accordion Label Behavior
 
@@ -222,9 +221,11 @@ The league filter accordion's label (`leagueAccordionLabel`) dynamically reflect
 
 - If a **team** is selected (`teamSelectedId` is set), the label shows `"Filter by league / team : <LEAGUE>/<team short name>"` (e.g. `MLB/CHC` for the Chicago Cubs).
 - If a **specific league** is selected (`activeFilter` is not `ALL`, `FAVORITES`, or `BOOKMARKS`), the label shows `"Filter by league / team : <league name>"`.
-- Otherwise, the default translated label ("League / Team" on mobile, "League" on desktop) is shown.
+- Otherwise, the default translated combined "League / Team" label is shown at every screen size.
 
-When the accordion is open, the default translated label is always shown. The `onExpandedChange` callback updates `leagueAccordionExpanded` whenever the accordion toggles.
+The league and team filters are contained in this same accordion at every screen size. When it is open, the default translated label is shown. The `onExpandedChange` callback updates `leagueAccordionExpanded` whenever the accordion toggles. The accordion is parent-controlled (`expanded={leagueAccordionExpanded}`) and defaults to **closed on medium screens** / **open on large screens** (`leagueAccordionExpanded` initialised to `width >= ACCORDION_MAX_WIDTH`).
+
+Olympic country entries in the day team selector are grouped by gender across hockey and basketball. The selected country matches the corresponding sport-specific team id in both upcoming and past-day payloads.
 
 ## Date / Calendar Datepicker Behavior
 

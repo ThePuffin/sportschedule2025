@@ -8,7 +8,16 @@ import { maxTeamsNumber } from '@/constants/Constants';
 import { useAuth } from '@/context/AuthContext';
 import { useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { fetchDateRangeFromApi, fetchTeams, getCache, saveCache } from '@/utils/fetchData';
+import {
+  fetchDateRangeFromApi,
+  fetchTeams,
+  getCanonicalTeamId,
+  getCache,
+  getOlympicTeamIds,
+  groupOlympicTeams,
+  saveCache,
+  teamsMatchSelection,
+} from '@/utils/fetchData';
 import { syncToFirestore } from '@/utils/syncService';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -72,6 +81,7 @@ export default function Calendar() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
+  const [bulkSelectedGames, setBulkSelectedGames] = useState<GameFormatted[]>([]);
   const [homeGameVisibility, setHomeGameVisibility] = useState<HomeGameFilter>('all');
 
   const scrollViewRef = useRef<ScrollView>(null);
@@ -259,9 +269,15 @@ export default function Calendar() {
 
   const storeTeamsSelected = useCallback(
     async (teamsSelectedIds: string[], teamsList?: Team[], syncToDB: boolean = true) => {
-      const filteredTeams = teamsSelectedIds.filter((teamId, i) => teamId && i < maxTeamsNumber);
-      setTeamsSelected(filteredTeams);
       const listToSearch = teamsList && teamsList.length > 0 ? teamsList : teams;
+      const filteredTeams = Array.from(
+        new Set(
+          teamsSelectedIds
+            .filter(Boolean)
+            .map((teamId) => getCanonicalTeamId(teamId, listToSearch)),
+        ),
+      ).slice(0, maxTeamsNumber);
+      setTeamsSelected(filteredTeams);
       const selectedTeams = filteredTeams
         .map((teamId) => {
           const team = listToSearch.find((team) => team.uniqueId === teamId);
@@ -274,7 +290,12 @@ export default function Calendar() {
       }
 
       const newGamesSelection = gamesSelected.filter(
-        (game) => filteredTeams.includes(game.homeTeamId) || filteredTeams.includes(game.awayTeamId),
+        (game) =>
+          filteredTeams.some(
+            (teamId) =>
+              teamsMatchSelection(game.homeTeamId, teamId) ||
+              teamsMatchSelection(game.awayTeamId, teamId),
+          ),
       );
       const selectionPruned = newGamesSelection.length !== gamesSelected.length;
 
@@ -311,8 +332,11 @@ export default function Calendar() {
           const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
           if (favoriteTeams.length) {
             for (const favTeamId of favoriteTeams) {
-              if (allTeams.some((team) => team.uniqueId === favTeamId)) {
-                selection.push(favTeamId);
+              const favoriteTeam = allTeams.find((team) =>
+                getOlympicTeamIds(team.uniqueId).includes(favTeamId),
+              );
+              if (favoriteTeam) {
+                selection.push(favoriteTeam.uniqueId);
               }
             }
           }
@@ -351,7 +375,7 @@ export default function Calendar() {
 
     try {
       // Try to fetch the global teams list from cache if state is empty
-      const allTeams = teams.length > 0 ? teams : getCache<Team[]>('teams') || [];
+      const allTeams = groupOlympicTeams(teams.length > 0 ? teams : getCache<Team[]>('teams') || []);
 
       if (allTeams.length > 0) {
         if (teams.length === 0) {
@@ -363,10 +387,7 @@ export default function Calendar() {
         setGames(getStoredGames() as FilterGames);
 
         const storedGamesSelected = getCache<GameFormatted[]>('gameSelected') ?? [];
-        const today = new Date().toISOString().split('T')[0];
-        const gamesSelectedFromStorage = storedGamesSelected.filter((game) => game.gameDate >= today);
-        setGamesSelected(gamesSelectedFromStorage);
-        saveCache('gameSelected', gamesSelectedFromStorage);
+        setGamesSelected(storedGamesSelected);
       }
     } finally {
       isRestoringSelectionRef.current = false;
@@ -375,7 +396,7 @@ export default function Calendar() {
 
   const getTeamsFromApi = useCallback(async (): Promise<Team[]> => {
     try {
-      const allTeams = await fetchTeams();
+      const allTeams = groupOlympicTeams(await fetchTeams());
       saveCache('teams', allTeams);
       getSelectedTeams(allTeams, false);
       return allTeams;
@@ -396,10 +417,9 @@ export default function Calendar() {
         }
 
         try {
+          const expandedTeamIds = Array.from(new Set(teamsSelected.flatMap(getOlympicTeamIds)));
           const response = await fetch(
-            `${EXPO_PUBLIC_API_BASE_URL}/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${teamsSelected.join(
-              ',',
-            )}`,
+            `${EXPO_PUBLIC_API_BASE_URL}/games/filter?startDate=${start}&endDate=${end}&teamSelectedIds=${expandedTeamIds.join(',')}`,
           );
           const gamesData = await response.json();
           saveCache('gamesData', gamesData);
@@ -508,8 +528,39 @@ export default function Calendar() {
     [gamesSelected, user],
   );
 
+  const isBulkSelected = useCallback(
+    (game: GameFormatted) => bulkSelectedGames.some((selected) => isSameGame(selected, game)),
+    [bulkSelectedGames],
+  );
+
+  const handleToggleBulkSelection = useCallback((game: GameFormatted) => {
+    setBulkSelectedGames((selectedGames) =>
+      selectedGames.some((selected) => isSameGame(selected, game))
+        ? selectedGames.filter((selected) => !isSameGame(selected, game))
+        : [...selectedGames, game],
+    );
+  }, []);
+
+  const handleRemoveBulkSelection = useCallback(async () => {
+    if (bulkSelectedGames.length === 0) return;
+    const newSelection = gamesSelected.filter(
+      (game) => !bulkSelectedGames.some((selected) => isSameGame(selected, game)),
+    );
+
+    setGamesSelected(newSelection);
+    setBulkSelectedGames([]);
+    saveCache('gameSelected', newSelection);
+    if (globalThis.window !== undefined) {
+      globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
+    }
+    if (user) {
+      syncToFirestore(user.uid, { gameSelected: newSelection });
+    }
+  }, [bulkSelectedGames, gamesSelected, user]);
+
   const handleClearGamesSelection = useCallback(async () => {
     setGamesSelected([]);
+    setBulkSelectedGames([]);
     saveCache('gameSelected', []);
     if (globalThis.window !== undefined) {
       globalThis.window.dispatchEvent(new Event('gamesSelectedUpdated'));
@@ -520,6 +571,11 @@ export default function Calendar() {
       syncToFirestore(user.uid, { gameSelected: [] });
     }
   }, [user]);
+
+  const closeGamesModal = useCallback(() => {
+    setGamesModalVisible(false);
+    setBulkSelectedGames([]);
+  }, []);
 
   useEffect(() => {
     const refreshData = () => {
@@ -561,9 +617,9 @@ export default function Calendar() {
 
   useEffect(() => {
     if (gamesModalVisible && filteredGamesSelected.length === 0) {
-      setGamesModalVisible(false);
+      closeGamesModal();
     }
-  }, [filteredGamesSelected, gamesModalVisible]);
+  }, [filteredGamesSelected, gamesModalVisible, closeGamesModal]);
 
   const displayAccordions = () => {
     if (!games || Object.keys(games).length === 0) return null;
@@ -579,8 +635,8 @@ export default function Calendar() {
       const gamesForDate = games[date].filter(
         (g) =>
           g.isActive !== false &&
-          filteredTeamsSelected.includes(g.teamSelectedId) &&
-          !hiddenTeams.includes(g.teamSelectedId),
+          filteredTeamsSelected.some((teamId) => teamsMatchSelection(g.teamSelectedId, teamId)) &&
+          !hiddenTeams.some((teamId) => teamsMatchSelection(g.teamSelectedId, teamId)),
       );
 
       if (gamesForDate.length === 0) return null;
@@ -675,7 +731,6 @@ export default function Calendar() {
 
   return (
     <ThemedView style={{ flex: 1 }}>
-      <PageHeader rightElement={<HomeGameToggle value={homeGameVisibility} onValueChange={handleHomeGameToggle} />} />
       <ScrollView
         ref={scrollViewRef}
         onScroll={(event) => ActionButtonRef.current?.handleScroll(event)}
@@ -683,13 +738,11 @@ export default function Calendar() {
       >
         <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <ThemedView style={{ backgroundColor }}>
+            <PageHeader
+              rightElement={<HomeGameToggle value={homeGameVisibility} onValueChange={handleHomeGameToggle} />}
+            />
             <div style={{ width: '100%', padding: useFilterAccordion ? 0 : 10, boxSizing: 'border-box' }}>
-              <FilterAccordion
-                label={teamAccordionLabel}
-                defaultOpen={true}
-                isSmallDevice={useFilterAccordion}
-                onExpandedChange={setIsTeamAccordionOpen}
-              >
+              <FilterAccordion label={teamAccordionLabel} defaultOpen={true} onExpandedChange={setIsTeamAccordionOpen}>
                 <ThemedElements>
                   <div
                     style={{
@@ -773,20 +826,30 @@ export default function Calendar() {
                   </div>
                 </ThemedElements>
               </FilterAccordion>
-              <FilterAccordion
-                label={dateAccordionLabel}
-                defaultOpen={true}
-                isSmallDevice={useFilterAccordion}
-                onExpandedChange={setIsDateAccordionOpen}
-              >
+              <FilterAccordion label={dateAccordionLabel} defaultOpen={true} onExpandedChange={setIsDateAccordionOpen}>
                 <ThemedElements style={{ zIndex: 20 }}>
                   <div style={{ position: 'relative' }}>
-                    <DateRangePicker dateRange={dateRange} onDateChange={handleDateChange} onOpenChange={setDatepickerOpen} title={translateWord('selectYourDates')} />
+                    <DateRangePicker
+                      dateRange={dateRange}
+                      onDateChange={handleDateChange}
+                      onOpenChange={setDatepickerOpen}
+                      title={translateWord('selectYourDates')}
+                    />
                   </div>
                 </ThemedElements>
               </FilterAccordion>
               {!useFilterAccordion || isDateAccordionOpen ? (
-                <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 , zIndex: 50, opacity: datepickerOpen ? 0 : 1, transition: 'opacity 200ms ease-in-out' } as any}>
+                <ThemedElements
+                  style={
+                    {
+                      paddingTop: 10,
+                      paddingBottom: 10,
+                      zIndex: 50,
+                      opacity: datepickerOpen ? 0 : 1,
+                      transition: 'opacity 200ms ease-in-out',
+                    } as any
+                  }
+                >
                   <Separator opacity={datepickerOpen ? 0 : undefined} />
                 </ThemedElements>
               ) : null}
@@ -832,9 +895,9 @@ export default function Calendar() {
         animationType="fade"
         transparent={true}
         visible={gamesModalVisible}
-        onRequestClose={() => setGamesModalVisible(false)}
+        onRequestClose={closeGamesModal}
       >
-        <Pressable style={styles.centeredView} onPress={() => setGamesModalVisible(false)}>
+        <Pressable style={styles.centeredView} onPress={closeGamesModal}>
           <Pressable
             style={[styles.modalView, { backgroundColor: modalBackgroundColor, maxHeight: '80%', minWidth: '75%' }]}
             onPress={(e) => e.stopPropagation()}
@@ -848,29 +911,49 @@ export default function Calendar() {
                 alignItems: 'center',
               }}
             >
-              <TouchableOpacity
-                onPress={() => {
-                  handleClearGamesSelection();
-                  setGamesModalVisible(false);
-                }}
-                style={{
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  borderRadius: 15,
-                  borderWidth: 1,
-                  borderColor: iconColor,
-                  width: 30,
-                  height: 30,
-                  backgroundColor: 'transparent',
-                }}
-              >
-                <Ionicons name="trash" size={16} color={iconColor} />
-              </TouchableOpacity>
+              <View style={{ width: 30 }} />
               <Text style={[styles.modalText, { color: textColor, marginBottom: 0 }]}>
                 {translateWord('favorites')}
               </Text>
-              <TouchableOpacity onPress={() => setGamesModalVisible(false)}>
+              <TouchableOpacity accessibilityRole="button" onPress={closeGamesModal}>
                 <Ionicons name="close" size={24} color={iconColor} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.favoriteModalDeleteActions}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`${translateWord('deleteSelection')} (${bulkSelectedGames.length})`}
+                disabled={bulkSelectedGames.length === 0}
+                onPress={handleRemoveBulkSelection}
+                style={[
+                  styles.favoriteModalDeleteButton,
+                  { backgroundColor: '#ef4444' },
+                  bulkSelectedGames.length === 0 && { opacity: 0.4 },
+                ]}
+              >
+                <Ionicons name="trash" size={15} color="#fff" />
+                <Text style={styles.favoriteModalDeleteButtonText}>
+                  {translateWord('deleteSelection')} ({bulkSelectedGames.length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={translateWord('deleteAllFavorites')}
+                disabled={gamesSelected.length === 0}
+                onPress={() => {
+                  handleClearGamesSelection();
+                  closeGamesModal();
+                }}
+                style={[
+                  styles.favoriteModalDeleteButton,
+                  { backgroundColor: '#475569' },
+                  gamesSelected.length === 0 && { opacity: 0.4 },
+                ]}
+              >
+                <Ionicons name="trash" size={15} color="#fff" />
+                <Text style={styles.favoriteModalDeleteButtonText}>
+                  {translateWord('deleteAllFavorites')}
+                </Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={{ width: '100%' }}>
@@ -882,6 +965,8 @@ export default function Calendar() {
                   gamesSelected={filteredGamesSelected}
                   onSelection={handleGamesSelection}
                   onRemoveFromFavorites={handleRemoveGameSelection}
+                  onToggleBulkSelection={handleToggleBulkSelection}
+                  isBulkSelected={isBulkSelected}
                   disableToggle={true}
                   hideEventCount={true}
                 />
@@ -889,6 +974,8 @@ export default function Calendar() {
                 <GamesSelected
                   onAction={handleGamesSelection}
                   onRemoveFromFavorites={handleRemoveGameSelection}
+                  onToggleBulkSelection={handleToggleBulkSelection}
+                  isBulkSelected={isBulkSelected}
                   data={filteredGamesSelected}
                   teamNumber={filteredGamesSelected.length}
                 />
@@ -909,6 +996,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  favoriteModalDeleteActions: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  favoriteModalDeleteButton: {
+    flex: 1,
+    minHeight: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  favoriteModalDeleteButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    flexShrink: 1,
   },
   modalView: {
     margin: 20,

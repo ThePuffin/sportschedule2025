@@ -23,10 +23,12 @@ export default function Accordion({
   gamesSelected,
   onSelection,
   onRemoveFromFavorites,
+  onToggleBulkSelection,
+  isBulkSelected,
   showTime = false,
   forceShowScores = false,
   filtersHeaderHeight = 0,
-  homeGameVisibility = false,
+  homeGameVisibility = 'all',
   hideEventCount = false,
 }: Readonly<
   AccordionProps & {
@@ -78,6 +80,11 @@ export default function Accordion({
         isSmallDevice: width < ACCORDION_MAX_WIDTH,
         filtersHeaderHeight: width < ACCORDION_MAX_WIDTH ? filtersHeaderHeight : 0,
       });
+      const gameStartTime = Date.parse(game.startTimeUTC);
+      const isPastFavorite =
+        Boolean(onRemoveFromFavorites) &&
+        Number.isFinite(gameStartTime) &&
+        gameStartTime < Date.now();
 
       return (
         <div
@@ -86,6 +93,7 @@ export default function Accordion({
           style={{
             width: isSmallDevice ? '100%' : 'calc((100% - 30px) / 3)',
             scrollMarginTop: `${scrollMarginTopValue}px`,
+            opacity: isPastFavorite ? 0.55 : 1,
           }}
         >
           <CardLarge
@@ -97,6 +105,8 @@ export default function Accordion({
             forceShowScores={forceShowScores}
             onSelection={onSelection}
             onRemoveFromFavorites={onRemoveFromFavorites ? () => onRemoveFromFavorites(game) : undefined}
+            onToggleBulkSelection={onToggleBulkSelection}
+            isBulkSelected={isBulkSelected?.(game)}
             isSelected={isSelected}
             showTime={showTime}
             animateEntry={true}

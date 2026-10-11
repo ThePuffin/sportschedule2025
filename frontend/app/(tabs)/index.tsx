@@ -31,8 +31,11 @@ import {
   fetchLeagues,
   fetchLiveScores,
   fetchTeams,
+  getOlympicTeamIds,
   getCache,
+  groupOlympicTeams,
   saveCache,
+  teamsMatchSelection,
 } from '../../utils/fetchData';
 import { GameFormatted, LeagueDayGroup, Team } from '../../utils/types';
 import { getFilterAccordionLabel, translateFilterLabel, translateWord } from '../../utils/utils';
@@ -58,6 +61,13 @@ const groupGamesByHour = (games: GameFormatted[]) => {
   });
   return grouped;
 };
+
+const getFavoriteGameIndex = (game: GameFormatted, favoriteTeams: string[]) =>
+  favoriteTeams.findIndex(
+    (teamId) =>
+      teamsMatchSelection(game.homeTeamId, teamId) ||
+      teamsMatchSelection(game.awayTeamId, teamId),
+  );
 
 // Special key of the leading favorites section returned by the backend
 // (`/games/league-day`): those games are also listed in their league group.
@@ -124,10 +134,6 @@ const pruneOldGamesCache = (cache: { [key: string]: GameFormatted[] }) => {
 
 const GameofTheDayContent = () => {
   const { width } = useWindowDimensions();
-  const isSmallDevice = width < 768;
-  // Filter sections collapse into accordions on phones AND tablets (portrait), so the
-  // games list keeps enough vertical room on smaller screens
-  const useFilterAccordion = width < ACCORDION_MAX_WIDTH;
   const { user, firestoreReady } = useAuth();
   const router = useRouter();
   const { date: dateParam } = useLocalSearchParams<{ date: string }>();
@@ -152,7 +158,8 @@ const GameofTheDayContent = () => {
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [showScores, setShowScores] = useState<boolean>(false);
   const [dateAccordionExpanded, setDateAccordionExpanded] = useState<boolean>(true);
-  const [leagueAccordionExpanded, setLeagueAccordionExpanded] = useState<boolean>(false);
+  // On medium screens only the date filter is open by default; on large screens everything starts open
+  const [leagueAccordionExpanded, setLeagueAccordionExpanded] = useState<boolean>(width >= ACCORDION_MAX_WIDTH);
 
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [retryCount, setRetryCount] = useState(0);
@@ -175,10 +182,9 @@ const GameofTheDayContent = () => {
     fetchDateRangeLimits().then(setDateLimits);
   }, []);
 
-  // Preload the 'teams' cache (24h) on mount to guarantee that getCache<Team[]>('teams')
-  // is available when the user filters by team through the slider (label → uniqueId resolution).
+  // Preload the 'teams' cache (24h) for label → uniqueId resolution.
   useEffect(() => {
-    fetchTeams().catch(() => {});
+    fetchTeams().catch((error) => console.error('Failed to preload teams for the day filter', error));
   }, []);
 
   const { minDate, maxDate } = dateLimits;
@@ -189,6 +195,13 @@ const GameofTheDayContent = () => {
 
   const [teamSelectedId, setTeamSelectedId] = useState<string>('');
   const gamesDayCache = useRef<{ [key: string]: GameFormatted[] }>({});
+  const persistPrunedGamesCache = useCallback(
+    (cache: { [key: string]: GameFormatted[] } = gamesDayCache.current) => {
+      gamesDayCache.current = pruneOldGamesCache(cache);
+      saveCache('gamesDay', gamesDayCache.current);
+    },
+    [],
+  );
   const scrollViewRef = useRef<ScrollView>(null);
   const ActionButtonRef = useRef<ActionButtonRef>(null);
   const dateRangePickerRef = useRef<DatePickerHandle>(null);
@@ -393,22 +406,19 @@ const GameofTheDayContent = () => {
   }, [disabledLeagues, isAnyGameSelectedToday]);
 
   const visibleGamesByHour = useMemo(() => {
+    const selectedTeam = selectedTeamUniqueId || teamSelectedId;
     const sortGamesByFavorites = (gamesToSort: GameFormatted[]) => {
       return gamesToSort.sort((a, b) => {
-        const aIsFavorite = favoriteTeams.includes(a.homeTeamId) || favoriteTeams.includes(a.awayTeamId);
-        const bIsFavorite = favoriteTeams.includes(b.homeTeamId) || favoriteTeams.includes(b.awayTeamId);
+        const aFavoriteIndex = getFavoriteGameIndex(a, favoriteTeams);
+        const bFavoriteIndex = getFavoriteGameIndex(b, favoriteTeams);
+        const aIsFavorite = aFavoriteIndex !== -1;
+        const bIsFavorite = bFavoriteIndex !== -1;
 
         if (aIsFavorite && !bIsFavorite) return -1;
         if (!aIsFavorite && bIsFavorite) return 1;
 
         if (aIsFavorite && bIsFavorite) {
-          const getFavoriteIndex = (game: GameFormatted) => {
-            const homeIndex = favoriteTeams.indexOf(game.homeTeamId);
-            const awayIndex = favoriteTeams.indexOf(game.awayTeamId);
-            const validIndexes = [homeIndex, awayIndex].filter((i) => i > -1);
-            return Math.min(...validIndexes);
-          };
-          return getFavoriteIndex(a) - getFavoriteIndex(b);
+          return aFavoriteIndex - bFavoriteIndex;
         }
 
         return 0;
@@ -420,14 +430,13 @@ const GameofTheDayContent = () => {
         (game) =>
           game.isActive &&
           selectLeagues.includes(game.league as League) &&
-          (!teamSelectedId ||
-            game.homeTeamId === teamSelectedId ||
-            game.awayTeamId === teamSelectedId ||
+          (!selectedTeam ||
+            teamsMatchSelection(game.homeTeamId, selectedTeam) ||
+            teamsMatchSelection(game.awayTeamId, selectedTeam) ||
             game.homeTeam === teamSelectedId ||
             game.awayTeam === teamSelectedId) &&
           (activeFilter !== 'FAVORITES' ||
-            favoriteTeams.includes(game.homeTeamId) ||
-            favoriteTeams.includes(game.awayTeamId)) &&
+            getFavoriteGameIndex(game, favoriteTeams) !== -1) &&
           (activeFilter !== 'BOOKMARKS' ||
             gamesSelected.some((g) => g.uniqueId === game.uniqueId || g._id === game._id)),
       )
@@ -497,24 +506,24 @@ const GameofTheDayContent = () => {
     }
 
     return groups;
-  }, [games, selectLeagues, teamSelectedId, activeFilter, favoriteTeams]);
+  }, [games, selectLeagues, teamSelectedId, selectedTeamUniqueId, activeFilter, favoriteTeams]);
 
   // Past days are rendered from the league groups built by the backend
   // (`/games/league-day`). Only the client-side filters are applied here
   // (selected leagues, team, favorites/bookmarks chips): the grouping, the
   // group order and the favorites section all come from the API.
   const visibleLeagueGroups = useMemo(() => {
+    const selectedTeam = selectedTeamUniqueId || teamSelectedId;
     const matchesFilters = (game: GameFormatted) =>
       game.isActive &&
       selectLeagues.includes(game.league as League) &&
-      (!teamSelectedId ||
-        game.homeTeamId === teamSelectedId ||
-        game.awayTeamId === teamSelectedId ||
+      (!selectedTeam ||
+        teamsMatchSelection(game.homeTeamId, selectedTeam) ||
+        teamsMatchSelection(game.awayTeamId, selectedTeam) ||
         game.homeTeam === teamSelectedId ||
         game.awayTeam === teamSelectedId) &&
       (activeFilter !== 'FAVORITES' ||
-        favoriteTeams.includes(game.homeTeamId) ||
-        favoriteTeams.includes(game.awayTeamId)) &&
+        getFavoriteGameIndex(game, favoriteTeams) !== -1) &&
       (activeFilter !== 'BOOKMARKS' ||
         gamesSelected.some((g) => g.uniqueId === game.uniqueId || g._id === game._id));
 
@@ -522,7 +531,7 @@ const GameofTheDayContent = () => {
       .filter((group) => activeFilter !== 'FAVORITES' || group.key === FAVORITES_GROUP_KEY)
       .map((group) => ({ ...group, games: group.games.filter(matchesFilters) }))
       .filter((group) => group.games.length > 0);
-  }, [leagueDayGroups, selectLeagues, teamSelectedId, activeFilter, favoriteTeams, gamesSelected]);
+  }, [leagueDayGroups, selectLeagues, teamSelectedId, selectedTeamUniqueId, activeFilter, favoriteTeams, gamesSelected]);
 
   // Sections actually rendered: one per league (leading with the favorites
   // section) for a past day, one per hour group otherwise.
@@ -549,6 +558,7 @@ const GameofTheDayContent = () => {
       const today = formatDateLocal(new Date());
 
       if (YYYYMMDD < today) {
+        persistPrunedGamesCache();
         if (gamesDayCache.current[YYYYMMDD]) {
           delete gamesDayCache.current[YYYYMMDD];
           saveCache('gamesDay', gamesDayCache.current);
@@ -624,25 +634,25 @@ const GameofTheDayContent = () => {
 
         if (YYYYMMDD === today) {
           getNextGamesFromApi(dateToFetch).then((nextFetchedGames) => {
-            gamesDayCache.current = pruneOldGamesCache({ ...gamesDayCache.current, ...nextFetchedGames });
-            saveCache('gamesDay', gamesDayCache.current);
+            persistPrunedGamesCache({
+              ...gamesDayCache.current,
+              ...nextFetchedGames,
+            });
           });
         } else {
           // For other days, save the cache that was updated in the if/else block
-          saveCache('gamesDay', gamesDayCache.current);
+          persistPrunedGamesCache();
         }
       } catch (error: unknown) {
         console.error(error);
         if (!cachedGames) {
           gamesDayCache.current[YYYYMMDD] = [];
-          const prunedEmpty = pruneOldGamesCache({ ...(gamesDayCache.current || {}) });
-          gamesDayCache.current = prunedEmpty;
-          saveCache('gamesDay', prunedEmpty);
+          persistPrunedGamesCache();
           setGames([]);
         }
       }
     },
-    [fetchAndMergeLiveScores],
+    [fetchAndMergeLiveScores, persistPrunedGamesCache],
   );
 
   const handleDateChange = useCallback(
@@ -687,13 +697,16 @@ const GameofTheDayContent = () => {
         // Reset to all leagues and clear team selection
         setSelectLeagues(userLeagues);
         setTeamSelectedId('');
+        setSelectedTeamUniqueId('');
       } else if (filter === 'FAVORITES' || filter === 'BOOKMARKS') {
         setSelectLeagues(allLeaguesList);
         setTeamSelectedId('');
+        setSelectedTeamUniqueId('');
       } else {
         // Specific league
         setSelectLeagues([filter as League]);
         setTeamSelectedId('');
+        setSelectedTeamUniqueId('');
       }
     },
     [allLeaguesList, userLeagues],
@@ -789,7 +802,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
         const useTeam = !!resolvedTeamId;
         const closest = useTeam
           ? await fetchClosestDates({
-              teamSelectedId: resolvedTeamId,
+                teamSelectedId: getOlympicTeamIds(resolvedTeamId).join(','),
               date: formatDateLocal(selectDate),
             })
           : await fetchClosestDates({
@@ -828,6 +841,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       setActiveFilter('ALL');
       setSelectLeagues(userLeagues);
       setTeamSelectedId('');
+      setSelectedTeamUniqueId('');
     }
   }, [activeFilter, hasFavorites, isLoading, userLeagues]);
 
@@ -868,7 +882,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       }
     });
 
-    return Array.from(teamsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+    return groupOlympicTeams(Array.from(teamsMap.values())).sort((a, b) => a.label.localeCompare(b.label));
   }, [games, selectLeagues]);
 
   const leagueAccordionLabel = useMemo(() => {
@@ -877,7 +891,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       : null;
     const { prefix, value } = getFilterAccordionLabel({
       prefix: translateFilterLabel('league_team'),
-      fallbackLabel: translateFilterLabel(useFilterAccordion ? 'league_team' : 'league'),
+      fallbackLabel: translateFilterLabel('league_team'),
       activeFilter,
       selectedTeam,
       expanded: leagueAccordionExpanded,
@@ -893,7 +907,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       );
     }
     return prefix;
-  }, [teamSelectedId, teamsOfTheDay, activeFilter, useFilterAccordion, leagueAccordionExpanded]);
+  }, [teamSelectedId, teamsOfTheDay, activeFilter, leagueAccordionExpanded]);
 
   const displayScoreToggle = useCallback(() => {
     return <PageHeader rightElement={<ScoreToggle value={showScores} onValueChange={handleScoreToggle} />} />;
@@ -941,7 +955,11 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
     const modalItemSelectedId = teamsOfTheDay.find((t) => t.uniqueId === teamSelectedId) ? teamSelectedId : '';
 
     const favoriteLabels = Array.from(
-      new Set(teamsOfTheDay.filter((t) => favoriteTeams.includes(t.uniqueId)).map((t) => t.label)),
+      new Set(
+        teamsOfTheDay
+          .filter((team) => getOlympicTeamIds(team.uniqueId).some((id) => favoriteTeams.includes(id)))
+          .map((team) => team.label),
+      ),
     );
 
     return (
@@ -1086,7 +1104,11 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
       // restore persisted games cache (current day + next 5 days)
       const localStorageGamesDay = getCache<{ [key: string]: GameFormatted[] }>('gamesDay');
       if (localStorageGamesDay) {
-        gamesDayCache.current = localStorageGamesDay;
+        const cachedGameDays = Object.keys(localStorageGamesDay);
+        gamesDayCache.current = pruneOldGamesCache(localStorageGamesDay);
+        if (Object.keys(gamesDayCache.current).length !== cachedGameDays.length) {
+          saveCache('gamesDay', gamesDayCache.current);
+        }
       }
       const storedLeagues = getCache<string[]>('leagues');
       const storedLeaguesSelected = getCache<League[]>('leaguesSelected');
@@ -1206,7 +1228,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                 {displayScoreToggle()}
                 <div
                   style={
-                    !useFilterAccordion
+                    width >= ACCORDION_MAX_WIDTH
                       ? {
                           width: windowWidth < 1200 ? '95%' : '100%',
                           margin: '0 auto',
@@ -1221,7 +1243,6 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                     <FilterAccordion
                       label={leagueAccordionLabel}
                       defaultOpen={false}
-                      isSmallDevice={useFilterAccordion}
                       expanded={leagueAccordionExpanded}
                       onExpandedChange={setLeagueAccordionExpanded}
                     >
@@ -1246,28 +1267,17 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                         ]}
                         disabledValues={disabledFilters}
                       />
-                      {useFilterAccordion && (
-                        <div style={{ marginTop: 10, marginBottom: 10 }}>
-                          <Separator />
-                        </div>
-                      )}
-
-                      {useFilterAccordion && displayFilters()}
+                      <div style={{ marginTop: 10, marginBottom: 10 }}>
+                        <Separator />
+                      </div>
+                      {displayFilters()}
                     </FilterAccordion>
                   </ThemedElements>
-
-                  {!useFilterAccordion && (
-                    <ThemedElements>
-                      <FilterAccordion label={translateFilterLabel('team')} defaultOpen={true} isSmallDevice={false}>
-                        {displayFilters()}
-                      </FilterAccordion>
-                    </ThemedElements>
-                  )}
 
                   <ThemedElements>
                     <FilterAccordion
                       label={
-                        useFilterAccordion && !dateAccordionExpanded ? (
+                        !dateAccordionExpanded ? (
                           <span>
                             {translateFilterLabel('date')} :{' '}
                             <i>
@@ -1284,8 +1294,7 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                           translateFilterLabel('date')
                         )
                       }
-                      defaultOpen={false}
-                      isSmallDevice={useFilterAccordion}
+                      defaultOpen={true}
                       onExpandedChange={handleDateAccordionExpanded}
                     >
                       <div>

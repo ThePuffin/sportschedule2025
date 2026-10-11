@@ -2,6 +2,174 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Changed: Calendar favorites support bulk selection and removal
+
+The FAVORIS modal now has a checkbox next to each card's league logo so users can select individual games without changing the normal card press behavior. The two delete buttons are explicitly labelled as deleting the selection or all favorites, and all new action labels are translated in the supported languages.
+
+Updated Calendar, `CardLarge`, `GamesSelected`, shared component types, and their documentation.
+
+The bulk-selection checkbox icon and touch target have been slightly enlarged for easier tapping.
+Its color now matches the game's bookmark icon in both light and dark themes.
+
+## Changed: past games can be bookmarked from game cards
+
+The card's top-right bookmark control is now available for past games too, so users can add or remove a past game from favorites using the same interaction as an upcoming game.
+
+Updated `frontend/components/CardLarge.tsx` and its documentation.
+
+## Changed: Calendar favorites retain and dim past games
+
+Calendar no longer deletes bookmarked games from its persisted selection simply because their date is before today. Past games remain in the FAVORIS modal and their cards are rendered at reduced opacity.
+
+Updated `calendar.tsx`, `GamesSelected.tsx`, `Accordion.tsx`, and their documentation.
+
+## Fixed: stale past days are pruned from the Game of the Day cache
+
+The persisted `gamesDay` cache is now pruned on restore and before cache updates are saved. Days older than yesterday no longer remain stored just because the user did not trigger the prefetch path.
+
+Updated `frontend/app/(tabs)/index.tsx` and its documentation.
+
+## Changed: long team names scale down consistently in the game modal
+
+On compact screens, the two team names share a font size determined by the longer name in the matchup. Wider screens keep the normal font size and the centered names with symmetric favorite-star side slots.
+
+Updated `frontend/components/GameModal.tsx`, its tests, and component documentation.
+
+## Fixed: favorite stars sit beside both second name lines
+
+In GameModal, both teams' favorite stars now sit immediately beside the last word on the second name line. Compact screens retain the matchup-based smaller font size; wider screens keep the normal size.
+
+## Changed: restore responsive team-name and favorite-star layout
+
+Compact screens place each favorite star below its team name, with both names sharing a font size based on the longer name and using the available team-column width. Text scales down as needed to stay within two lines. Wider screens restore the prior inline star placement beside the team name.
+
+Updated `frontend/components/GameModal.tsx`, its tests, and component documentation.
+
+Updated `frontend/components/GameModal.tsx`, its tests, and component documentation.
+
+## Fixed: Schedule requests include both Olympic sports
+
+Schedule team-game and team-result requests now send both hockey and basketball team ids for an Olympic country selection. This avoids relying on the deployed backend to expand a single sport-specific id. The remaining-games cache is keyed by the full ID set, so an older hockey-only cache entry cannot mask basketball games.
+
+Updated `frontend/utils/fetchData.ts`, its tests, and `frontend/docs/fetchData.ts.md`.
+
+## Fixed: Olympic favorites include both sports in the day view
+
+The index screen now matches Olympic favorites by country/gender identity when sorting and filtering games. Past-day favorite requests also send both sport-specific ids so the backend's FAVORITES section includes both hockey and basketball games.
+
+Updated `frontend/app/(tabs)/index.tsx`, `frontend/utils/fetchData.ts`, their documentation, and fetchData tests.
+
+## Changed: Olympic team filter labels
+
+Olympic team options remain grouped by country and gender, and display the country name only.
+
+## Fixed: Olympic team filters group countries across hockey and basketball
+
+Olympic hockey and basketball have separate provider team ids, which made a country selection
+show only one sport and produced duplicate country choices. The Schedule, Game of the Day, and
+Calendar screens now treat ids for the same Olympic country/gender as one identity. Schedule
+and Calendar selectors group the roster into one country entry, while game and closest-date
+filters include the matching hockey and basketball ids. The backend performs the same expansion
+for team-based upcoming, result, date-range, and closest-date queries, so available sports are
+found across Olympic years; the Olympic gender and country are retained, but the sport does not
+restrict the result. Non-Olympic league behavior is unchanged.
+
+Updated the Schedule, Game of the Day, Calendar and fetchData documentation, plus backend
+`games.service` documentation.
+
+## Fixed: burger-menu scroll buttons showed as disabled after opening a page
+
+`ActionButton` kept `canScrollToTop` / `canScrollToBottom` in sync only through `onScroll` events, both initialized to `false`. Opening a page at the top never emits a scroll event (the focus `scrollTo({ y: 0 })` is a no-op there), and the page content is often still being fetched at that moment: when the fetch completes, the content grows without emitting an event either. The scroll-to-top / scroll-to-bottom buttons in the burger menu therefore stayed dimmed and disabled even though the page could scroll — most visible right after opening a page.
+
+`ActionButton` now re-measures the scroll view directly from the scrollable node (`getScrollableNode()` on web) when the burger menu opens, and on every render while the menu stays open, so the buttons always reflect the current scrollability.
+
+Updated `frontend/components/ActionButton.tsx` and `frontend/docs/components/ActionButton.tsx.md`.
+
+## Fixed: calendar top bar background now matches the other tabs
+
+On the calendar screen, the `PageHeader` was rendered directly on the root `ThemedView`, so the area behind the logo bar was painted with the raw theme background (`#151718` dark / `#fff` light). On `index.tsx` and `schedule.tsx`, the `PageHeader` sits **inside** the sticky `ThemedView` that uses the page background (`#121212` dark / `#F0F0F0` light). Result: the calendar's top bar looked lighter than the other tabs (and slightly different from its own filter bands below).
+
+The `PageHeader` is now the first child of that sticky zone on `calendar.tsx`, exactly like the other two screens, so the header and the filter bands share one uniform background.
+
+Updated `frontend/app/(tabs)/calendar.tsx` and `frontend/docs/calendar.tsx.md`.
+
+## Changed: floating actions menu
+
+The bottom-right floating button now opens a burger menu with separate scroll-to-top, scroll-to-bottom, and favorites actions stacked above it. The burger becomes a close button while the actions are expanded. Scroll actions are dimmed and disabled at their respective ends, and scrolling the screen closes the menu. All menu buttons use the shared `Colors` palette for their theme-aware background, border, and icon colors.
+
+Updated `frontend/components/ActionButton.tsx`, its per-file documentation, and the burger/close icon mappings in `frontend/components/ui/IconSymbol.tsx`.
+
+## Changed: combined league and team filter accordions
+
+The index and schedule screens now place the league and team filters inside one accordion at every viewport size. On the schedule screen, team and opponent selectors remain side by side on wide screens.
+
+Updated `frontend/app/(tabs)/index.tsx`, `frontend/app/(tabs)/schedule.tsx`, and their per-screen documentation.
+
+## Removed: obsolete non-accordion filter branches
+
+Removed the leftover screen-size checks that assumed filters were not accordions on wide screens. Dynamic date labels now work on all screen sizes, and the schedule sticky-header offset accounts for accordions everywhere.
+
+Updated `frontend/app/(tabs)/index.tsx`, `frontend/app/(tabs)/schedule.tsx`, and their per-screen documentation.
+
+## Fixed: all pre-existing TypeScript errors (`tsc --noEmit` now clean)
+
+`npx tsc --noEmit` went from **20 errors** to **0** (the project builds with Metro/Babel, so these never blocked bundling, but they are now resolved). Changes are type-level only, except where noted:
+
+1. `utils/utils.tsx` — typed the implicit-`any` parameters: `randomNumber(max: number)`, `brightenColor(color: string, amount?)` and its inner `.map((c: string) => …)`.
+2. `utils/dateRange.ts` + `utils/fetchData.ts` — **implemented the league-scoped date-range feature that the test and `docs/dateRange.ts.md` already described** but which was never written:
+   - `getDateRangeLimits(leagues?)` / `fetchDateRangeLimits(leagues?, force?)` accept an optional leagues array and use a scoped cache key (`dateRangeLimits` globally, `dateRangeLimits_<LEAGUES>` otherwise).
+   - `fetchDateRangeFromApi(leagues?, force?)` sends `?leagues=…` and, when `force = true`, bypasses the 24h API cache. Fully backward compatible (all args optional). `utils/dateRange.test.ts` (7 tests) passes against the real implementation.
+3. `app/refresh.tsx` — replaced invalid RN string style values with numbers: `padding: '20px'` → `20`, and three `fontSize: '16px'` → `16` (React Native `ViewStyle`/`TextStyle` require numeric lengths).
+4. `components/Accordion.tsx` — `homeGameVisibility` default `false` → `'all'` to match its `HomeGameFilter` type.
+5. `components/ExternalLink.tsx` — cast `href` to `ComponentProps<typeof Link>['href']` (expo-router typed routes reject a plain `string`).
+6. `components/FilterAccordion.tsx` — removed the invalid `underlayColor` prop (not part of `ListItemAccordionProps`).
+7. `components/Selector.tsx` — removed the dead `styles.leagueChipText` reference (the style never existed; the inline `{ color }`/selected styles already cover it).
+8. `components/SliderDatePicker.tsx` — `fontWeight: 'bolder'` → `'bold'` (`'bolder'` is not a valid RN `fontWeight`).
+9. `components/ui/IconSymbol.tsx` — `style` prop type `StyleProp<ViewStyle>` → `StyleProp<TextStyle>` to match what `MaterialIcons` accepts.
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0, 0 errors.
+- `npx jest` → 8 suites, 105 tests, all passing.
+
+### Files
+
+- `utils/utils.tsx`, `utils/dateRange.ts`, `utils/fetchData.ts`, `app/refresh.tsx`, `components/Accordion.tsx`, `components/ExternalLink.tsx`, `components/FilterAccordion.tsx`, `components/Selector.tsx`, `components/SliderDatePicker.tsx`, `components/ui/IconSymbol.tsx`.
+- Docs updated: `docs/dateRange.ts.md` (already described the feature), `docs/fetchData.ts.md` (`fetchDateRangeFromApi` signature), `docs/components/Accordion.tsx.md` (`homeGameVisibility` default).
+
+## Changed: filter accordions on every screen size, all open on large screens
+
+### Problem
+
+Filter sections (`FilterAccordion`) only rendered as collapsible accordions on medium screens (`width < ACCORDION_MAX_WIDTH`, 1024px). On large screens they rendered as **static, always-expanded** labelled sections (`Separator` label + content), so there was no way to collapse a filter on desktop.
+
+### Solution
+
+`FilterAccordion` now always renders the collapsible accordion, on every screen size. The screen-size dependency moved entirely to the **default open state**, decided by each screen:
+
+- **Large screens** (`width >= ACCORDION_MAX_WIDTH`): every filter accordion defaults to **open**.
+- **Medium screens** (`width < ACCORDION_MAX_WIDTH`): only one relevant filter is open by default:
+  - **index** (`Game of the Day`): only the **date** filter is open.
+  - **schedule** (`Focus Team`): only the **team/league** filter is open.
+  - **calendar**: both stay open (unchanged behaviour, both were already `defaultOpen`).
+
+### Changes
+
+1. `frontend/components/FilterAccordion.tsx` — removed the static-section branch (always renders the accordion), removed the now-unused `isSmallDevice` prop, and removed the `useWindowDimensions`/`Separator` imports that only served that branch. `ACCORDION_MAX_WIDTH` is kept as the medium/large threshold that screens use to pick their default open state.
+2. `frontend/app/(tabs)/index.tsx` — `leagueAccordionExpanded` initialised to `width >= ACCORDION_MAX_WIDTH` (closed on medium / open on large); the date accordion's `defaultOpen` changed from `false` to `true` (open everywhere). Dropped the three `isSmallDevice` props.
+3. `frontend/app/(tabs)/schedule.tsx` — `isDateAccordionOpen` initialised to `width >= ACCORDION_MAX_WIDTH` and the date/month accordion's `defaultOpen` changed from `false` to `width >= ACCORDION_MAX_WIDTH` (closed on medium / open on large). Dropped the four `isSmallDevice` props.
+4. `frontend/app/(tabs)/calendar.tsx` — dropped the two `isSmallDevice` props (both accordions already default to open).
+5. `frontend/components/Separator.tsx` — removed the now-unused `label` prop (its only caller was the deleted static branch of `FilterAccordion`); the component is now a plain full-width divider line.
+
+Each screen keeps its responsive *content* layout (stacked on medium, side-by-side on large) — only the accordion chrome is now uniform.
+
+### Files
+
+- `frontend/components/FilterAccordion.tsx` — always-accordion, removed `isSmallDevice` prop and static branch.
+- `frontend/components/Separator.tsx` — removed the now-unused `label` prop (docs: `docs/components/Separator.tsx.md`).
+- `frontend/app/(tabs)/index.tsx`, `schedule.tsx`, `calendar.tsx` — default open state from `width >= ACCORDION_MAX_WIDTH`, removed `isSmallDevice` props.
+- `frontend/docs/components/FilterAccordion.tsx.md`, `frontend/docs/index.tsx.md`, `frontend/docs/schedule.tsx.md`, `frontend/docs/calendar.tsx.md` — docs updated.
+
 ## Fixed: dependency vulnerabilities via non-breaking `npm audit fix`
 
 `npm audit fix` (no `--force`) was run to avoid the breaking upgrades that `npm audit fix --force` would impose on an Expo/React Native project (it wants to jump `expo` 52 → 57 and `react-native` 0.76.7 → 0.75.5, which would break the Metro/babel toolchain).

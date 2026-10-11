@@ -48,6 +48,8 @@ Returns a localized label for filter sections (`league`, `team`, `date`, `league
 ### `translateWord(word)`
 
 Returns a localized translation for a word/key. Supports the same languages as `translateFilterLabel`. Used for UI text like `all`, `gamesOfDay`, `filterTeams`, `inProgress`, etc.
+The Calendar favorites modal also uses localized labels for selecting/deselecting games and
+deleting all favorites.
 
 ### `getWikipediaLanguage()`
 

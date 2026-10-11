@@ -354,7 +354,7 @@ export default function SliderDatePicker({
                             : selected
                               ? textColor
                               : unselectedTextColor,
-                        fontWeight: selected ? 'bolder' : 'normal',
+                        fontWeight: selected ? 'bold' : 'normal',
                       },
                     ]}
                   >

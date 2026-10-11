@@ -1,8 +1,16 @@
 import FavModal from '@/components/FavModal';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCache, saveCache } from '@/utils/fetchData';
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
-import { Animated, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { ThemedView } from './ThemedView';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { IconSymbol } from './ui/IconSymbol';
 
 interface ActionButtonProps {
@@ -10,7 +18,7 @@ interface ActionButtonProps {
 }
 
 export interface ActionButtonRef {
-  handleScroll: (event: any) => void;
+  handleScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   openFavModal: () => void;
 }
 
@@ -23,44 +31,70 @@ const ActionButtonWithRef: React.ForwardRefRenderFunction<ActionButtonRef, Actio
   });
 
   const [isOpenModal, setIsOpenModal] = useState(favoriteTeams.length === 0);
-  const [isVisibleScrollTop, setIsVisibleScrollTop] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-
-  const animateToggle = (showTop: boolean) => {
-    // 1. Fade Out
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setIsVisibleScrollTop(showTop);
-
-      // 3. Fade In
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [canScrollToTop, setCanScrollToTop] = useState(false);
+  const [canScrollToBottom, setCanScrollToBottom] = useState(false);
+  const colorScheme = useColorScheme() ?? 'light';
+  const buttonColors = {
+    backgroundColor: Colors[colorScheme].background,
+    borderColor: Colors[colorScheme].text,
+    iconColor: Colors[colorScheme].text,
   };
 
-  const handleScroll = (event: any) => {
-    const scrollY = event.nativeEvent.contentOffset.y;
-    const shouldShowTop = scrollY > 200;
-
-    // Only trigger animation if the visibility state actually needs to change
-    if (shouldShowTop !== isVisibleScrollTop) {
-      animateToggle(shouldShowTop);
-    }
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const maxScrollY = contentSize.height - layoutMeasurement.height;
+    setCanScrollToTop(contentOffset.y > 1);
+    setCanScrollToBottom(maxScrollY > 1 && contentOffset.y < maxScrollY - 1);
+    setIsMenuOpen(false);
   };
+
+  // Re-measure the scroll view directly instead of relying only on scroll
+  // events. When a page opens, `canScrollToTop/Bottom` stay at their initial
+  // `false` until an `onScroll` fires — but the page content is often still
+  // being fetched at that moment: the initial `scrollTo({ y: 0 })` emits no
+  // event, and when the fetch completes the content grows without emitting
+  // one either. The scroll buttons then wrongly appear disabled. On web,
+  // `getScrollableNode()` returns the scrollable DOM node exposing
+  // `scrollTop` / `scrollHeight` / `clientHeight`.
+  const refreshScrollState = () => {
+    const scrollableNode = (scrollViewRef.current as any)?.getScrollableNode?.() as
+      | { scrollTop?: number; scrollHeight?: number; clientHeight?: number }
+      | null
+      | undefined;
+    if (!scrollableNode || typeof scrollableNode.scrollTop !== 'number') return;
+    const maxScrollY = (scrollableNode.scrollHeight ?? 0) - (scrollableNode.clientHeight ?? 0);
+    setCanScrollToTop(scrollableNode.scrollTop > 1);
+    setCanScrollToBottom(maxScrollY > 1 && scrollableNode.scrollTop < maxScrollY - 1);
+  };
+
+  // Keep the menu accurate while it stays open: if the data fetch finishes in
+  // the meantime, the content grows without producing a scroll event.
+  useEffect(() => {
+    if (isMenuOpen) refreshScrollState();
+  });
 
   useImperativeHandle(ref, () => ({
     handleScroll,
-    openFavModal: () => setIsOpenModal(true),
+    openFavModal: () => {
+      setIsMenuOpen(false);
+      setIsOpenModal(true);
+    },
   }));
 
   const scrollToTop = () => {
+    setIsMenuOpen(false);
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const scrollToBottom = () => {
+    setIsMenuOpen(false);
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  };
+
+  const openFavorites = () => {
+    setIsMenuOpen(false);
+    setIsOpenModal(true);
   };
 
   const saveTeams = (newTeams: string[]) => {
@@ -76,35 +110,70 @@ const ActionButtonWithRef: React.ForwardRefRenderFunction<ActionButtonRef, Actio
         isOpen={isOpenModal}
         onClose={() => setIsOpenModal(false)}
         favoriteTeams={favoriteTeams}
-        onSave={saveTeams} // Pass a save handler
+        onSave={saveTeams}
       />
-      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <View style={styles.container}>
+        {isMenuOpen && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Scroll to top"
+              accessibilityState={{ disabled: !canScrollToTop }}
+              disabled={!canScrollToTop}
+              onPress={scrollToTop}
+              style={[
+                styles.button,
+                buttonColors,
+                styles.actionButton,
+                !canScrollToTop && styles.disabledButton,
+              ]}
+            >
+              <IconSymbol name="arrow.up" color={buttonColors.iconColor} size={24} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Scroll to bottom"
+              accessibilityState={{ disabled: !canScrollToBottom }}
+              disabled={!canScrollToBottom}
+              onPress={scrollToBottom}
+              style={[
+                styles.button,
+                buttonColors,
+                styles.actionButton,
+                !canScrollToBottom && styles.disabledButton,
+              ]}
+            >
+              <IconSymbol name="arrow.down" color={buttonColors.iconColor} size={24} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Open favorites"
+              onPress={openFavorites}
+              style={[styles.button, buttonColors, styles.actionButton]}
+            >
+              <IconSymbol name="gearshape.fill" color={buttonColors.iconColor} size={24} />
+            </TouchableOpacity>
+          </View>
+        )}
         <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={isMenuOpen ? 'Close actions menu' : 'Open actions menu'}
+          accessibilityState={{ expanded: isMenuOpen }}
           onPress={() => {
-            if (isVisibleScrollTop) {
-              scrollToTop();
-            } else {
-              setIsOpenModal(true);
-            }
+            // Re-measure before showing the actions so the buttons reflect the
+            // current scrollability (e.g. content loaded after the page fetch).
+            if (!isMenuOpen) refreshScrollState();
+            setIsMenuOpen((isOpen) => !isOpen);
           }}
+          style={[styles.button, buttonColors, styles.menuButton]}
         >
-          <ThemedView
-            style={[
-              styles.button,
-              {
-                backgroundColor: isVisibleScrollTop ? 'black' : 'white',
-                borderColor: isVisibleScrollTop ? 'white' : 'black',
-              },
-            ]}
-          >
-            <IconSymbol
-              name={isVisibleScrollTop ? 'arrow.up' : 'gearshape.fill'}
-              color={isVisibleScrollTop ? 'white' : 'black'}
-              size={24}
-            />
-          </ThemedView>
+          <IconSymbol
+            name={isMenuOpen ? 'xmark' : 'line.3.horizontal'}
+            color={buttonColors.iconColor}
+            size={24}
+          />
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     </>
   );
 };
@@ -115,14 +184,25 @@ const styles = StyleSheet.create({
     bottom: 20,
     right: 20,
     zIndex: 1,
+    alignItems: 'flex-end',
+  },
+  actions: {
+    marginBottom: 10,
+    gap: 10,
   },
   button: {
-    backgroundColor: '#000000',
     borderRadius: 50,
     padding: 10,
-    borderColor: 'white',
     borderWidth: 1,
-    color: 'white',
+  },
+  actionButton: {
+    alignSelf: 'flex-end',
+  },
+  menuButton: {
+    alignSelf: 'flex-end',
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });
 

@@ -7,6 +7,8 @@ export default function GamesSelected({
   data = [],
   onAction,
   onRemoveFromFavorites,
+  onToggleBulkSelection,
+  isBulkSelected,
   teamNumber = 1,
 }: Readonly<GamesSelectedProps>) {
   const { width } = useWindowDimensions();
@@ -37,10 +39,18 @@ export default function GamesSelected({
       }}
     >
       {data.map((gameSelected: GameFormatted) => {
+        const gameStartTime = Date.parse(gameSelected.startTimeUTC);
+        const isPastGame = Number.isFinite(gameStartTime) && gameStartTime < Date.now();
+
         return (
           <div
             key={gameSelected.uniqueId || gameSelected._id}
-            style={{ width: cardWidth, padding: 5, boxSizing: 'border-box' }}
+            style={{
+              width: cardWidth,
+              padding: 5,
+              boxSizing: 'border-box',
+              opacity: onRemoveFromFavorites && isPastGame ? 0.55 : 1,
+            }}
           >
             <CardLarge
               data={gameSelected}
@@ -50,6 +60,8 @@ export default function GamesSelected({
               onRemoveFromFavorites={
                 onRemoveFromFavorites ? () => onRemoveFromFavorites(gameSelected) : undefined
               }
+              onToggleBulkSelection={onToggleBulkSelection}
+              isBulkSelected={isBulkSelected?.(gameSelected)}
               animateExit={true}
               animateEntry={true}
               verticalMode={verticalMode}

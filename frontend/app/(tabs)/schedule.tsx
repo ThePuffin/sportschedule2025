@@ -36,8 +36,13 @@ import {
   fetchResultsByLeague,
   fetchResultsByTeam,
   fetchTeams,
+  getCanonicalTeamId,
   getCache,
+  getOlympicTeamIds,
+  getTeamIdentityKey,
+  groupOlympicTeams,
   saveCache,
+  teamsMatchSelection,
   smallFetchRemainingGamesByLeague,
 } from '../../utils/fetchData';
 import { FilterGames, GameFormatted, Team } from '../../utils/types';
@@ -58,6 +63,14 @@ const mergeGames = (initial: FilterGames, remaining: FilterGames): FilterGames =
   return merged;
 };
 
+const getTeamIdsForSelection = (teamId: string): string[] => getOlympicTeamIds(teamId);
+
+const getLeagueTeamOptions = (allTeams: Team[], league: string): Team[] => {
+  const teamsInLeague = allTeams.filter((team) => team.league === league);
+  if (!league.startsWith('OLYMPICS-')) return teamsInLeague;
+  return groupOlympicTeams(teamsInLeague).sort((a, b) => a.label.localeCompare(b.label));
+};
+
 export default function Schedule() {
   const { user, firestoreReady } = useAuth();
   const router = useRouter();
@@ -66,7 +79,7 @@ export default function Schedule() {
   const [results, setResults] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamSelected, setTeamSelected] = useState<string>('');
-  const [gamesTeamId, setGamesTeamId] = useState<string>('');
+  const [gamesTeamIds, setGamesTeamIds] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string>('');
   const [monthFilter, setMonthFilter] = useState<string[]>([]);
   const [leagueTeams, setLeagueTeams] = useState<Team[]>([]);
@@ -76,9 +89,6 @@ export default function Schedule() {
   const backgroundColor = useThemeColor({ light: '#F0F0F0', dark: '#121212' }, 'background');
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   const isSmallDevice = width <= 768;
-  // Filter sections collapse into accordions on phones AND tablets (portrait), so the
-  // games list keeps enough vertical room on smaller screens
-  const useFilterAccordion = width < ACCORDION_MAX_WIDTH;
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
   const [leagueOfSelectedTeam, setleagueOfSelectedTeam] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -88,7 +98,8 @@ export default function Schedule() {
     () => getCache<boolean>('showPreviousScores') || false,
   );
   const [isTeamAccordionOpen, setIsTeamAccordionOpen] = useState(true);
-  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(false);
+  // On medium screens the team/league filter is the open one; on large screens everything starts open
+  const [isDateAccordionOpen, setIsDateAccordionOpen] = useState(width >= ACCORDION_MAX_WIDTH);
 
   const isInternalChange = useRef(false);
   const handlePreviousScoreToggle = useCallback(
@@ -269,10 +280,15 @@ export default function Schedule() {
           selection = forcedTeam || storedTeamsLeagues[forcedLeague];
         } else {
           const favoriteTeams = getCache<string[]>('favoriteTeams') || [];
-          const teamsInLeague = allTeams.filter((t) => t.league === forcedLeague);
-          const fav = favoriteTeams.find((fid) => teamsInLeague.some((t) => t.uniqueId === fid));
+          const teamsInLeague = getLeagueTeamOptions(allTeams, forcedLeague);
+          const fav = favoriteTeams.find((fid) =>
+            teamsInLeague.some((team) => getTeamIdsForSelection(team.uniqueId).includes(fid)),
+          );
           if (fav) {
-            selection = fav;
+            selection =
+              teamsInLeague.find((team) =>
+                getTeamIdsForSelection(team.uniqueId).includes(fav),
+              )?.uniqueId ?? fav;
           } else {
             selection = 'all';
           }
@@ -287,7 +303,10 @@ export default function Schedule() {
       const teamsSelected = getCache<Team[]>('teamsSelected');
 
       let teamsSelectedIds = teamsSelected || [];
-      let randomTeam = getRandomTeamId(allTeams) || '';
+      const availableTeams = leagueToSet
+        ? getLeagueTeamOptions(allTeams, leagueToSet)
+        : allTeams;
+      let randomTeam = getRandomTeamId(availableTeams) || '';
 
       if (teamsSelectedIds.length > 0) {
         selection = teamsSelectedIds[0]?.uniqueId || randomTeam;
@@ -317,7 +336,7 @@ export default function Schedule() {
             .map(([date, games]) => [date, games as GameFormatted[]]),
         ) as FilterGames;
         setGames(filteredGames);
-        setGamesTeamId(teamSelection);
+        setGamesTeamIds(getTeamIdsForSelection(teamSelection));
       }
     } else {
       setTeamSelected(teamSelection);
@@ -381,7 +400,7 @@ export default function Schedule() {
       isInternalChange.current = true;
       router.setParams({ league: finalLeagueId });
       localStorage.setItem('leagueSelected', finalLeagueId);
-      const teamsAvailableInLeague = teams.filter(({ league }) => league === finalLeagueId);
+      const teamsAvailableInLeague = getLeagueTeamOptions(teams, finalLeagueId);
       allOption.league = finalLeagueId;
       setLeagueTeams([allOption, ...teamsAvailableInLeague]);
       setleagueOfSelectedTeam(finalLeagueId);
@@ -393,16 +412,19 @@ export default function Schedule() {
 
       if (team.length === 0) {
         const favoriteTeams = getCache<string[]>('favoriteTeams')?.filter((team) => team !== '') || [];
-        const favoriteInLeague = favoriteTeams.find((favId) =>
-          teamsAvailableInLeague.some((t) => t.uniqueId === favId),
+        const favoriteInLeague = teamsAvailableInLeague.find((team) =>
+          favoriteTeams.some((favId) => getTeamIdsForSelection(team.uniqueId).includes(favId)),
         );
         if (favoriteInLeague) {
-          team = favoriteInLeague;
+          team = favoriteInLeague.uniqueId;
         } else {
           team = teamsAvailableInLeague.length
             ? teamsAvailableInLeague[randomNumber(teamsAvailableInLeague.length - 1)].uniqueId
             : 'all';
         }
+      }
+      if (team && team !== 'all') {
+        team = getCanonicalTeamId(team, teams);
       }
       localStorage.setItem('teamSelected', team);
       router.setParams({ league: finalLeagueId, team: team });
@@ -477,7 +499,12 @@ export default function Schedule() {
           .map(([date, dayGames]) => [
             date,
             Array.isArray(dayGames)
-              ? dayGames.filter((g) => g && (g.homeTeamId === filterNameGame || g.awayTeamId === filterNameGame))
+              ? dayGames.filter(
+                  (g) =>
+                    g &&
+                    (teamsMatchSelection(g.homeTeamId, filterNameGame) ||
+                      teamsMatchSelection(g.awayTeamId, filterNameGame)),
+                )
               : [],
           ])
           .filter(([_, filteredDayGames]) => (filteredDayGames as GameFormatted[]).length > 0),
@@ -505,12 +532,14 @@ export default function Schedule() {
       .map(([month, daysInMonth]) => {
         const gamesForThisMonth: GameFormatted[] = daysInMonth.reduce((acc: GameFormatted[], day: string) => {
           const dayGames = Array.isArray(subFilteredGames[day]) ? subFilteredGames[day] : [];
-          if (gamesTeamId === 'all') {
+          if (gamesTeamIds.includes('all')) {
             if (dayGames.length) {
               acc.push(...dayGames);
             }
           } else {
-            const gamesOnDay = dayGames.filter((game: GameFormatted) => game.teamSelectedId === gamesTeamId);
+            const gamesOnDay = dayGames.filter((game: GameFormatted) =>
+              gamesTeamIds.some((teamId) => teamsMatchSelection(game.teamSelectedId, teamId)),
+            );
             if (gamesOnDay.length) {
               acc.push(...gamesOnDay);
             }
@@ -520,7 +549,7 @@ export default function Schedule() {
         return { month, games: gamesForThisMonth };
       })
       .filter((item) => item.games.length > 0);
-  }, [games, results, teamFilter, gamesTeamId]);
+  }, [games, results, teamFilter, gamesTeamIds]);
 
   const scrollTargetId = useMemo(() => {
     if (visibleGamesByMonth.length === 0) return null;
@@ -607,13 +636,10 @@ export default function Schedule() {
   }, [isLoading, showPreviousScores, visibleGamesByMonth.length, teamSelected, leagueOfSelectedTeam, leaguesAvailable]);
 
   const stickyFiltersHeight = useMemo(() => {
-    // Accordion filters exist on phones AND tablets, so the sticky offset applies to both
-    if (!useFilterAccordion) return 0;
-
     const accordionOpenCount = [isTeamAccordionOpen, isDateAccordionOpen].filter(Boolean).length;
     const baseHeight = 180;
     return baseHeight + accordionOpenCount * 126;
-  }, [isDateAccordionOpen, useFilterAccordion, isTeamAccordionOpen]);
+  }, [isDateAccordionOpen, isTeamAccordionOpen]);
 
   const uniqueTeamsFromGames = useMemo(() => {
     if (teamSelected === 'all' && monthFilter.length === 0) {
@@ -622,6 +648,24 @@ export default function Schedule() {
     const teamsFromGames: Team[] = [];
     const seenIds = new Set<string>();
     const allGames = showPreviousScores ? mergeGames(results, games) : games;
+    const addOpponent = (teamId: string, label: string, league: string) => {
+      const identity = getTeamIdentityKey(teamId);
+      if (!teamId || seenIds.has(identity) || teamsMatchSelection(teamId, teamSelected)) return;
+      seenIds.add(identity);
+      const rosterTeam = teamsForSelector.find((team) => getTeamIdentityKey(team.uniqueId) === identity);
+      teamsFromGames.push(
+    rosterTeam ?? {
+      label,
+      league,
+      uniqueId: teamId,
+      id: teamId,
+      teamLogo: '',
+      teamCommonName: label,
+      abbrev: '',
+      updateDate: '',
+    },
+      );
+    };
     for (const day in allGames) {
       if (!Object.hasOwn(allGames, day)) continue;
       if (monthFilter.length > 0) {
@@ -636,32 +680,8 @@ export default function Schedule() {
 
       dayGames.forEach((game) => {
         const { homeTeam, awayTeam, league, homeTeamId, awayTeamId } = game;
-        if (homeTeam && !seenIds.has(homeTeamId) && homeTeamId !== teamSelected) {
-          seenIds.add(homeTeamId);
-          teamsFromGames.push({
-            label: homeTeam,
-            league,
-            uniqueId: homeTeamId,
-            id: homeTeamId,
-            teamLogo: '',
-            teamCommonName: homeTeam,
-            abbrev: '',
-            updateDate: '',
-          });
-        }
-        if (awayTeam && !seenIds.has(awayTeamId) && awayTeamId !== teamSelected) {
-          seenIds.add(awayTeamId);
-          teamsFromGames.push({
-            label: awayTeam,
-            league,
-            uniqueId: awayTeamId,
-            id: awayTeamId,
-            teamLogo: '',
-            teamCommonName: awayTeam,
-            abbrev: '',
-            updateDate: '',
-          });
-        }
+        if (homeTeam) addOpponent(homeTeamId, homeTeam, league);
+        if (awayTeam) addOpponent(awayTeamId, awayTeam, league);
       });
     }
     return teamsFromGames.sort((a, b) => a.label.localeCompare(b.label));
@@ -772,25 +792,30 @@ export default function Schedule() {
                   <PreviousScoreToggle value={showPreviousScores} onValueChange={handlePreviousScoreToggle} />
                 }
               />
-              <div style={{ width: '100%', padding: useFilterAccordion ? 0 : 10, boxSizing: 'border-box' }}>
-                {useFilterAccordion ? (
-                  <FilterAccordion
-                    label={teamAccordionLabel}
-                    defaultOpen={true}
-                    isSmallDevice={true}
-                    onExpandedChange={setIsTeamAccordionOpen}
+              <div style={{ width: '100%', padding: width < ACCORDION_MAX_WIDTH ? 0 : 10, boxSizing: 'border-box' }}>
+                <FilterAccordion
+                  label={teamAccordionLabel}
+                  defaultOpen={true}
+                  onExpandedChange={setIsTeamAccordionOpen}
+                >
+                  <ThemedElements style={{ width: '100%' }}>
+                    <FilterSlider
+                      selectedFilter={leagueOfSelectedTeam}
+                      onFilterChange={handleLeagueSelectionChange}
+                      availableLeagues={leagues}
+                    />
+                  </ThemedElements>
+                  <ThemedElements style={{ marginTop: 10, marginBottom: 10 }}>
+                    <Separator />
+                  </ThemedElements>
+                  <div
+                    style={
+                      isSmallDevice
+                        ? { width: '100%' }
+                        : { display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%' }
+                    }
                   >
-                    <ThemedElements style={{ width: '100%' }}>
-                      <FilterSlider
-                        selectedFilter={leagueOfSelectedTeam}
-                        onFilterChange={handleLeagueSelectionChange}
-                        availableLeagues={leagues}
-                      />
-                    </ThemedElements>
-                    <ThemedElements style={{ marginTop: 10, marginBottom: 10 }}>
-                      <Separator />
-                    </ThemedElements>
-                    <div style={{ width: '100%' }}>
+                    <div style={{ width: isSmallDevice || !showTeamFilter ? '100%' : '50%' }}>
                       <TeamFilter
                         icon={<Ionicons name="search" size={24} color="white" />}
                         selectorData={dataTeams}
@@ -808,11 +833,15 @@ export default function Schedule() {
                     </div>
 
                     {showTeamFilter && (
-                      <div style={{ width: '100%' }}>
+                      <div style={{ width: isSmallDevice ? '100%' : '50%' }}>
                         <TeamFilter
                           icon={
                             <span
-                              style={{ color: Colors[colorScheme ?? 'light'].text, fontWeight: 'bold', fontSize: 18 }}
+                              style={{
+                                color: Colors[colorScheme ?? 'light'].text,
+                                fontWeight: 'bold',
+                                fontSize: 18,
+                              }}
                             >
                               VS
                             </span>
@@ -831,85 +860,12 @@ export default function Schedule() {
                         />
                       </div>
                     )}
-                  </FilterAccordion>
-                ) : (
-                  <>
-                    <FilterAccordion label={translateFilterLabel('league')} defaultOpen={true} isSmallDevice={false}>
-                      <ThemedElements style={{ width: '100%' }}>
-                        <FilterSlider
-                          selectedFilter={leagueOfSelectedTeam}
-                          onFilterChange={handleLeagueSelectionChange}
-                          availableLeagues={leagues}
-                        />
-                      </ThemedElements>
-                    </FilterAccordion>
-                    <FilterAccordion
-                      label={translateFilterLabel('team')}
-                      defaultOpen={true}
-                      isSmallDevice={false}
-                      onExpandedChange={setIsTeamAccordionOpen}
-                    >
-                      <div
-                        style={
-                          isSmallDevice
-                            ? { width: '100%' }
-                            : { display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%' }
-                        }
-                      >
-                        <div style={{ width: isSmallDevice || !showTeamFilter ? '100%' : '50%' }}>
-                          <TeamFilter
-                            icon={<Ionicons name="search" size={24} color="white" />}
-                            selectorData={dataTeams}
-                            onSelectorChange={handleTeamSelectionChange}
-                            selectorPlaceholder={translateWord('filterTeams')}
-                            isClearable={false}
-                            filterData={teamsForSelector.map((t) => ({
-                              label: t.label === 'All' ? translateWord('all') : t.label,
-                              value: t.uniqueId,
-                            }))}
-                            selectedFilter={teamSelected}
-                            onFilterChange={handleTeamSelectionChange}
-                            favoriteValues={favoriteTeams}
-                          />
-                        </div>
-
-                        {showTeamFilter && (
-                          <div style={{ width: isSmallDevice ? '100%' : '50%' }}>
-                            <TeamFilter
-                              icon={
-                                <span
-                                  style={{
-                                    color: Colors[colorScheme ?? 'light'].text,
-                                    fontWeight: 'bold',
-                                    fontSize: 18,
-                                  }}
-                                >
-                                  VS
-                                </span>
-                              }
-                              selectorData={dataTeamsFilter}
-                              onSelectorChange={handleTeamFilterChange}
-                              selectorPlaceholder={translateWord('filterTeams')}
-                              isClearable={false}
-                              filterData={[
-                                { label: translateWord('all'), value: '' },
-                                ...uniqueTeamsFromGames.map((t) => ({ label: t.label, value: t.uniqueId })),
-                              ]}
-                              selectedFilter={teamFilter}
-                              onFilterChange={handleTeamFilterChange}
-                              favoriteValues={favoriteTeams}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </FilterAccordion>
-                  </>
-                )}
+                  </div>
+                </FilterAccordion>
                 {visibleGamesByMonth.length > 1 && (
                   <FilterAccordion
                     label={dateAccordionLabel}
-                    defaultOpen={false}
-                    isSmallDevice={useFilterAccordion}
+                    defaultOpen={width >= ACCORDION_MAX_WIDTH}
                     onExpandedChange={setIsDateAccordionOpen}
                   >
                     <ThemedElements style={{ width: '100%' }}>
@@ -945,8 +901,7 @@ export default function Schedule() {
                     </ThemedElements>
                   </FilterAccordion>
                 )}
-                {!useFilterAccordion ||
-                (visibleGamesByMonth.length > 1 ? isDateAccordionOpen : isTeamAccordionOpen) ? (
+                {(visibleGamesByMonth.length > 1 ? isDateAccordionOpen : isTeamAccordionOpen) ? (
                   <ThemedElements style={{ paddingTop: 10, paddingBottom: 10 }}>
                     <Separator />
                   </ThemedElements>
@@ -1049,13 +1004,14 @@ export default function Schedule() {
         if (scheduleKeys.length > 0) {
           const scheduleTeam = scheduleDataStored[scheduleKeys[0]]?.[0]?.teamSelectedId;
           const scheduleLeague = scheduleDataStored[scheduleKeys[0]]?.[0]?.league;
+          const selectedTeamIds = getTeamIdsForSelection(teamSelected);
 
           if (
-            scheduleTeam === teamSelected ||
+            selectedTeamIds.includes(scheduleTeam) ||
             (teamSelected === 'all' && scheduleLeague?.toUpperCase() === leagueOfSelectedTeam?.toUpperCase())
           ) {
             setGames(removeOldGames(scheduleDataStored));
-            setGamesTeamId(teamSelected);
+            setGamesTeamIds(selectedTeamIds);
           } else {
             setGames({});
           }
@@ -1066,7 +1022,7 @@ export default function Schedule() {
           const smallScheduleData = await smallFetchRemainingGamesByLeague(selectionLeague);
           saveCache('scheduleData', smallScheduleData);
           setGames(removeOldGames(smallScheduleData));
-          setGamesTeamId(teamSelected);
+          setGamesTeamIds(['all']);
           setleagueOfSelectedTeam(selectionLeague);
           const remainingScheduleData = await fetchRemainingGamesByLeague(
             selectionLeague,
@@ -1106,13 +1062,13 @@ export default function Schedule() {
         saveCache('scheduleData', scheduleData);
 
         setGames(removeOldGames(scheduleData));
-        setGamesTeamId(teamSelected);
+        setGamesTeamIds(getTeamIdsForSelection(teamSelected));
       } catch (error) {
         console.error('fetch games failed, using cached schedule if available', error);
         const scheduleData = getCache<FilterGames>('scheduleData');
         if (scheduleData) {
           setGames(scheduleData);
-          setGamesTeamId(teamSelected);
+          setGamesTeamIds(getTeamIdsForSelection(teamSelected));
         }
       } finally {
         setIsLoading(false);
@@ -1140,23 +1096,27 @@ export default function Schedule() {
     }
 
     const list = teamsList ?? teams;
+    const normalizedSelection =
+      teamSelection === 'all'
+        ? teamSelection
+        : getCanonicalTeamId(teamSelection, list);
     let newLeague = '';
-    if (teamSelection === 'all') {
+    if (normalizedSelection === 'all') {
       newLeague = localStorage.getItem('leagueSelected') || '';
     } else {
-      newLeague = list.find((t) => t.uniqueId === teamSelection)?.league ?? '';
+      newLeague = list.find((t) => t.uniqueId === normalizedSelection)?.league ?? '';
     }
 
     // persist immediately
-    localStorage.setItem('teamSelected', teamSelection);
+    localStorage.setItem('teamSelected', normalizedSelection);
     if (newLeague) {
       localStorage.setItem('leagueSelected', newLeague);
     }
 
     // update state once with derived values
-    setTeamSelected(teamSelection);
+    setTeamSelected(normalizedSelection);
     setleagueOfSelectedTeam(newLeague);
-    const leagueFilter = list.filter(({ league }) => league === newLeague);
+    const leagueFilter = getLeagueTeamOptions(list, newLeague);
     allOption.league = newLeague;
     setLeagueTeams([allOption, ...leagueFilter]);
   };

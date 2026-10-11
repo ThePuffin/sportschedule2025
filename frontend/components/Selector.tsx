@@ -415,7 +415,6 @@ export default function Selector({
                           >
                             <Text
                               style={[
-                                styles.leagueChipText,
                                 { color: textColor },
                                 selectedLeague === league && { color: backgroundColor, fontWeight: 'bold' },
                               ]}

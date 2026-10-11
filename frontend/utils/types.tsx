@@ -109,6 +109,8 @@ export type AccordionProps = {
    * shows a "remove from favorites" button.
    */
   readonly onRemoveFromFavorites?: (game: GameFormatted) => void;
+  readonly onToggleBulkSelection?: (game: GameFormatted) => void;
+  readonly isBulkSelected?: (game: GameFormatted) => boolean;
 };
 
 export interface ButtonsProps {
@@ -150,6 +152,8 @@ export interface GamesSelectedProps {
    * "remove from favorites" button) instead of removing the card directly.
    */
   readonly onRemoveFromFavorites?: (game: GameFormatted) => void;
+  readonly onToggleBulkSelection?: (game: GameFormatted) => void;
+  readonly isBulkSelected?: (game: GameFormatted) => boolean;
 }
 
 export interface SelectorProps {
@@ -183,4 +187,6 @@ export interface CardsProps {
    * favorites" button next to the `.ics` / "locate arena" actions.
    */
   onRemoveFromFavorites?: (game: GameFormatted) => void;
+  onToggleBulkSelection?: (game: GameFormatted) => void;
+  isBulkSelected?: boolean;
 }

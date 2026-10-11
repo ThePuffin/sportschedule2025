@@ -114,7 +114,8 @@ their league section, which is why the screen de-duplicates them before building
 
 Props for the `Accordion` component. `onRemoveFromFavorites?: (game: GameFormatted) => void` is
 forwarded to each `CardLarge` (bound to the current game) and switches the cards to
-favorites-details mode for the FAVORIS modal.
+favorites-details mode for the FAVORIS modal. `onToggleBulkSelection` and `isBulkSelected` render
+and control the independent bulk-selection checkbox.
 
 ### `ButtonsProps`
 
@@ -132,7 +133,8 @@ Props for icon buttons (extends `ButtonProps`).
 
 Props for the games selected component. `onRemoveFromFavorites?: (game: GameFormatted) => void`
 puts every card in favorites-details mode (card press opens `GameModal`, which offers the
-removal button).
+removal button). `onToggleBulkSelection` and `isBulkSelected` optionally enable the independent
+bulk-selection checkbox.
 
 ### `SelectorProps`
 
@@ -142,4 +144,6 @@ Props for the selector component.
 
 Props for the card components. `onRemoveFromFavorites?: (game: GameFormatted) => void` enables
 favorites-details mode: the card press opens `GameModal` instead of toggling the bookmark, and
-the game is removed through the modal's trash button.
+the game is removed through the modal's trash button. `onToggleBulkSelection` enables a checkbox
+that toggles bulk selection without overriding the card press, while `isBulkSelected` controls its
+indicator.
