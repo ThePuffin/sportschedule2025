@@ -2,6 +2,12 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Changed: missing team palettes
+
+Replaced the supplied university and professional-team placeholder palettes,
+reusing each university's colors across its sport-specific team keys. Added
+PWHL Detroit, Hamilton, Las Vegas, and San Jose palettes to the frontend map.
+
 ## Changed: Calendar favorites support bulk selection and removal
 
 The FAVORIS modal now has a checkbox next to each card's league logo so users can select individual games without changing the normal card press behavior. The two delete buttons are explicitly labelled as deleting the selection or all favorites, and all new action labels are translated in the supported languages.
