@@ -2,6 +2,7 @@ import {
   applySeasonFinalRecords,
   extractCompetitorRecord,
   fetchJsonOrNull,
+  getESPNTeamLogo,
   getOlympicTeamLogo,
   getOlympicSeasonTeams,
   getRecordSeasonType,
@@ -9,8 +10,71 @@ import {
   getTeamsSchedule,
   isD1Groups,
   NCAAMH_D1_TEAMS,
+  NCAAWH_D1_TEAM_IDS,
   resolveScheduleGameStatus,
 } from './espnAllData';
+
+describe('getESPNTeamLogo', () => {
+  const logo = (href: string, rel: string[]) => ({
+    href,
+    rel,
+    alt: '',
+    width: 500,
+    height: 500,
+  });
+
+  it('preserves the existing ESPN logo preference order', () => {
+    expect(
+      getESPNTeamLogo({
+        logo: 'singular-logo.png',
+        logos: [
+          logo('first-logo.png', ['default']),
+          logo('second-logo.png', ['full']),
+          logo('third-logo.png', ['primary_logo_on_white_color']),
+        ],
+      }),
+    ).toBe('third-logo.png');
+  });
+
+  it('falls back to known ESPN logo relations when the original indexes are absent', () => {
+    expect(
+      getESPNTeamLogo({
+        logos: [
+          logo('', ['default']),
+          logo('scoreboard-logo.png', ['full', 'scoreboard']),
+        ],
+      }),
+    ).toBe('scoreboard-logo.png');
+  });
+
+  it('uses any remaining ESPN logo href when no known relation is present', () => {
+    expect(
+      getESPNTeamLogo({
+        logos: [logo('alternate-logo.png', ['alternate'])],
+      }),
+    ).toBe('alternate-logo.png');
+  });
+
+  it('allows a caller-specific ESPN relation to take precedence', () => {
+    expect(
+      getESPNTeamLogo(
+        {
+          logo: 'singular-logo.png',
+          logos: [
+            logo('indexed-logo.png', ['default']),
+            logo('preferred-logo.png', ['full', 'scoreboard']),
+          ],
+        },
+        [['full', 'scoreboard']],
+      ),
+    ).toBe('preferred-logo.png');
+  });
+
+  it('returns undefined when ESPN provides no usable URL', () => {
+    expect(getESPNTeamLogo({ logos: [] })).toBeUndefined();
+    expect(getESPNTeamLogo(undefined)).toBeUndefined();
+  });
+});
 
 describe('getSeasonFinals', () => {
   const game = (id, home, away, homeRecord, awayRecord) => ({
@@ -649,6 +713,13 @@ describe('isD1Groups', () => {
     it('keeps a team with no groups info (transient fetch failure)', () => {
       expect(isD1Groups('NCAAB', undefined, 'DUKE')).toBe(true);
     });
+
+    it('keeps Division I NCAAWH teams and drops D2/D3 teams by ESPN id', () => {
+      expect(NCAAWH_D1_TEAM_IDS.size).toBe(41);
+      expect(isD1Groups('NCAAWH', undefined, undefined, '103')).toBe(true);
+      expect(isD1Groups('NCAAWH', undefined, undefined, '127962')).toBe(false);
+      expect(isD1Groups('NCAAWH', undefined, undefined, '121934')).toBe(false);
+    });
   });
 
   describe('men\u2019s college hockey (NCAAMH) allowlist', () => {
@@ -693,6 +764,97 @@ describe('isD1Groups', () => {
     it('keeps a team with no groups info (transient fetch failure)', () => {
       expect(isD1Groups('NCAAMH', undefined, 'MICH')).toBe(true);
       expect(isD1Groups('NCAAMH', undefined, undefined)).toBe(true);
+    });
+  });
+
+  describe('getTeamsSchedule Division I filtering', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('only requests schedules for verified D1 teams', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(
+        async (input) => {
+          const url = String(input);
+          const isSchedule = url.includes('/schedule?');
+          const teamId = url.match(/\/teams\/(\d+)/)?.[1];
+          const payload = isSchedule
+            ? { events: [] }
+            : {
+                team: {
+                  groups: {
+                    id: teamId === '99001' ? '100' : '200',
+                    parent: { id: teamId === '99001' ? '50' : '49' },
+                  },
+                },
+              };
+
+          return new Response(JSON.stringify(payload), {
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+      );
+
+      const result = await getTeamsSchedule(
+        [
+          {
+            id: '99001',
+            abbrev: 'D1',
+            uniqueId: 'NCAAB-D1',
+            label: 'D1 University',
+          },
+          {
+            id: '99002',
+            abbrev: 'D2',
+            uniqueId: 'NCAAB-D2',
+            label: 'D2 University',
+          },
+        ],
+        'NCAAB',
+        {},
+        true,
+      );
+
+      expect(result['NCAAB-D1']).toEqual([]);
+      expect(result['NCAAB-D2']).toEqual([]);
+      expect(
+        fetchSpy.mock.calls.filter(([url]) => String(url).includes('/schedule?')),
+      ).toHaveLength(3);
+    });
+
+    it('fails the league fetch instead of accepting an invalid schedule payload', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(
+        async (input) => {
+          const url = String(input);
+          const payload = url.includes('/schedule?')
+            ? { unexpected: [] }
+            : { team: { groups: { parent: { id: '50' } } } };
+          return new Response(JSON.stringify(payload), {
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+      );
+
+      await expect(
+        getTeamsSchedule(
+          [
+            {
+              id: '99003',
+              abbrev: 'D1',
+              uniqueId: 'NCAAB-INCOMPLETE',
+              label: 'D1 University',
+            },
+          ],
+          'NCAAB',
+          {},
+          true,
+        ),
+      ).rejects.toThrow('refusing to return a partial league schedule');
+
+      expect(
+        fetchSpy.mock.calls.filter(([url]) => String(url).includes('/schedule?')),
+      ).toHaveLength(1);
     });
   });
 });

@@ -7,6 +7,55 @@ import { capitalize, getLuminance, getCurrentSeasonYears } from '../utils';
 
 const espnAPI = 'https://site.api.espn.com/apis/site/v2/sports/';
 
+const ESPN_LOGO_RELATION_PRIORITIES = [
+  ['default'],
+  ['full', 'scoreboard'],
+  ['scoreboard'],
+  ['full'],
+  ['primary_logo_on_white_color'],
+  ['primary_logo_on_primary_color'],
+  ['primary_logo_on_secondary_color'],
+  ['primary_logo_on_black_color'],
+  ['primary_logo_black'],
+  ['primary_logo_white'],
+];
+
+export const getESPNTeamLogo = (
+  team?: Partial<Pick<ESPNTeam['team'], 'logo' | 'logos'>>,
+  preferredRelations: string[][] = [],
+): string | undefined => {
+  const logos = Array.isArray(team?.logos)
+    ? team.logos.filter((logo) => logo && typeof logo.href === 'string')
+    : [];
+  const validUrl = (href?: string) =>
+    typeof href === 'string' && href.trim().length > 0;
+
+  const preferredLogo = preferredRelations
+    .map(
+      (relations) =>
+        logos.find((logo) =>
+          relations.every((relation) => logo.rel?.includes(relation)),
+        )?.href,
+    )
+    .find(validUrl);
+
+  return (
+    preferredLogo ??
+    [
+      logos[2]?.href,
+      logos[0]?.href,
+      team?.logo,
+      ...ESPN_LOGO_RELATION_PRIORITIES.map(
+        (relations) =>
+          logos.find((logo) =>
+            relations.every((relation) => logo.rel?.includes(relation)),
+          )?.href,
+      ),
+      ...logos.map((logo) => logo.href),
+    ].find(validUrl)
+  );
+};
+
 // Abort a hanging ESPN request after `timeoutMs`, using the global AbortController
 // (Node >= 18). Prevents a connect-timeout from blocking the schedule/oldies
 // refresh for an unbounded amount of time (undici's default is very long).
@@ -668,6 +717,19 @@ export const NCAAMH_D1_TEAMS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * NCAA women's hockey has no usable ESPN division marker: D1, D2 and D3 teams
+ * all report group 51. Keep the current D1 ESPN team IDs explicitly listed.
+ * Update this set when the NCAA D1 roster changes.
+ */
+export const NCAAWH_D1_TEAM_IDS: ReadonlySet<string> = new Set([
+  '132', '103', '104', '225', '2137', '2142', '172', '159', '108', '107',
+  '2815', '2341', '311', '2385', '2771', '134', '135', '2364', '160', '315',
+  '155', '111', '194', '213', '163', '2507', '2514', '178', '2528', '2523',
+  '2529', '2594', '2779', '2900', '284', '183', '41', '2785', '261', '275',
+  '43',
+]);
+
+/**
  * Whether an ESPN team-detail `groups` object marks a Division 1 team.
  * Returns `true` when there is no `groups` info (transient fetch failure):
  * a team must never be dropped on a network error, only on positive proof
@@ -676,22 +738,34 @@ export const NCAAMH_D1_TEAMS: ReadonlySet<string> = new Set([
  * For men's college hockey (NCAAMH) the group parent id is not trustworthy, so
  * the decision is delegated to the explicit `NCAAMH_D1_TEAMS` allowlist; a
  * team is kept only when its abbreviation is listed there.
+ * Women's college hockey uses an explicit ESPN team-id allowlist because ESPN
+ * exposes no reliable division marker for that league.
  */
 export const isD1Groups = (
   leagueName: string,
   groups?: { id: string; parent?: { id: string }; isConference?: boolean },
   teamAbbrev?: string,
+  teamId?: string,
 ): boolean => {
   if (leagueName === CollegeLeague.NCAAMH) {
     // No groups info (transient failure): keep, never drop on a network error.
     if (!groups && !teamAbbrev) return true;
     return !!teamAbbrev && NCAAMH_D1_TEAMS.has(teamAbbrev);
   }
+  if (leagueName === CollegeLeague.NCAAWH) {
+    return !!teamId && NCAAWH_D1_TEAM_IDS.has(teamId);
+  }
   const d1Parents = D1_PARENT_IDS[leagueName];
   if (!d1Parents) return true;
   if (!groups) return true;
   return !!(groups.parent?.id && d1Parents.includes(groups.parent.id));
 };
+
+const ESPN_DIVISION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const espnDivisionCache = new Map<
+  string,
+  { isD1: boolean; checkedAt: number }
+>();
 
 const getTeamRecord = async (
   leagueName: string,
@@ -722,6 +796,93 @@ const getTeamRecord = async (
   } catch {
     return {};
   }
+};
+
+const isD1ScheduleTeam = async (
+  leagueName: string,
+  id: string,
+  abbrev?: string,
+): Promise<boolean> => {
+  const cacheKey = `${leagueName}:${id}`;
+  const cached = espnDivisionCache.get(cacheKey);
+  if (cached && Date.now() - cached.checkedAt < ESPN_DIVISION_CACHE_TTL_MS) {
+    return cached.isD1;
+  }
+
+  let isD1: boolean;
+  if (leagueName === CollegeLeague.NCAAMH) {
+    isD1 = isD1Groups(leagueName, undefined, abbrev);
+  } else if (leagueName === CollegeLeague.NCAAWH) {
+    isD1 = isD1Groups(leagueName, undefined, undefined, id);
+  } else {
+    const { groups } = await getTeamRecord(leagueName, id);
+    if (!groups?.parent?.id) {
+      throw new Error(
+        `[Schedule] Cannot verify Division I status for ${leagueName} team ${id}: ESPN did not return a group parent.`,
+      );
+    }
+    isD1 = isD1Groups(leagueName, groups, abbrev, id);
+  }
+
+  espnDivisionCache.set(cacheKey, { isD1, checkedAt: Date.now() });
+  return isD1;
+};
+
+const getD1ScheduleTeamIds = async (
+  leagueName: string,
+  teams: TeamType[],
+): Promise<Set<string> | undefined> => {
+  if (
+    !D1_PARENT_IDS[leagueName] &&
+    leagueName !== CollegeLeague.NCAAMH &&
+    leagueName !== CollegeLeague.NCAAWH
+  ) {
+    return undefined;
+  }
+
+  const d1TeamIds = new Set<string>();
+  const nonD1Teams: TeamType[] = [];
+  const concurrencyLimit = 4;
+
+  for (let start = 0; start < teams.length; start += concurrencyLimit) {
+    if (start > 0) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, ESPN_TEAM_BATCH_DELAY_MS),
+      );
+    }
+
+    const batch = teams.slice(start, start + concurrencyLimit);
+    await Promise.all(
+      batch.map(async (team) => {
+        const id = String(team.id || '');
+        if (!id) {
+          throw new Error(
+            `[Schedule] Cannot verify Division I status for ${leagueName} team ${team.uniqueId}: ESPN id is missing.`,
+          );
+        }
+
+        const abbrev =
+          team.abbrev || team.uniqueId?.split('-').slice(1).join('-');
+        const isD1 = await isD1ScheduleTeam(leagueName, id, abbrev);
+
+        if (isD1) {
+          d1TeamIds.add(id);
+        } else {
+          nonD1Teams.push(team);
+        }
+      }),
+    );
+  }
+
+  if (nonD1Teams.length > 0) {
+    console.info(
+      `[Schedule] ${leagueName}: skipped ${nonD1Teams.length} non-D1 team(s): ${nonD1Teams
+        .map((team) => team.uniqueId)
+        .join(', ')}.`,
+    );
+  }
+
+  return d1TeamIds;
 };
 
 const getESPNStandings = async (leagueName: string) => {
@@ -861,10 +1022,8 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
         // have an entry for this abbreviation. the abbreviation is the second
         // part of the uniqueId when saved in the database.
         let teamLogo =
-          logos?.[2]?.href ??
-          logos?.[0]?.href ??
-          team.logo ??
-          UniversityLogos[teamID] ??
+          getESPNTeamLogo(team) ||
+          UniversityLogos[teamID] ||
           getOlympicTeamLogo(leagueName, teamID);
         const teamLogoDark =
           logos?.find(
@@ -932,7 +1091,7 @@ export const getESPNTeams = async (leagueName: string): Promise<TeamType[]> => {
           (team as any).otLosses = record.otLosses;
         }
       }
-      if (isD1Groups(leagueName, groups, team.abbrev)) {
+      if (isD1Groups(leagueName, groups, team.abbrev, team.id)) {
         filteredTeams.push(team);
       } else {
         console.info(
@@ -997,10 +1156,8 @@ export const getOlympicSeasonTeams = async (
           }
 
           const teamLogo =
-            team.logos?.[2]?.href ??
-            team.logos?.[0]?.href ??
-            team.logo ??
-            UniversityLogos[abbrev] ??
+            getESPNTeamLogo(team) ||
+            UniversityLogos[abbrev] ||
             getOlympicTeamLogo(sourceLeague, abbrev);
           discovered.set(uniqueId, {
             uniqueId,
@@ -1045,8 +1202,38 @@ export const getTeamsSchedule = async (
 ) => {
   const allGames = {};
   const concurrencyLimit = 2;
+  let d1TeamIds: Set<string> | undefined;
+  try {
+    d1TeamIds = await getD1ScheduleTeamIds(leagueName, activeTeams);
+  } catch (error) {
+    for (const team of activeTeams) {
+      console.info(
+        `[Schedule] ${leagueName} ${team.label || team.uniqueId}: 0 game(s) fetched (team division could not be verified; refresh aborted).`,
+      );
+    }
+    console.info(
+      `[Schedule] ${leagueName}: fetched schedules for 0 team(s), 0 distinct game(s) across those schedules; division verification failed, league refresh aborted.`,
+    );
+    throw error;
+  }
+  const teamsToFetch =
+    d1TeamIds === undefined
+      ? activeTeams
+      : activeTeams.filter((team) => d1TeamIds.has(String(team.id)));
+  const scheduleErrors: unknown[] = [];
 
-  for (let start = 0; start < activeTeams.length; start += concurrencyLimit) {
+  if (d1TeamIds) {
+    for (const team of activeTeams) {
+      if (!d1TeamIds.has(String(team.id))) {
+        allGames[team.uniqueId] = [];
+        console.info(
+          `[Schedule] ${leagueName} ${team.label || team.uniqueId}: 0 game(s) fetched (non-D1 team skipped).`,
+        );
+      }
+    }
+  }
+
+  for (let start = 0; start < teamsToFetch.length; start += concurrencyLimit) {
     // Pace the crawl: a short gap between batches keeps ESPN's Akamai edge from
     // rate-limiting / bot-blocking us (transient 403 "Access Denied" pages) when
     // the oldies recovery fires hundreds of team-schedule calls in a row.
@@ -1055,26 +1242,39 @@ export const getTeamsSchedule = async (
         setTimeout(resolve, ESPN_TEAM_BATCH_DELAY_MS),
       );
     }
-    const batch = activeTeams.slice(start, start + concurrencyLimit);
+    const batch = teamsToFetch.slice(start, start + concurrencyLimit);
     await Promise.all(
       batch.map(async ({ id, abbrev, uniqueId, label }) => {
         const leagueID = `${uniqueId}`;
-        const teamGames = await getEachTeamSchedule(
-          {
-            id,
-            abbrev,
-            teamUniqueId: uniqueId,
-            leagueName,
-            leagueLogos,
-          },
-          forceUpdate,
-          season,
-          teamRecords,
-        );
-        allGames[leagueID] = teamGames;
-        console.info(
-          `[Schedule] ${leagueName} ${label || uniqueId}: ${teamGames.length} game(s) fetched.`,
-        );
+        try {
+          const teamGames = await getEachTeamSchedule(
+            {
+              id,
+              abbrev,
+              teamUniqueId: uniqueId,
+              leagueName,
+              leagueLogos,
+            },
+            forceUpdate,
+            season,
+            teamRecords,
+            d1TeamIds,
+          );
+          allGames[leagueID] = teamGames;
+          console.info(
+            `[Schedule] ${leagueName} ${label || uniqueId}: ${teamGames.length} game(s) fetched.`,
+          );
+        } catch (error) {
+          scheduleErrors.push(error);
+          allGames[leagueID] = [];
+          console.error(
+            `[Schedule] ${leagueName} ${label || uniqueId}: schedule fetch failed; league refresh will be aborted.`,
+            error,
+          );
+          console.info(
+            `[Schedule] ${leagueName} ${label || uniqueId}: 0 game(s) fetched (request failed; league refresh aborted).`,
+          );
+        }
       }),
     );
   }
@@ -1091,8 +1291,16 @@ export const getTeamsSchedule = async (
     ),
   );
   console.info(
-    `[Schedule] ${leagueName}: fetched schedules for ${activeTeams.length} team(s), ${distinctGames.size} distinct game(s) across those schedules.`,
+    `[Schedule] ${leagueName}: fetched schedules for ${teamsToFetch.length} team(s), ${distinctGames.size} distinct game(s) across those schedules.` +
+      (scheduleErrors.length
+        ? ` ${scheduleErrors.length} team schedule request(s) failed; league refresh aborted.`
+        : ''),
   );
+  if (scheduleErrors.length > 0) {
+    throw new Error(
+      `[Schedule] ${leagueName}: ${scheduleErrors.length} team schedule request(s) failed; refusing to return a partial league schedule.`,
+    );
+  }
   return allGames;
 };
 
@@ -1101,6 +1309,7 @@ const getEachTeamSchedule = async (
   forceUpdate = false,
   season?: number,
   teamRecords?: Map<string, string>,
+  d1TeamIds?: Set<string>,
 ) => {
   try {
     const normalizedLeagueName = getNormalizedLeagueName(leagueName);
@@ -1119,6 +1328,7 @@ const getEachTeamSchedule = async (
           forceUpdate,
           season,
           teamRecords,
+          d1TeamIds,
         );
         allGames = [...allGames, ...games];
       }
@@ -1160,10 +1370,16 @@ const getEachTeamSchedule = async (
               const url = `${espnAPI}${sport}/${league}/scoreboard?dates=${year}&limit=1000&page=${page}`;
               const data = await fetchJsonOrNull(url);
               if (!data) {
-                hasMore = false;
-                break;
+                throw new Error(
+                  `ESPN returned no schedule data for ${teamUniqueId} in season ${year}.`,
+                );
               }
-              const events = data.events || [];
+              if (!Array.isArray(data.events)) {
+                throw new Error(
+                  `ESPN returned an invalid schedule payload for ${teamUniqueId} in season ${year}.`,
+                );
+              }
+              const events = data.events;
               const eventsFiltered = events
                 .filter((ev) =>
                   ev.competitions?.[0]?.competitors?.some(
@@ -1183,7 +1399,11 @@ const getEachTeamSchedule = async (
             }
           }
         } catch (error) {
-          console.info('no games found ' + leagueName, teamUniqueId, error);
+          console.error(
+            `[Schedule] ESPN scoreboard fetch failed for ${teamUniqueId}:`,
+            error,
+          );
+          throw error;
         }
       }
       // Scoreboard path: read the tally before anything is filtered out.
@@ -1200,7 +1420,16 @@ const getEachTeamSchedule = async (
             const link = `${baseUrl}?seasontype=${type}${seasonParam}`;
             const fetchGamesData = await fetchJsonOrNull(link);
 
-            if (fetchGamesData && fetchGamesData.events && fetchGamesData.events.length > 0) {
+            if (
+              !fetchGamesData ||
+              !Array.isArray(fetchGamesData.events)
+            ) {
+              throw new Error(
+                `ESPN returned no complete schedule data for ${teamUniqueId} (season type ${type}).`,
+              );
+            }
+
+            if (fetchGamesData.events.length > 0) {
               games = [
                 ...games,
                 ...fetchGamesData.events.map((event) => ({
@@ -1214,6 +1443,7 @@ const getEachTeamSchedule = async (
               `Error type ${type} for ${leagueName} team ${id}:`,
               err,
             );
+            throw err;
           }
         }
 
@@ -1233,7 +1463,33 @@ const getEachTeamSchedule = async (
         games = gamesFilter;
       } catch (error) {
         console.info('no', teamUniqueId, error);
-        games = [];
+        throw error;
+      }
+    }
+
+    if (d1TeamIds) {
+      const fetchedCount = games.length;
+      const d1Games = [];
+      for (const game of games) {
+        const competitors = game?.competitions?.[0]?.competitors;
+        if (!Array.isArray(competitors) || competitors.length !== 2) continue;
+        const bothTeamsAreD1 = await Promise.all(
+          competitors.map((competitor) =>
+            isD1ScheduleTeam(
+              leagueName,
+              String(competitor?.team?.id || ''),
+              competitor?.team?.abbreviation,
+            ),
+          ),
+        );
+        if (bothTeamsAreD1.every(Boolean)) d1Games.push(game);
+      }
+      games = d1Games;
+      const excludedCount = fetchedCount - d1Games.length;
+      if (excludedCount > 0) {
+        console.info(
+          `[Schedule] ${leagueName} ${teamUniqueId}: excluded ${excludedCount} game(s) involving a non-D1 opponent.`,
+        );
       }
     }
 
@@ -1281,16 +1537,12 @@ const getEachTeamSchedule = async (
         const homeAbbrev = `${homeTeam.abbreviation}`;
 
         const awayTeamLogo =
-          awayTeam?.logos?.find(
-            (l) => l.rel?.includes('full') && l.rel?.includes('scoreboard'),
-          )?.href ||
+          getESPNTeamLogo(awayTeam, [['full', 'scoreboard']]) ||
           awayTeam?.logo ||
           leagueLogos[awayAbbrev] ||
           getOlympicTeamLogo(leagueName, awayAbbrev);
         const homeTeamLogo =
-          homeTeam?.logos?.find(
-            (l) => l.rel?.includes('full') && l.rel?.includes('scoreboard'),
-          )?.href ||
+          getESPNTeamLogo(homeTeam, [['full', 'scoreboard']]) ||
           homeTeam?.logo ||
           leagueLogos[homeAbbrev] ||
           getOlympicTeamLogo(leagueName, homeAbbrev);
@@ -1370,10 +1622,7 @@ const getEachTeamSchedule = async (
     return gamesData;
   } catch (error) {
     console.error(`Error in getEachTeamSchedule for ${teamUniqueId}:`, error);
-    // Always hand back an array: the aggregate-league recursion spreads the
-    // result (`[...allGames, ...games]`), and `getTeamsSchedule()` stores it,
-    // so an `undefined` here propagates as a TypeError in both callers.
-    return [];
+    throw error;
   }
 };
 
