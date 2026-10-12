@@ -39,6 +39,12 @@ const mockGameService = {
   getAllGames: jest.fn().mockResolvedValue(mockGames),
   getLeagueGames: jest.fn().mockResolvedValue(mockGames),
   fetchGamesScores: jest.fn().mockResolvedValue([{ success: true }]),
+  refreshCurrentSeasonRecords: jest.fn().mockResolvedValue({ leagues: [], updatedTeams: 0 }),
+  finalizeFinishedSeasonRecords: jest.fn().mockResolvedValue({
+    leagues: ['NHL'],
+    gamesUpdated: 10,
+    teamsReset: 32,
+  }),
   update: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
   removeLeague: jest.fn().mockResolvedValue({ deletedCount: 10 }),
   removeAll: jest.fn().mockResolvedValue({ deletedCount: 100 }),
@@ -323,6 +329,26 @@ describe('GamesController', () => {
         skipCascade: true,
       });
     });
+
+    it('should accept a lowercase league name', async () => {
+      await controller.refreshByLeague('nhl');
+      expect(service.getLeagueGames).toHaveBeenCalledWith({
+        forceUpdate: true,
+        league: 'nhl',
+        skipCascade: true,
+      });
+    });
+
+    // Regression: POST /games/refresh/records was swallowed by
+    // POST /games/refresh/:league (NestJS matches in declaration order), so
+    // the records refresh ran getLeagueGames({ league: 'records' }) — a ghost
+    // "RECORDS" league with 0 teams and 0 games.
+    it('should reject an unknown league instead of refreshing a ghost league', async () => {
+      await expect(controller.refreshByLeague('records')).rejects.toThrow(
+        'League RECORDS not found',
+      );
+      expect(service.getLeagueGames).not.toHaveBeenCalled();
+    });
   });
 
   describe('fetchScores', () => {
@@ -359,6 +385,18 @@ describe('GamesController', () => {
     it('should remove duplicates and old games', async () => {
       await controller.removeDuplicate();
       expect(service.removeDuplicatesAndOlds).toHaveBeenCalled();
+    });
+  });
+
+  describe('finalizeSeasonRecords', () => {
+    it('delegates to GameService.finalizeFinishedSeasonRecords and returns its result', async () => {
+      const result = await controller.finalizeSeasonRecords();
+      expect(service.finalizeFinishedSeasonRecords).toHaveBeenCalled();
+      expect(result).toEqual({
+        leagues: ['NHL'],
+        gamesUpdated: 10,
+        teamsReset: 32,
+      });
     });
   });
 

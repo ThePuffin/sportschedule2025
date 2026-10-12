@@ -32,6 +32,8 @@ const mockTeamModel = {
   deleteMany: jest.fn(),
   find: jest.fn(),
   countDocuments: jest.fn(),
+  updateOne: jest.fn(),
+  updateMany: jest.fn(),
 };
 
 describe('TeamService', () => {
@@ -136,6 +138,32 @@ describe('TeamService', () => {
     });
   });
 
+  describe('resetLeagueRecords', () => {
+    it('zeroes wins/losses/ties/otLosses for every team of the league', async () => {
+      mockTeamModel.updateMany.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ modifiedCount: 32 }),
+      });
+
+      const modified = await service.resetLeagueRecords('NHL');
+
+      expect(mockTeamModel.updateMany).toHaveBeenCalledWith(
+        { league: 'NHL' },
+        { $set: { wins: 0, losses: 0, ties: 0, otLosses: 0 } },
+      );
+      expect(modified).toBe(32);
+    });
+
+    it('returns 0 when nothing was modified', async () => {
+      mockTeamModel.updateMany.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+      });
+
+      const modified = await service.resetLeagueRecords('PWHL');
+
+      expect(modified).toBe(0);
+    });
+  });
+
   describe('Colors Merge Logic (parseExistingColorBlocks & mergeColorsContent)', () => {
     it('should parse existing colors with single/double quotes and whitespace variations', () => {
       const existingContent = `
@@ -196,7 +224,65 @@ describe('TeamService', () => {
         "'PWHL-DET': {\n    color: '#C0C0C0',\n    backgroundColor: '#000000',\n  }",
       );
       expect(merged).toContain(
-        "'PWHL-HAM': {\n    color: '#000000',\n    backgroundColor: '#ffffff',\n  }",
+        "'PWHL-HAM': {\n    color: '#ffffff',\n    backgroundColor: '#000000',\n  }",
+      );
+    });
+
+    it('should keep two non-default colors with the darkest as background', () => {
+      const merged = service['mergeColorsContent']('', [
+        { uniqueId: 'NHL-BOS', color: '#FFB81C', backgroundColor: '#000000' },
+      ]);
+
+      // Gold is lighter than black: it stays the foreground, black the bg.
+      expect(merged).toContain(
+        "'NHL-BOS': {\n    color: '#FFB81C',\n    backgroundColor: '#000000',\n  }",
+      );
+    });
+
+    it('should swap when the incoming background is lighter than the color', () => {
+      const merged = service['mergeColorsContent']('', [
+        { uniqueId: 'TST-A', color: '#111111', backgroundColor: '#EEEEEE' },
+      ]);
+
+      expect(merged).toContain(
+        "'TST-A': {\n    color: '#EEEEEE',\n    backgroundColor: '#111111',\n  }",
+      );
+    });
+
+    it('should preserve the stored side when only one incoming side is provided', () => {
+      const existingContent = `  'NHL-BOS': {\n    color: '#FFB81C',\n    backgroundColor: '#000000',\n  },`;
+      const merged = service['mergeColorsContent'](existingContent, [
+        { uniqueId: 'NHL-BOS', color: '#FFB81C' },
+      ]);
+
+      // No default dragged in: the stored black background is kept.
+      expect(merged).toContain(
+        "'NHL-BOS': {\n    color: '#FFB81C',\n    backgroundColor: '#000000',\n  }",
+      );
+    });
+
+    it('should keep an existing pair when ESPN only knows one side (white background marker)', () => {
+      const existingContent = `  'NCAAB-CAM': {\n    color: '#006847',\n    backgroundColor: '#8C9091',\n  },`;
+      const merged = service['mergeColorsContent'](existingContent, [
+        { uniqueId: 'NCAAB-CAM', color: '#006847', backgroundColor: '#ffffff' },
+      ]);
+
+      // The '#ffffff' background is the "no information" marker: the stored
+      // real background must be kept, not overwritten with white. The pair
+      // is reordered darkest-as-background ('#006847' is darker than grey).
+      expect(merged).toContain(
+        "'NCAAB-CAM': {\n    color: '#8C9091',\n    backgroundColor: '#006847',\n  }",
+      );
+    });
+
+    it('should keep an existing pair when ESPN only knows one side (black color marker)', () => {
+      const existingContent = `  'TST-B': {\n    color: '#C8102E',\n    backgroundColor: '#003DA5',\n  },`;
+      const merged = service['mergeColorsContent'](existingContent, [
+        { uniqueId: 'TST-B', color: '#000000', backgroundColor: '#003DA5' },
+      ]);
+
+      expect(merged).toContain(
+        "'TST-B': {\n    color: '#C8102E',\n    backgroundColor: '#003DA5',\n  }",
       );
     });
 
