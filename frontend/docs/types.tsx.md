@@ -20,14 +20,14 @@ Represents a formatted game object returned by the API:
 | `awayTeamLogo`            | `string`         | Away team logo URL                       |
 | `awayTeamLogoDark?`       | `string`         | Dark mode logo URL                       |
 | `awayTeamScore`           | `number \| null` | Away team score                          |
-| `awayTeamRecord?`         | `string`         | Away team record                         |
+| `awayTeamRecord?`         | `string`         | Away team record (playoff games display the series label instead — filled by the backend enrichment) |
 | `homeTeamId`              | `string`         | Home team ID                             |
 | `homeTeam`                | `string`         | Home team name                           |
 | `homeTeamShort`           | `string`         | Home team abbreviation                   |
 | `homeTeamScore`           | `number \| null` | Home team score                          |
 | `homeTeamLogo`            | `string`         | Home team logo URL                       |
 | `homeTeamLogoDark?`       | `string`         | Dark mode logo URL                       |
-| `homeTeamRecord?`         | `string`         | Home team record                         |
+| `homeTeamRecord?`         | `string`         | Home team record (playoff games display the series label instead — filled by the backend enrichment) |
 | `arenaName`               | `string`         | Arena name                               |
 | `placeName`               | `string`         | City/place name                          |
 | `gameDate`                | `string`         | Game date (YYYY-MM-DD)                   |

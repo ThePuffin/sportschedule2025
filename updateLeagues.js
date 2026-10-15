@@ -43,36 +43,44 @@ async function updateData() {
   }
 
   // --- Update Teams ---
+  // Two buckets so Teams.tsx only lists teams that actually play:
+  //   - regular leagues   → at least 10 active games  (minGames=10)
+  //   - Olympic teams     → at least 1 active game    (minGames=1)
   try {
-    const response = await fetch(TEAMS_API_URL);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const [regularResp, olympicResp] = await Promise.all([
+      fetch(`${TEAMS_API_URL}?minGames=10`),
+      fetch(`${TEAMS_API_URL}?minGames=1`),
+    ]);
+    if (!regularResp.ok || !olympicResp.ok) {
+      throw new Error(
+        `HTTP error! status: ${regularResp.status} / ${olympicResp.status}`,
+      );
+    }
 
-    const teams = await response.json();
+    const regularTeams = await regularResp.json();
+    const olympicTeams = await olympicResp.json();
 
-    if (!Array.isArray(teams)) {
-      console.error('❌ Unexpected response format for teams (expected array)');
+    if (!Array.isArray(regularTeams) || !Array.isArray(olympicTeams)) {
+      console.error(
+        '❌ Unexpected response format for teams (expected array)',
+      );
     } else {
       const teamsObj = {};
-      // Alphabetical sort for a cleaner file
-      teams.sort((a, b) => {
-        const nameA = a.name || a.teamCommonName || '';
-        const nameB = b.name || b.teamCommonName || '';
-        return nameA.localeCompare(nameB);
-      });
 
-      // Only active teams should appear in the frontend selection file
-      // (inactive/historical teams must not pollute filters/favorites).
-      teams
-        .filter((t) => t.isActive !== false)
-        .forEach((t) => {
-          // Look for ID and Name in likely fields
-          const key = t.uniqueId || t.id;
-          const value = t.teamCommonName || t.name || t.displayName;
+      const addTeam = (t) => {
+        const key = t.uniqueId || t.id;
+        const value = t.teamCommonName || t.name || t.displayName;
+        if (key && value) teamsObj[key] = value;
+      };
 
-          if (key && value) {
-            teamsObj[key] = value;
-          }
-        });
+      // Regular teams: minGames=10 already excludes inactive/historical teams.
+      regularTeams.forEach(addTeam);
+
+      // Olympic teams: only those whose id starts with OLYMPICS-, so a single
+      // match is enough to list a country delegation.
+      olympicTeams
+        .filter((t) => String(t.uniqueId || t.id || '').startsWith('OLYMPICS-'))
+        .forEach(addTeam);
 
       const fileContent = [
         'export const TeamsEnum: Record<string, string> = {',
@@ -94,7 +102,7 @@ async function updateData() {
         const collegeLeagues = ['NCAAF', 'NCAAB', 'NCCABB', 'WNCAAB'];
         // Build the new logos map from the API (only non-empty college logos).
         const newLogos = {};
-        teams.forEach((t) => {
+        regularTeams.forEach((t) => {
           if (collegeLeagues.includes(t.league)) {
             const parts = t.uniqueId ? t.uniqueId.split('-') : [];
             let key = parts.length > 1 ? parts[1] : t.abbrev || t.id || '';

@@ -2,6 +2,33 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Changed: instant team catalog on cold start (session storage + Teams.tsx fallback)
+
+`fetchTeams()` no longer waits for the network before showing teams. On app start it returns:
+
+1. the **session-storage** copy if still fresh (< 24 h, key `teams_session`);
+2. otherwise the static `TeamsEnum` constant from `frontend/constants/Teams.tsx` **instantly** — this file is generated backend-side and only contains teams that actually play (≥10 active games for regular leagues, ≥1 for Olympic teams);
+3. then `GET /teams?minGames=10` (regular teams) and `GET /teams?minGames=1` (Olympic teams) run in the background, the results are merged, the session-storage copy is replaced, and a `teamsSessionUpdated` window event is dispatched so already-mounted screens (Schedule, Calendar, Favorites) re-render with real metadata (logos, colors, …).
+
+The catalog behind `fetchTeams()` and `Teams.tsx` only lists teams with enough active games — opponents with fewer games may not have metadata available in the catalog. Only the *selection* surfaces are further narrowed by `selectableMinGames` / `isActive`.
+
+- **`frontend/utils/fetchData.ts`** — `fetchTeams()` now checks session storage first, falls back to `Teams.tsx`, and refreshes from the API in the background; new helpers `isSessionCacheValid()`, `saveSessionCache()`, `getSessionCache()` and `teamsEnumToTeamArray()`.
+- **`frontend/app/(tabs)/_layout.tsx`** — loads teams via `fetchTeams()` and keeps the `localStorage` `teams` copy warm.
+- **`frontend/app/(tabs)/schedule.tsx`**, **`frontend/app/(tabs)/calendar.tsx`**, **`frontend/components/FavModal.tsx`** — listen for `teamsSessionUpdated` and refresh their local teams state.
+
+## Changed: team selectors only offer teams that actually play
+
+The three **selection** surfaces — the global favorites modal, the Calendar team picker and the main team filter of the Schedule screen — now only offer teams having more than `selectableMinGames` official games (`frontend/constants/Constants.js`, currently `4`) **and still active** (teams marked `isActive: false` are retired/historical and never pickable), so the long tail of franchises that never plays (or only plays preseason exhibitions) can no longer be picked.
+
+- **`frontend/utils/fetchData.ts`** — new `fetchSelectableTeams()` (calls `GET /teams?minGames=…`, which also excludes retired teams, 24 h-cached under `teams_selectable_v3`, versioned so any change to the selection rules invalidates stored lists, returns `[]` on failure) and `restrictToSelectableTeams(teams, selectableTeams, keepIds)`, which narrows a roster while **always keeping the ids in `keepIds`**: an existing favorite or current selection stays visible and removable instead of rendering as a blank row, and an empty selectable list (fetch failed / not loaded) leaves the roster untouched so a failed request can never lock the user out of every selector.
+- **`frontend/components/FavModal.tsx`** — the static `TeamsEnum` constant is gone; the modal builds `teamsForFavorites` from `fetchTeams()` (full catalog, for labels/logos) narrowed by `fetchSelectableTeams()`. Existing favorites are passed as `keepIds`.
+- **`frontend/app/(tabs)/calendar.tsx`** — `teamsAvailableForReorder` is narrowed the same way, with `teamsSelected` as `keepIds`.
+- **`frontend/app/(tabs)/schedule.tsx`** — new `selectableTeamsForSelector` memo narrows the team chips and the search selector (`keepIds = [teamSelected, 'all']`, so the `'all'` pseudo-team is pinned). `teamsForSelector` stays the **full** roster on purpose: it resolves the metadata of the **opponents** listed by `uniqueTeamsFromGames`, and the opponent (VS) filter remains unrestricted — a game always displays both of its teams.
+
+Only selection is restricted; display never is. The backend-side threshold (and its preseason exclusion) lives in `backend/CHANGELOG_ARCHITECTURE.md`.
+
+Updated `fetchData.ts`, `FavModal.tsx`, `calendar.tsx`, `schedule.tsx`, `Constants.js`, and their documentation.
+
 ## Changed: missing team palettes
 
 Replaced the supplied university and professional-team placeholder palettes,

@@ -31,6 +31,8 @@ import { TeamType } from '../utils/interface/team';
 import { UniversityLogos } from '../utils/UniversityLogos';
 import {
   doesDateRangeOverlapLeaguePeriod,
+  getLeagueConfig,
+  isInThePeriod,
   isCurrentSeason,
   isPlayoffsPeriod,
   needRefresh,
@@ -94,6 +96,28 @@ export class GameService {
   private _isSeriesDecided(seriesStatus?: string): boolean {
     if (!seriesStatus || typeof seriesStatus !== 'string') return false;
     return this.decidedSeriesPattern.test(seriesStatus.trim());
+  }
+
+  /**
+   * Matches a playoff series **evolution** label: a team leading the series
+   * (`"MIL leads 3-0"`, `"EDM lead series 3-2"`), the series tied
+   * (`"Series tied 2-2"`, `"Tied 1-1"`) or a team having won it
+   * (`"MIL wins series 4-2"`, `"Series over"`). A stored `seriesStatus` may
+   * only ever be replaced by another value of this shape — a round label
+   * (`"NLDS - Game 3"`) or an empty payload must never overwrite it (see
+   * `_isSeriesEvolution()`, `create()` and `syncGameWithScore()`).
+   */
+  private readonly seriesEvolutionPattern =
+    /\bleads?\s+(?:the\s+)?series\b|\bleads?\s+\d+\s*[-–]\s*\d+\b|\bwins?\s+(?:the\s+)?series\b|series\s+(?:is\s+)?over\b|series\s+won\b|\b(?:series\s+)?tied\s+\d+\s*[-–]\s*\d+\b/i;
+
+  /**
+   * Whether a label reads as a playoff series evolution (a team leading, the
+   * series tied, or a team having won it). An empty/absent value is never an
+   * evolution.
+   */
+  private _isSeriesEvolution(value?: string): boolean {
+    if (!value || typeof value !== 'string') return false;
+    return this.seriesEvolutionPattern.test(value.trim());
   }
 
   // Capacity-based purge configuration
@@ -201,6 +225,217 @@ export class GameService {
     return uniqueId ? getTeamColors(uniqueId) : storedColors;
   }
 
+  /**
+   * Labels that are **not** a playoff series status and must never replace
+   * the season record in the response: regular-season / preseason notes
+   * (`"Regular Season"`, `"Game 2 of 3"`, `"Doubleheader Game 1"`) and the
+   * bare `"Game N"` produced by providers without a phase tag (the PWHL
+   * mapping labels every game of the season that way).
+   */
+  private readonly nonSeriesLabelPattern =
+    /regular season|preseason|spring training|exhibition|doubleheader|game\s+\d+\s+of\s+\d+|^\s*game\s+\d+\s*$/i;
+
+  /**
+   * Cache of computed series statuses, keyed by game `uniqueId`. Populated
+   * before enrichment in the read routes (`_precomputeSeriesStatus`) and
+   * consulted by `_playoffSeriesDisplay()` when a stored `seriesStatus` is
+   * missing.
+   */
+  private _computedSeriesStatusMap = new Map<string, string>();
+
+  /**
+   * Playoff series label shown **in priority of the season record** in the
+   * record slots of the responses (display-time only: the persisted
+   * `homeTeamRecord` / `awayTeamRecord` are never modified here).
+   *
+   * Display rules:
+   * - **Playoff game with a stored series evolution** — returns `seriesStatus`.
+   * - **Playoff game without a stored status** — returns a computed evolution
+   *   derived from the other games of the same series, falling back to
+   *   `seriesSummary`.
+   * - **Any other phase / label** — returns `''`, keeping the record chain
+   *   (`game record || team.record`) used by the regular season.
+   */
+  private _playoffSeriesDisplay(game: any): string {
+    const status =
+      typeof game.seriesStatus === 'string' ? game.seriesStatus.trim() : '';
+    const summary =
+      typeof game.seriesSummary === 'string' ? game.seriesSummary.trim() : '';
+
+    // 1. Stored series status takes priority.
+    if (status) {
+      return this._seriesDisplayForPhase(game, status);
+    }
+
+    // 2. No stored status: try a computed evolution from series games
+    //    (playoff games only).
+    if (this._isPlayoffGame(game)) {
+      const computed = this._computedSeriesStatusMap.get(game.uniqueId);
+      if (computed) return computed;
+    }
+
+    // 3. Fall back to the series label.
+    if (!summary) return '';
+    return this._seriesDisplayForPhase(game, summary);
+  }
+
+  /**
+   * Applies the phase/label gate for a series candidate label: only phase 3
+   * (playoffs) may override the record; legacy documents are decided from the
+   * label content (a regular-season note never replaces the record).
+   */
+  private _seriesDisplayForPhase(game: any, label: string): string {
+    const phase = game.recordSeasonType;
+    if (phase !== undefined && phase !== null && phase !== '') {
+      return String(phase) === '3' ? label : '';
+    }
+    if (this.nonSeriesLabelPattern.test(label)) return '';
+    return label;
+  }
+
+  /**
+   * Builds a series key that groups games of the same playoff series together
+   * regardless of which team is home or away. Key:
+   * `${league}|${season}|${teamA}|${teamB}` with teamA < teamB.
+   */
+  private _seriesKey(game: any): string | null {
+    if (!game.league || !game.homeTeamId || !game.awayTeamId || game.homeTeamId === game.awayTeamId) {
+      return null;
+    }
+    const season = (game.gameDate || '').slice(0, 4);
+    if (!season) return null;
+    const [a, b] = [game.homeTeamId, game.awayTeamId].sort();
+    return `${game.league}|${season}|${a}|${b}`;
+  }
+
+  /**
+   * Whether a game is a playoff game, for series-status computation. Modern
+   * documents carry `recordSeasonType === 3`; legacy documents are decided
+   * from the label content (a non-empty, non-regular-season label).
+   */
+  private _isPlayoffGame(game: any): boolean {
+    const phase = game.recordSeasonType;
+    if (phase !== undefined && phase !== null && phase !== '') {
+      return String(phase) === '3';
+    }
+    const status = typeof game.seriesStatus === 'string' ? game.seriesStatus.trim() : '';
+    const summary = typeof game.seriesSummary === 'string' ? game.seriesSummary.trim() : '';
+    const hasLabel = status || summary;
+    return hasLabel && !this.nonSeriesLabelPattern.test(status) && !this.nonSeriesLabelPattern.test(summary);
+  }
+
+  /**
+   * Computes the playoff series status for `currentGame` from the full list of
+   * games in the same series. Returns a label such as `"MIL leads 3-0"`,
+   * `"Series tied 2-2"` or `"MIL wins series 4-2"`, or `''` when there aren't
+   * enough completed games to determine a status.
+   */
+  private _computeSeriesStatus(seriesGames: any[], currentGame: any): string {
+    const team1Id = currentGame.homeTeamId;
+    const team2Id = currentGame.awayTeamId;
+    const team1Name = currentGame.homeTeamShort || currentGame.homeTeam || team1Id;
+    const team2Name = currentGame.awayTeamShort || currentGame.awayTeam || team2Id;
+
+    let team1Wins = 0;
+    let team2Wins = 0;
+    let completedGames = 0;
+
+    for (const game of seriesGames) {
+      const homeScore = game.homeTeamScore;
+      const awayScore = game.awayTeamScore;
+      if (homeScore === null || homeScore === undefined || awayScore === null || awayScore === undefined) {
+        continue;
+      }
+      completedGames++;
+      if (homeScore > awayScore) {
+        if (game.homeTeamId === team1Id) team1Wins++;
+        else if (game.homeTeamId === team2Id) team2Wins++;
+      } else if (awayScore > homeScore) {
+        if (game.awayTeamId === team1Id) team1Wins++;
+        else if (game.awayTeamId === team2Id) team2Wins++;
+      }
+    }
+
+    // Un seul match joué ne constitue pas une série avec évolution :
+    // on laisse tomber sur seriesSummary (ex: "NFC Divisional Playoffs").
+    if (completedGames <= 1 || (team1Wins === 0 && team2Wins === 0)) {
+      return '';
+    }
+
+    if (team1Wins === team2Wins) {
+      return `Series tied ${team1Wins}-${team2Wins}`;
+    }
+
+    const leaderWins = Math.max(team1Wins, team2Wins);
+    const trailerWins = Math.min(team1Wins, team2Wins);
+    const leaderName = team1Wins > team2Wins ? team1Name : team2Name;
+
+    // Series decided: 4+ wins (best-of-7 or best-of-5), or 3 wins with all
+    // 5 games completed (best-of-5 clincher).
+    const seriesDecided = leaderWins >= 4 || (leaderWins === 3 && completedGames >= 5);
+
+    if (seriesDecided) {
+      return `${leaderName} wins series ${leaderWins}-${trailerWins}`;
+    }
+
+    return `${leaderName} leads ${leaderWins}-${trailerWins}`;
+  }
+
+  /**
+   * Pre-computes series statuses for the playoff games in `games` that are
+   * missing a stored `seriesStatus`. Groups them by series key, fetches all
+   * games of each series from the DB in a single query, and stores the
+   * computed status per `uniqueId` in `_computedSeriesStatusMap`.
+   */
+  private async _precomputeSeriesStatus(games: any[]): Promise<void> {
+    this._computedSeriesStatusMap.clear();
+
+    const needsCompute = games.filter((g) => {
+      const status = typeof g.seriesStatus === 'string' ? g.seriesStatus.trim() : '';
+      if (status) return false;
+      if (!this._isPlayoffGame(g)) return false;
+      if (!g.uniqueId) return false;
+      return true;
+    });
+
+    if (needsCompute.length === 0) return;
+
+    const bySeries = new Map<string, any[]>();
+    for (const g of needsCompute) {
+      const key = this._seriesKey(g);
+      if (!key) continue;
+      if (!bySeries.has(key)) bySeries.set(key, []);
+      bySeries.get(key)!.push(g);
+    }
+
+    if (bySeries.size === 0) return;
+
+    for (const [key, groupGames] of bySeries) {
+      const [league, season, teamA, teamB] = key.split('|');
+
+      const seriesGames = await this.gameModel
+        .find({
+          league,
+          gameDate: { $gte: `${season}-01-01`, $lte: `${season}-12-31` },
+          recordSeasonType: 3,
+          $or: [
+            { homeTeamId: teamA, awayTeamId: teamB },
+            { homeTeamId: teamB, awayTeamId: teamA },
+          ],
+        })
+        .sort({ startTimeUTC: 1 })
+        .lean()
+        .exec();
+
+      for (const g of groupGames) {
+        const computed = this._computeSeriesStatus(seriesGames, g);
+        if (computed && g.uniqueId) {
+          this._computedSeriesStatusMap.set(g.uniqueId, computed);
+        }
+      }
+    }
+  }
+
   private _enrichGameWithTeamData(game: any, teamsMap: Map<string, TeamType>) {
     // Fallback to the static `HistoricalTeams` file for teams that
     // disappeared/moved/renamed and are missing from the database (old games).
@@ -211,13 +446,20 @@ export class GameService {
     const homeTeamColors = this._resolveTeamColors(homeTeam, game.homeTeamId);
     const awayTeamColors = this._resolveTeamColors(awayTeam, game.awayTeamId);
 
+    // Playoff series label ("MIL leads 2-1" / "NLCS - Game 2") wins over the
+    // season record in the record slots; '' outside the playoffs keeps the
+    // record chain untouched (see `_playoffSeriesDisplay`).
+    const seriesDisplay = this._playoffSeriesDisplay(game);
+
     return {
       ...game,
       homeTeamRecord:
+        seriesDisplay ||
         game.homeTeamRecord ||
         homeTeam?.record ||
         '',
       awayTeamRecord:
+        seriesDisplay ||
         game.awayTeamRecord ||
         awayTeam?.record ||
         '',
@@ -324,6 +566,46 @@ export class GameService {
             }
           });
 
+          // Playoff series fields: a stored series evolution (`seriesStatus`
+          // such as "MIL leads 3-0") may only ever be replaced by another
+          // evolution ("LAD ties series 2-2", "MIL wins series 4-0"). The
+          // team-schedule endpoint used by the refresh cron carries no
+          // `series.summary` at all, so its empty status would wipe the
+          // stored one on every refresh and the display would fall back to
+          // the round label ("NLDS - Game 3"). A stored non-evolution value
+          // (e.g. PWHL's "Game 2") keeps the previous rule: any non-empty
+          // fresh value overwrites it.
+          const storedSeriesStatus =
+            typeof existingGame.seriesStatus === 'string'
+              ? existingGame.seriesStatus.trim()
+              : '';
+          if (storedSeriesStatus) {
+            const incomingSeriesStatus =
+              typeof gameDto.seriesStatus === 'string'
+                ? gameDto.seriesStatus.trim()
+                : '';
+            const storedIsEvolution =
+              this._isSeriesEvolution(storedSeriesStatus);
+            const incomingIsEvolution =
+              this._isSeriesEvolution(incomingSeriesStatus);
+            if (
+              !incomingSeriesStatus ||
+              (storedIsEvolution && !incomingIsEvolution)
+            ) {
+              delete gameDto.seriesStatus;
+            }
+          }
+
+          // Same non-empty rule for the round label (`seriesSummary`, e.g.
+          // "NLDS - Game 3"): an empty fresh value never wipes a stored one.
+          if (
+            !gameDto.seriesSummary &&
+            typeof existingGame.seriesSummary === 'string' &&
+            existingGame.seriesSummary.trim()
+          ) {
+            delete gameDto.seriesSummary;
+          }
+
           Object.assign(existingGame, gameDto);
 
           return await existingGame.save();
@@ -336,16 +618,145 @@ export class GameService {
   }
 
   /**
+   * `YYYY-MM-DD` first day of a league's current regular season, derived from
+   * the static month window of `getLeagueConfig()` (NHL: October 1st of the
+   * season-start year). Returns `null` when the window is unusable (unknown
+   * league, the `99` placeholder used for off-years) — callers must then skip
+   * the update entirely.
+   */
+  private _currentSeasonStart(league: string): string | null {
+    const config = getLeagueConfig(league);
+    const startMonth = Number.parseInt(config?.startSeason ?? '', 10);
+    const endMonth = Number.parseInt(config?.endSeason ?? '', 10);
+    if (
+      !Number.isFinite(startMonth) ||
+      !Number.isFinite(endMonth) ||
+      startMonth < 1 ||
+      startMonth > 12 ||
+      endMonth < 1 ||
+      endMonth > 12
+    ) {
+      return null;
+    }
+    const now = new Date();
+    const year = now.getFullYear();
+    // Seasons spanning two calendar years (e.g. NHL Oct-Apr) started last year
+    // when today is still before the start month.
+    const startYear =
+      startMonth > endMonth && now.getMonth() + 1 < startMonth
+        ? year - 1
+        : year;
+    return `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
+  }
+
+  /**
+   * Writes a team's record onto **every game of its current regular season**
+   * (past and upcoming), so the views always display the latest tally instead
+   * of a frozen or initial `0-0-0` value.
+   *
+   * Guard rails:
+   * - runs only while the league's regular season is in progress and before
+   *   the playoffs window starts (from then on the phase-2 tally is frozen
+   *   and playoff records stay game-specific);
+   * - only games of the current season (`gameDate` bound), so finished
+   *   seasons keep their verified final tallies;
+   * - `recordSeasonType: { $in: [2, null] }` — regular-season phase only,
+   *   also matching documents stored before the phase was persisted;
+   * - only the team's own side of each game (pipeline `$set` with `$cond`)
+   *   and only rows whose stored value differs (the `$expr` guard keeps the
+   *   twice-daily bulk run cheap and avoids useless writes).
+   *
+   * Returns the number of games actually updated. Fail-soft: a write error is
+   * logged and never breaks the caller (score sync / records cron).
+   */
+  private async _propagateTeamRecordToSeasonGames(
+    league: string,
+    teamUniqueId: string,
+    record: string,
+  ): Promise<number> {
+    if (!record || !league || !teamUniqueId) return 0;
+
+    const config = getLeagueConfig(league);
+    if (!config) return 0;
+    if (!isInThePeriod(config.startSeason, config.endSeason)) return 0;
+    if (isInThePeriod(config.endSeason, config.endPlayoffs)) return 0;
+
+    const seasonStart = this._currentSeasonStart(league);
+    if (!seasonStart) return 0;
+
+    try {
+      const result = await this.gameModel
+        .updateMany(
+          {
+            league,
+            isActive: true,
+            gameDate: { $gte: seasonStart },
+            recordSeasonType: { $in: [2, null] },
+            $or: [{ homeTeamId: teamUniqueId }, { awayTeamId: teamUniqueId }],
+            $expr: {
+              $or: [
+                {
+                  $and: [
+                    { $eq: ['$homeTeamId', teamUniqueId] },
+                    { $ne: ['$homeTeamRecord', record] },
+                  ],
+                },
+                {
+                  $and: [
+                    { $eq: ['$awayTeamId', teamUniqueId] },
+                    { $ne: ['$awayTeamRecord', record] },
+                  ],
+                },
+              ],
+            },
+          },
+          [
+            {
+              $set: {
+                homeTeamRecord: {
+                  $cond: [
+                    { $eq: ['$homeTeamId', teamUniqueId] },
+                    record,
+                    '$homeTeamRecord',
+                  ],
+                },
+                awayTeamRecord: {
+                  $cond: [
+                    { $eq: ['$awayTeamId', teamUniqueId] },
+                    record,
+                    '$awayTeamRecord',
+                  ],
+                },
+              },
+            },
+          ],
+        )
+        .exec();
+      return Number(result?.modifiedCount ?? 0);
+    } catch (error) {
+      console.error(
+        `[Records] Could not propagate ${record} of ${teamUniqueId} to its ${league} games:`,
+        error instanceof Error ? error.message : String(error),
+      );
+      return 0;
+    }
+  }
+
+  /**
    * Refreshes `team.record` (wins / losses / ties / otLosses) for every league
    * whose season — regular season OR playoffs — covers today, WITHOUT saving
-   * any game.
+   * any **fetched** game.
    *
    * The schedule of each in-season league is fetched exactly like a normal
    * refresh, but `_fetchUniqueGames()` is only used for its `teamRecords`
    * side effect (the most recent tally per team, harvested from the schedule —
    * the only source for leagues whose scoreboard carries no `records`, e.g.
-   * college hockey). The fetched games are discarded, so no `Game` document is
-   * created, updated or deactivated here.
+   * college hockey). The fetched games are discarded, so no fetched `Game`
+   * document is created, updated or deactivated here. The only game writes are
+   * the record propagation: each fresh tally is mirrored onto the team's
+   * current-season games (past and upcoming) by
+   * `_propagateTeamRecordToSeasonGames()`, which self-heals stale stored
+   * values (e.g. a frozen `0-0-0`) on every run.
    *
    * Off-season leagues are skipped before any third-party call, so this is
    * cheap (a handful of leagues) and safe to run a few times a day.
@@ -384,6 +795,24 @@ export class GameService {
           record,
         })),
       );
+
+      // Mirror the fresh tallies onto every game of each team's current
+      // regular season (past and upcoming): this keeps the stored records
+      // display-ready everywhere and self-heals stale values (a frozen
+      // `0-0-0`, an outdated tally) on the very next run.
+      let propagatedGames = 0;
+      for (const [uniqueId, record] of teamRecords) {
+        propagatedGames += await this._propagateTeamRecordToSeasonGames(
+          uniqueId.split('-')[0],
+          uniqueId,
+          record,
+        );
+      }
+      if (propagatedGames > 0) {
+        console.info(
+          `[Records] Propagated fresh tallies to ${propagatedGames} season game(s).`,
+        );
+      }
     }
 
     console.info(
@@ -1388,6 +1817,9 @@ export class GameService {
             `[Oldies] ${normalizedLeague} ${season ? `(season ${season})` : ''}: added ${added}, skipped (existing identical) ${skippedExisting}, skipped (missing team/score data) ${skippedMissingTeamData}, records backfilled ${backfilled}.`,
           );
           await this._deleteGamesOfPurgedTeams(normalizedLeague);
+          // See the note at the end of the normal path: the memoised per-team
+          // game counts no longer match the collection.
+          this.teamService.clearActiveGameCountCache?.();
           return { added, skippedExisting, skippedMissingTeamData };
         }
       }
@@ -1397,6 +1829,9 @@ export class GameService {
       console.info(
         `[Games] ${normalizedLeague} refresh complete: ${uniqueGames.length} distinct game(s) fetched, ${savedGames} game document(s) saved/upserted.`,
       );
+      // The per-team game counts memoised by `TeamService` are stale now that
+      // games were written and deactivated above.
+      this.teamService.clearActiveGameCountCache?.();
       return games;
     } catch (err) {
       // Never let a failing third-party API (ESPN / PWHL) propagate to the
@@ -1490,6 +1925,8 @@ export class GameService {
 
     const teams = await this.teamService.findAll();
     const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
+
+    await this._precomputeSeriesStatus(allGames);
 
     return allGames.map((game: any) =>
       this._enrichGameWithTeamData(game, teamsMap),
@@ -1944,6 +2381,8 @@ export class GameService {
     );
     const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
 
+    await this._precomputeSeriesStatus(filtredGames);
+
     const games = Array.isArray(filtredGames)
       ? filtredGames.map((game: any) =>
           this._enrichGameWithTeamData(game, teamsMap),
@@ -2084,6 +2523,9 @@ export class GameService {
         gameStatus === 'FINISHED'
       );
     });
+
+    await this._precomputeSeriesStatus(filteredGames);
+
     return filteredGames.map((game: any) =>
       this._enrichGameWithTeamData(game, teamsMap),
     );
@@ -2098,6 +2540,7 @@ export class GameService {
   async remove(uniqueId: string) {
     const filter = { uniqueId: uniqueId };
     const deleted = await this.gameModel.findOneAndDelete(filter).exec();
+    if (deleted) this.teamService.clearActiveGameCountCache?.();
     return deleted;
   }
 
@@ -2143,6 +2586,7 @@ export class GameService {
     for (const game of games) {
       await this.remove(game.uniqueId);
     }
+    this.teamService.clearActiveGameCountCache?.();
   }
 
   async removeDuplicatesAndOlds() {
@@ -2211,12 +2655,16 @@ export class GameService {
       await this.remove(duplicate.uniqueId);
     }
 
+    // Both the age-based deleteMany above and the duplicate removals change the
+    // per-team counts behind `GET /teams?minGames=…`.
+    this.teamService.clearActiveGameCountCache?.();
     console.info('End of removing duplicates and old games...');
   }
 
   async removeLeague(league: string): Promise<DeleteResult> {
     const filter = { league };
     const deleted = await this.gameModel.deleteMany(filter);
+    this.teamService.clearActiveGameCountCache?.();
     return deleted;
   }
 
@@ -2242,6 +2690,7 @@ export class GameService {
       game.isActive = false;
       await this.create(game);
     }
+    this.teamService.clearActiveGameCountCache?.();
   }
 
   async fetchOldGamesWithMissingScores(hours = 2): Promise<Game[]> {
@@ -2926,8 +3375,30 @@ export class GameService {
       game.dataChangedAt = now;
     }
     game.gameStatus = resolvedStatus;
-    game.seriesSummary = matchedScore.seriesSummary;
-    game.seriesStatus = matchedScore.seriesStatus;
+    // Series fields: the round label (`seriesSummary`) is only overwritten by
+    // a non-empty fresh value, and a series evolution (`seriesStatus` such as
+    // "MIL leads 3-0") is only overwritten by another evolution ("LAD ties
+    // series 2-2", "MIL wins series 4-0"). A sync answering with an empty
+    // status (the team-schedule endpoint carries no `series.summary`) or with
+    // a mere round label ("NLDS - Game 3") must not wipe the stored
+    // evolution, otherwise the display priority of
+    // `_enrichGameWithTeamData()` would fall back to `seriesSummary`. A
+    // stored non-evolution value (e.g. PWHL's "Game 2") still accepts any
+    // non-empty fresh value.
+    if (matchedScore.seriesSummary) {
+      game.seriesSummary = matchedScore.seriesSummary;
+    }
+    const freshSeriesStatus =
+      typeof matchedScore.seriesStatus === 'string'
+        ? matchedScore.seriesStatus.trim()
+        : '';
+    if (
+      freshSeriesStatus &&
+      (!this._isSeriesEvolution(game.seriesStatus) ||
+        this._isSeriesEvolution(freshSeriesStatus))
+    ) {
+      game.seriesStatus = matchedScore.seriesStatus;
+    }
 
     // Update team records.
     // Most scoreboards expose a pre-game snapshot, so the post-game tally is
@@ -2993,12 +3464,24 @@ export class GameService {
       game.homeTeamRecord = homeTeamRecord;
       if (!hasPWHLSeasonRecords) {
         await this.teamService.updateRecord(game.homeTeamId, homeTeamRecord);
+        // Keep every game of the team's current season (past and upcoming)
+        // aligned with the fresh tally so all views show the latest record.
+        await this._propagateTeamRecordToSeasonGames(
+          game.league,
+          game.homeTeamId,
+          homeTeamRecord,
+        );
       }
     }
     if (awayTeamRecord && game.awayTeamId) {
       game.awayTeamRecord = awayTeamRecord;
       if (!hasPWHLSeasonRecords) {
         await this.teamService.updateRecord(game.awayTeamId, awayTeamRecord);
+        await this._propagateTeamRecordToSeasonGames(
+          game.league,
+          game.awayTeamId,
+          awayTeamRecord,
+        );
       }
     }
 
@@ -3141,6 +3624,8 @@ export class GameService {
           : undefined,
     );
     const teamsMap = new Map(teams.map((t) => [t.uniqueId, t]));
+
+    await this._precomputeSeriesStatus(games);
 
     // avoid dupplicate games
     return games
@@ -4236,6 +4721,9 @@ export class GameService {
       console.info(
         `[Capacity Manager] Deleted ${deletedCount} games from ${oldestYear}-${oldestMonth}.`,
       );
+      // A whole month of games just disappeared: the memoised per-team counts
+      // behind `GET /teams?minGames=…` must be recomputed.
+      this.teamService.clearActiveGameCountCache?.();
 
       // Get remaining years for the report
       const remainingYears = (await this.getAvailableYears()).map(

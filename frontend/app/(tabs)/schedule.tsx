@@ -35,12 +35,14 @@ import {
   fetchRemainingGamesByTeam,
   fetchResultsByLeague,
   fetchResultsByTeam,
+  fetchSelectableTeams,
   fetchTeams,
   getCanonicalTeamId,
   getCache,
   getOlympicTeamIds,
   getTeamIdentityKey,
   groupOlympicTeams,
+  restrictToSelectableTeams,
   saveCache,
   teamsMatchSelection,
   smallFetchRemainingGamesByLeague,
@@ -83,6 +85,16 @@ export default function Schedule() {
   const [teamFilter, setTeamFilter] = useState<string>('');
   const [monthFilter, setMonthFilter] = useState<string[]>([]);
   const [leagueTeams, setLeagueTeams] = useState<Team[]>([]);
+  /**
+   * Teams a user may pick as the main team filter (`GET /teams?minGames=…`).
+   *
+   * `teamsForSelector` below stays the **full** roster on purpose: it also
+   * resolves the metadata (label, league, logo) of the **opponents** listed by
+   * `uniqueTeamsFromGames`, and an opponent must be shown whoever it is,
+   * however few games it has. Only the two selection surfaces — the search
+   * selector and the team chips — are narrowed, via `selectableTeamsForSelector`.
+   */
+  const [selectableTeams, setSelectableTeams] = useState<Team[]>([]);
   const { width } = useWindowDimensions();
   const colorScheme = useColorScheme();
   const { backgroundColor: selectedBackgroundColor } = useFavoriteColor('#000');
@@ -125,6 +137,17 @@ export default function Schedule() {
   const teamsForSelector = useMemo(() => {
     return [...leagueTeams];
   }, [leagueTeams]);
+
+  /**
+   * The same roster, narrowed to the teams a user may actually pick. The current
+   * selection and the "All" pseudo-team are always kept: `'all'` has no entry in
+   * the selectable list (it is not a real team), so without pinning it here the
+   * league selector would lose its "All" entry as soon as the list loads.
+   */
+  const selectableTeamsForSelector = useMemo(
+    () => restrictToSelectableTeams(teamsForSelector, selectableTeams, [teamSelected, 'all']),
+    [teamsForSelector, selectableTeams, teamSelected],
+  );
 
   useEffect(() => {
     // If we're coming from another tab or initial load, ensure params match what's in state/LS if empty
@@ -226,6 +249,12 @@ export default function Schedule() {
         saveCache('teams', teamsData);
         // restore selection using freshly fetched teams
         getSelectedTeams(teamsData, forcedLeague, forcedTeam);
+
+        // The selectable subset is fetched in parallel: it only narrows what the
+        // user may pick, never what is displayed (opponents stay unrestricted).
+        fetchSelectableTeams()
+          .then(setSelectableTeams)
+          .catch((err) => console.error('fetch selectable teams failed', err));
       } catch (err) {
         console.error('fetch teams failed, using cached teams if available', err);
         if (cachedTeams) {
@@ -248,6 +277,28 @@ export default function Schedule() {
     }
     fetchTeamsAndRestore();
   }, [leagueParam, teamParam, firestoreReady]);
+
+  // Refresh the local teams list when the background API refresh completes,
+  // so screens already mounted show real metadata (logos, colors, …) instead
+  // of the Teams.tsx placeholder.
+  useEffect(() => {
+    const onTeamsUpdated = async () => {
+      const teamsData = await fetchTeams();
+      setTeams(teamsData);
+      saveCache("teams", teamsData);
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener(
+        "teamsSessionUpdated",
+        onTeamsUpdated,
+      );
+      return () =>
+        globalThis.window.removeEventListener(
+          "teamsSessionUpdated",
+          onTeamsUpdated,
+        );
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -738,7 +789,7 @@ export default function Schedule() {
 
     const dataTeams = {
       i: 'teams',
-      items: teamsForSelector,
+      items: selectableTeamsForSelector,
       itemsSelectedIds: [],
       itemSelectedId: teamSelected,
     };
@@ -822,7 +873,7 @@ export default function Schedule() {
                         onSelectorChange={handleTeamSelectionChange}
                         selectorPlaceholder={translateWord('filterTeams')}
                         isClearable={false}
-                        filterData={teamsForSelector.map((t) => ({
+                        filterData={selectableTeamsForSelector.map((t) => ({
                           label: t.label === 'All' ? translateWord('all') : t.label,
                           value: t.uniqueId,
                         }))}

@@ -2,10 +2,9 @@ import ScoreToggle from '@/components/ScoreToggle';
 import Selector from '@/components/Selector';
 import TeamReorderSelector from '@/components/TeamReorderSelector';
 import { LeaguesEnum } from '@/constants/Leagues';
-import { TeamsEnum } from '@/constants/Teams';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { fetchLeagues, getCache, saveCache } from '@/utils/fetchData';
+import { fetchLeagues, fetchSelectableTeams, fetchTeams, getCache, restrictToSelectableTeams, saveCache } from '@/utils/fetchData';
 import { syncToFirestore } from '@/utils/syncService';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
@@ -88,16 +87,67 @@ const FavModal = ({
     };
   }, []);
 
-  const teamsForFavorites: Team[] = Object.entries(TeamsEnum).map(([id, name]) => ({
-    label: name,
-    uniqueId: id,
-    league: id.split('-')[0],
-    id: '',
-    teamLogo: '',
-    teamCommonName: name,
-    abbrev: '',
-    updateDate: '',
-  }));
+  /**
+   * Teams offered as favorites. Built from the full catalog narrowed down to the
+   * selectable ones (`GET /teams?minGames=…`), so the long tail of teams that
+   * never plays cannot be picked — while the user's **existing** favorites always
+   * stay in the list, keeping their real label/logo, so an off-season favorite
+   * remains visible and removable instead of rendering as a blank row.
+   *
+   * This replaces the static `TeamsEnum` constant, which carried the whole
+   * catalog and had no notion of whether a team actually has games.
+   */
+  const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [selectableTeams, setSelectableTeams] = useState<Team[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+    // Both lists are 24 h-cached: the full one is usually already warm because
+    // the Schedule/Calendar screens load it, so this costs nothing extra.
+    Promise.all([fetchTeams(), fetchSelectableTeams()])
+      .then(([catalog, selectable]) => {
+        if (cancelled) return;
+        setAllTeams(catalog);
+        setSelectableTeams(selectable);
+      })
+      .catch((err) => console.error('Failed to load teams for favorites', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  // Refresh the favorites catalog when the background API refresh completes.
+  useEffect(() => {
+    const onTeamsUpdated = async () => {
+      if (!isOpen) return;
+      const [catalog, selectable] = await Promise.all([
+        fetchTeams(),
+        fetchSelectableTeams(),
+      ]);
+      setAllTeams(catalog);
+      setSelectableTeams(selectable);
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener(
+        'teamsSessionUpdated',
+        onTeamsUpdated,
+      );
+      return () =>
+        globalThis.window.removeEventListener(
+          'teamsSessionUpdated',
+          onTeamsUpdated,
+        );
+    }
+  }, [isOpen]);
+
+  const teamsForFavorites: Team[] = restrictToSelectableTeams(
+    allTeams,
+    selectableTeams,
+    localFavorites,
+  );
 
   const handleSave = async () => {
     if (!hasSelection) {

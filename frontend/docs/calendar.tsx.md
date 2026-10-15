@@ -28,6 +28,7 @@ The **Calendar** tab (also called "Agenda") displays games for multiple selected
 | --------------------- | ------------------------ | --------------------------------- |
 | `games`               | `FilterGames`            | Games keyed by date               |
 | `teams`               | `Team[]`                 | All teams from API                |
+| `selectableTeams`     | `Team[]`                 | Teams pickable in the picker (`GET /teams?minGames=…`) |
 | `teamsSelected`       | `string[]`               | Selected team IDs (max 9)         |
 | `gamesSelected`       | `GameFormatted[]`        | Bookmarked games                  |
 | `homeGameVisibility`  | `HomeGameFilter`         | `'all'`, `'home'`, or `'away'`    |
@@ -138,12 +139,17 @@ Bookmarked games that are active and in allowed leagues.
 
 ### `teamsAvailableForReorder`
 
-All teams filtered by allowed leagues.
+Teams filtered by allowed leagues, then narrowed to the **selectable** ones
+(`restrictToSelectableTeams(inAllowedLeagues, selectableTeams, teamsSelected)`): only teams with
+more than `selectableMinGames` official (non-preseason) games can be newly added. The
+**already-selected** teams always stay in the list, so a selection made in another season never
+disappears from the reorder modal. Games display is unaffected — a game always shows both of its
+teams.
 
 ## Data Flow
 
 1. On mount (after `firestoreReady`), restores date range and teams from cache
-2. Fetches all teams from API
+2. Fetches all teams from API, plus the selectable-teams list used to restrict the picker
 3. Fetches games for selected teams within the date range
 4. Displays accordions per date, filtered by hidden teams and home/away visibility
 5. Team changes, date changes, and game selections sync to Firestore

@@ -26,6 +26,7 @@ Team selectors use stable callback identifiers (`teams` and `teamsFilter`). `Sel
 | `games`                | `FilterGames` | Remaining games keyed by date               |
 | `results`              | `FilterGames` | Past results keyed by date                  |
 | `teams`                | `Team[]`      | All teams from API                          |
+| `selectableTeams`      | `Team[]`      | Teams pickable as main filter (`GET /teams?minGames=…`) |
 | `teamSelected`         | `string`      | Currently selected team ID                  |
 | `gamesTeamIds`         | `string[]`    | Team IDs used for the games data (both sport ids for an Olympic country) |
 | `teamFilter`           | `string`      | Opponent filter (VS) value                  |
@@ -110,6 +111,20 @@ Builds a list of unique opponent teams from games, **respecting the `monthFilter
 
 - If `teamSelected === 'all'` and no month filter: returns all teams in the league
 - Otherwise: iterates games, filters by selected month (using `monthKey = "${month} ${year}"`), and collects unique home/away teams (excluding the selected team). Olympic hockey/basketball opponents from the same country and gender are shown once.
+
+### `teamsForSelector` / `selectableTeamsForSelector`
+
+- `teamsForSelector` is the **full** roster of the selected league (`leagueTeams`). It is
+  deliberately not restricted: it also resolves the metadata (label, league, logo) of the
+  **opponents** listed by `uniqueTeamsFromGames`, and an opponent must be shown whoever it is,
+  however few games it has.
+- `selectableTeamsForSelector` = `restrictToSelectableTeams(teamsForSelector, selectableTeams,
+  [teamSelected, 'all'])` — the narrowed list used by the two **selection** surfaces only: the team
+  chips (`dataTeams`) and the search selector (`filterData` of `TeamFilter`). A team must have more
+  than `selectableMinGames` official (non-preseason) games to be newly picked. The current
+  `teamSelected` and the `'all'` pseudo-team are always kept, so an out-of-threshold selection
+  stays visible; if the selectable list hasn't loaded (or the fetch failed) the roster is used
+  untouched.
 
 ### `showTeamFilter`
 

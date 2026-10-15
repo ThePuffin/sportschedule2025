@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
   recordText: {
     fontSize: 11,
     marginTop: 2,
-    height: 15,
+    height: 'auto',
     textAlign: 'center',
   },
   centerColumn: {

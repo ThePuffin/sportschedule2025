@@ -100,6 +100,18 @@ export class Game extends Document {
   seriesStatus: string;
 
   /**
+   * Season phase of the fixture as reported by the provider: 1 = preseason,
+   * 2 = regular season, 3 = playoffs (ESPN `seasonType` / NHL `gameType`).
+   * Every schedule mapping already computes it; persisting it here lets read
+   * paths decide whether the playoff series label may replace the season
+   * record in the response (`_enrichGameWithTeamData()` / the phase grouping
+   * of `_freezeSeasonRecords()`). Documents stored before this prop existed
+   * fall back to a content check on the series label.
+   */
+  @Prop()
+  recordSeasonType?: number;
+
+  /**
    * ISO-8601 string (UTC) of when `gameClock` / `gamePeriod` / scores / status last
    * actually **changed value**, as opposed to `updateDate`, which is rewritten on
    * every live sync whether or not anything moved. The frontend needs this to tell
@@ -136,3 +148,13 @@ GameSchema.index({
 // `before` bound can then only be applied in memory.
 GameSchema.index({ isActive: 1, homeTeamId: 1, startTimeUTC: -1 });
 GameSchema.index({ isActive: 1, awayTeamId: 1, startTimeUTC: -1 });
+
+// Per-team ACTIVE game counts, backing `GET /teams?minGames=…`
+// (`TeamService.countActiveGamesByTeam()`). The aggregation
+// `{ $match: { isActive: true, recordSeasonType: { $ne: 1 } } }` +
+// `{ $group: { _id: '$teamSelectedId' } }` is then served straight from this
+// index, so counting a team's games never reads a single game document.
+// `recordSeasonType` is part of the index because the `$ne` filter (which drops
+// preseason games) has to be evaluated there; without it every active game
+// document would be fetched just to check its phase and then be grouped.
+GameSchema.index({ isActive: 1, teamSelectedId: 1, recordSeasonType: 1 });

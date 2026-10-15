@@ -3,9 +3,11 @@ import {
   fetchRecentFormGames,
   fetchResultsByTeam,
   fetchGamesByLeagueDay,
+  fetchSelectableTeams,
   getCanonicalTeamId,
   getOlympicTeamIds,
   groupOlympicTeams,
+  restrictToSelectableTeams,
   teamsMatchSelection,
 } from "./fetchData";
 import { Team } from "./types";
@@ -156,6 +158,94 @@ describe("fetchGamesByLeagueDay", () => {
     expect(requestUrl.searchParams.get("favoriteTeams")).toBe(
       "OLYMPICS-HOCKEY-MEN-FRA+OLYMPICS-BASKETBALL-MEN-FRA",
     );
+  });
+});
+
+describe("selectable teams (favorites / Calendar / Schedule team filter)", () => {
+  const plainTeam = (uniqueId: string): Team => ({
+    uniqueId,
+    id: uniqueId,
+    label: uniqueId,
+    teamLogo: "",
+    teamCommonName: uniqueId,
+    league: uniqueId.split("-")[0],
+    abbrev: "",
+    updateDate: "",
+  });
+
+  it("requests the restricted list with the shared minGames threshold", async () => {
+    mockSuccessfulFetch([plainTeam("NHL-BOS")]);
+
+    const teams = await fetchSelectableTeams();
+
+    expect(teams).toHaveLength(1);
+    const url = new URL(lastRequestedUrl(), "https://localhost");
+    expect(url.pathname).toBe("/teams");
+    // `selectableMinGames` is 4 → "more than 3 games".
+    expect(url.searchParams.get("minGames")).toBe("4");
+  });
+
+  it("serves the second call from its own cache, not the API", async () => {
+    mockSuccessfulFetch([plainTeam("NHL-BOS")]);
+
+    const first = await fetchSelectableTeams();
+    const second = await fetchSelectableTeams();
+
+    expect(first).toEqual(second);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  describe("restrictToSelectableTeams", () => {
+    const roster = [plainTeam("NHL-BOS"), plainTeam("NHL-VGK"), plainTeam("NCAA-TINY")];
+    const selectable = [plainTeam("NHL-BOS"), plainTeam("NHL-VGK")];
+
+    it("keeps only the teams reaching the threshold", () => {
+      expect(restrictToSelectableTeams(roster, selectable).map((t) => t.uniqueId)).toEqual([
+        "NHL-BOS",
+        "NHL-VGK",
+      ]);
+    });
+
+    it("returns the roster untouched when the selectable list is not loaded", () => {
+      // A failed fetch must never lock the user out of every selector.
+      expect(restrictToSelectableTeams(roster, [])).toEqual(roster);
+      expect(restrictToSelectableTeams(roster, null)).toEqual(roster);
+      expect(restrictToSelectableTeams(roster, undefined)).toEqual(roster);
+    });
+
+    it("always keeps the current selection even below the threshold", () => {
+      // An off-season favorite must stay visible and removable, not render blank.
+      const result = restrictToSelectableTeams(roster, selectable, ["NCAA-TINY"]);
+      expect(result.map((t) => t.uniqueId)).toEqual(["NHL-BOS", "NHL-VGK", "NCAA-TINY"]);
+    });
+
+    it("keeps both Olympic sport ids of a stored selection", () => {
+      const olympicRoster = [
+        olympicTeam("OLYMPICS-HOCKEY-MEN-FRA", "France", "OLYMPICS-MEN"),
+        olympicTeam("OLYMPICS-BASKETBALL-MEN-FRA", "France", "OLYMPICS-MEN"),
+        olympicTeam("NHL-BOS", "Boston Bruins", "NHL"),
+      ];
+
+      // Only the basketball twin is selectable, but a stored hockey id must not
+      // make its sibling disappear from the selector.
+      const result = restrictToSelectableTeams(
+        olympicRoster,
+        [olympicTeam("OLYMPICS-BASKETBALL-MEN-FRA", "France", "OLYMPICS-MEN")],
+        ["OLYMPICS-HOCKEY-MEN-FRA"],
+      );
+
+      expect(result.map((t) => t.uniqueId)).toEqual([
+        "OLYMPICS-HOCKEY-MEN-FRA",
+        "OLYMPICS-BASKETBALL-MEN-FRA",
+      ]);
+    });
+
+    it("ignores empty keep ids", () => {
+      expect(restrictToSelectableTeams(roster, selectable, ["", ""]).map((t) => t.uniqueId)).toEqual([
+        "NHL-BOS",
+        "NHL-VGK",
+      ]);
+    });
   });
 });
 

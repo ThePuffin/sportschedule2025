@@ -11,7 +11,7 @@ The **fetchData** utility provides all API fetching functions with caching, comp
 - **Fetch timeout** — aborts requests after a configurable timeout
 - **Retry logic** — retries after 10s if cache is invalid
 - **Team games cache** — short-TTL cache (6 minutes) for team schedules
-- **Session storage** — used for hourly game data (short-lived)
+- **Session storage** — used for hourly game data (short-lived) and for the full team catalog (24 h TTL, key `teams_session`)
 
 ## Cache Helpers
 
@@ -68,7 +68,39 @@ Fetches available leagues. Cached for 24 hours.
 
 ### `fetchTeams()`
 
-Fetches all teams. Cached for 24 hours.
+Returns the full team catalog, optimized for cold start:
+
+1. **Session storage (< 24 h)** — returns immediately, no network.
+2. **`Teams.tsx` fallback** — on a totally cold start (no session cache), returns the static `TeamsEnum` list instantly so the user never waits on the network. `Teams.tsx` is generated backend-side and only contains teams that actually play: at least **10 active games** for regular leagues, or **1 active game** for Olympic teams (`OLYMPICS-*` ids), so country delegations are never empty.
+3. **Background API refresh** — `GET /teams?minGames=10` (regular teams) and `GET /teams?minGames=1` (Olympic teams) run in the background, the results are merged, the session-storage copy is replaced, and a `teamsSessionUpdated` window event is dispatched so already-mounted screens can re-render with real metadata (logos, colors, …).
+
+The result is also written to `localStorage` under key `teams` (via callers such as `_layout.tsx`) for compatibility with code paths that read the local cache directly.
+
+**Keep using this one for anything read-only** — opponent names/logos/colors, resolving a stored selection, enriching a game. It is the full catalog on purpose.
+
+### `fetchSelectableTeams()` / `restrictToSelectableTeams()`
+
+`fetchSelectableTeams()` fetches the teams a user is allowed to **pick**, from
+`GET /teams?minGames=<selectableMinGames>` (`frontend/constants/Constants.js`, currently `4` = "more
+than 3 games"). The backend only returns teams having at least that many **regular-season or playoff**
+games — preseason games are excluded, so a franchise that only plays exhibitions never becomes
+selectable. Teams marked `isActive: false` (historical/retired franchises, e.g. a relocated team)
+are excluded too, so a defunct team can never be picked. Cached for 24 h under its own key
+(`teams_selectable_v3`, versioned so any change to the selection rules — threshold or active-only —
+invalidates previously stored lists).
+
+Used by the three selection surfaces: the global favorites (`FavModal`), the Calendar team picker
+(`calendar.tsx`) and the main team filter of the Schedule screen (`schedule.tsx`).
+
+`restrictToSelectableTeams(teams, selectableTeams, keepIds)` narrows a roster a screen already
+holds, and **always keeps the ids in `keepIds`** (the current selection / existing favorites), so an
+off-season favorite stays visible and removable instead of rendering as a blank row. It returns the
+roster untouched when the selectable list is empty (request failed / not loaded yet): a failed fetch
+must never lock the user out of every selector.
+
+- Opponents are deliberately **not** restricted: a game always displays both of its teams, whoever
+  they are. On the Schedule screen `teamsForSelector` stays the full roster for that reason, and only
+  the two selection surfaces use the narrowed list.
 
 ### Olympic team identity helpers
 

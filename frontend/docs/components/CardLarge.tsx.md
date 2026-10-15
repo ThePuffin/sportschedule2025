@@ -6,7 +6,7 @@ The **CardLarge** component displays a single game as a card with team logos, sc
 
 ## Key Features
 
-- **Team display** — home/away team logos, names, abbreviations, records
+- **Team display** — home/away team logos, names, abbreviations, records. The record / series label (`seriesStatus` or `seriesSummary`) is rendered with `height: 'auto'`, so a long round label (e.g. `Milano Cortina 2026 Men's Hockey…`) is no longer truncated to a single fixed line and can wrap onto several lines.
 - **Score display** — shows scores with reveal button for hidden scores; the per-card
   "revealed" state is shared module-wide (`revealedGameKeys` set + `scoreRevealed`
   window event, same pattern as `scoresUpdated`), so revealing a score on one card

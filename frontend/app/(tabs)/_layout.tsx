@@ -1,5 +1,5 @@
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { fetchTeams, getCache, saveCache } from '@/utils/fetchData';
+import { fetchTeams, saveCache } from '@/utils/fetchData';
 import { db } from '@/utils/firebaseConfig';
 import { applyFirestoreDataToLocal, flushSync, syncOnLogin } from '@/utils/syncService';
 import { Team } from '@/utils/types';
@@ -23,11 +23,11 @@ function TabLayoutContent() {
   const applyFirestoreData = async (data: any) => {
     applyFirestoreDataToLocal(data);
 
-    let allTeams = getCache<Team[]>('teams') || [];
-    if (allTeams.length === 0) {
-      allTeams = await fetchTeams();
-      saveCache('teams', allTeams);
-    }
+    // fetchTeams() returns the session-storage copy (fresh < 24 h), falls back
+    // to Teams.tsx instantly, and refreshes from the API in the background.
+    const allTeams = await fetchTeams();
+    // Keep the localStorage copy warm for any code path still reading it directly.
+    saveCache("teams", allTeams);
 
     const dbTeamsSelectedIds: string[] = Array.isArray(data?.teamsSelected) ? data.teamsSelected : [];
     if (dbTeamsSelectedIds.length > 0 && allTeams.length > 0) {

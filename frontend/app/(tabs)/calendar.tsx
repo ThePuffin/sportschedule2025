@@ -10,11 +10,13 @@ import { useHorizontalScroll } from '@/context/HorizontalScrollContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import {
   fetchDateRangeFromApi,
+  fetchSelectableTeams,
   fetchTeams,
   getCanonicalTeamId,
   getCache,
   getOlympicTeamIds,
   groupOlympicTeams,
+  restrictToSelectableTeams,
   saveCache,
   teamsMatchSelection,
 } from '@/utils/fetchData';
@@ -79,6 +81,13 @@ export default function Calendar() {
   const useFilterAccordion = width < ACCORDION_MAX_WIDTH;
   const [games, setGames] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
+  /**
+   * Teams a user may add to the Calendar (`GET /teams?minGames=…`). Kept apart
+   * from `teams`, which stays the full catalog: it resolves stored selections
+   * and enriches displayed games, and **opponents must keep showing every team**
+   * regardless of how many games it has.
+   */
+  const [selectableTeams, setSelectableTeams] = useState<Team[]>([]);
   const [teamsSelected, setTeamsSelected] = useState<string[]>([]);
   const [gamesSelected, setGamesSelected] = useState<GameFormatted[]>([]);
   const [bulkSelectedGames, setBulkSelectedGames] = useState<GameFormatted[]>([]);
@@ -133,9 +142,18 @@ export default function Calendar() {
   }, [gamesSelected, allowedLeagues]);
 
   const teamsAvailableForReorder = useMemo(() => {
-    if (allowedLeagues.length === 0) return teams;
-    return teams.filter((t) => allowedLeagues.includes(t.league));
-  }, [teams, allowedLeagues]);
+    const inAllowedLeagues =
+      allowedLeagues.length === 0
+        ? teams
+        : teams.filter((t) => allowedLeagues.includes(t.league));
+    // Already-selected teams stay available even if they dropped below the
+    // threshold, so the reorder modal never loses a row the user still has.
+    return restrictToSelectableTeams(
+      inAllowedLeagues,
+      selectableTeams,
+      teamsSelected,
+    );
+  }, [teams, allowedLeagues, selectableTeams, teamsSelected]);
 
   const teamAccordionLabel = useMemo(() => {
     const labels =
@@ -687,7 +705,39 @@ export default function Calendar() {
       setTeams(teamsData);
     }
     fetchTeams();
+
+    // Loaded alongside the catalog (both 24 h-cached) so the team picker is
+    // restricted from the first render instead of flashing every team.
+    let cancelled = false;
+    fetchSelectableTeams()
+      .then((selectable) => {
+        if (!cancelled) setSelectableTeams(selectable);
+      })
+      .catch((error) => console.error(error));
+
+    return () => {
+      cancelled = true;
+    };
   }, [firestoreReady]);
+
+  // Refresh the local teams list when the background API refresh completes.
+  useEffect(() => {
+    const onTeamsUpdated = async () => {
+      const teamsData = await getTeamsFromApi();
+      setTeams(teamsData);
+    };
+    if (globalThis.window !== undefined) {
+      globalThis.window.addEventListener(
+        "teamsSessionUpdated",
+        onTeamsUpdated,
+      );
+      return () =>
+        globalThis.window.removeEventListener(
+          "teamsSessionUpdated",
+          onTeamsUpdated,
+        );
+    }
+  }, [getTeamsFromApi]);
 
   const handleHomeGameToggle = (value: HomeGameFilter) => {
     setHomeGameVisibility(value);
