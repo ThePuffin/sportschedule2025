@@ -26,9 +26,11 @@ export class TeamsController {
     const teams = await this.TeamService.findAll(undefined, { minGames });
     // Olympic deduplication on HTTP output: one entry per country and gender
     // (OLYMPICS-{MEN|WOMEN}-{PAYS}) so the selector does not display the same
-    // country twice (hockey + basketball). The representative ID keeps its
-    // existing format. `findAll()` is left intact to avoid impacting
-    // GameService's per-sport iteration (team enrichment and league
+    // country twice (hockey + basketball). The representative ID is unified to
+    // `OLYMPICS-{GENDER}-{COUNTRY}` (e.g. `OLYMPICS-WOMEN-USA`) instead of
+    // keeping a sport-specific ID such as `OLYMPICS-HOCKEY-WOMEN-USA` /
+    // `OLYMPICS-BASKETBALL-WOMEN-USA`. `findAll()` is left intact to avoid
+    // impacting GameService's per-sport iteration (team enrichment and league
     // discovery).
     return dedupOlympicTeams(teams);
   }
@@ -83,11 +85,17 @@ export class TeamsController {
 
 /**
  * Deduplicates Olympic teams so there is a single entry per country and
- * gender (`OLYMPICS-{MEN|WOMEN}-{PAYS}`), keeping the representative ID in
- * its existing format (`OLYMPICS-{SPORT}-{GENDER}-{COUNTRY}`: the
- * lexicographically smallest ID is retained). Non-Olympic teams pass through
- * unchanged. HTTP output only: GameService's per-sport iteration must keep
- * every Olympic team.
+ * gender (`OLYMPICS-{MEN|WOMEN}-{PAYS}`) in the HTTP output.
+ *
+ * The representative ID is unified to `OLYMPICS-{GENDER}-{COUNTRY}` (e.g.
+ * `OLYMPICS-WOMEN-USA`) instead of keeping a sport-specific ID such as
+ * `OLYMPICS-HOCKEY-WOMEN-USA` or `OLYMPICS-BASKETBALL-WOMEN-USA`. This avoids
+ * arbitrarily dropping hockey (lexicographic tie-break) while still showing
+ * each country delegation only once in the selector.
+ *
+ * Non-Olympic teams pass through unchanged. HTTP output only: GameService's
+ * per-sport iteration must keep every Olympic team with its sport-specific ID,
+ * so `findAll()` is left intact.
  */
 function dedupOlympicTeams(teams: any[]): any[] {
   const representatives = new Map<string, any>();
@@ -100,12 +108,13 @@ function dedupOlympicTeams(teams: any[]): any[] {
       continue;
     }
     const groupKey = `OLYMPICS-${match[1]}-${match[2]}`;
-    const existing = representatives.get(groupKey);
-    if (
-      !existing ||
-      String(team.uniqueId).localeCompare(String(existing.uniqueId)) < 0
-    ) {
-      representatives.set(groupKey, team);
+    // One entry per country and gender. The ID is unified to
+    // `OLYMPICS-{GENDER}-{COUNTRY}` so neither hockey nor basketball is
+    // arbitrarily favored (previous lexicographic tie-break kept basketball).
+    // The first team encountered wins the group; its sport-specific ID is
+    // still authoritative in the database (findAll is not deduplicated).
+    if (!representatives.has(groupKey)) {
+      representatives.set(groupKey, { ...team, uniqueId: groupKey });
     }
   }
   return Array.from(representatives.values());

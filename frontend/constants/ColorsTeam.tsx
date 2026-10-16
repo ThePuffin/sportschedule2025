@@ -4836,7 +4836,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCAAF-BENT': {
-    color: '#004C99',
+    color: '#666666',
     backgroundColor: '#004C99',
   },
   'NCAAF-BER': {
@@ -5615,6 +5615,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#000000',
   },
+  'NCAAF-GVLS': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
   'NCAAF-GVSU': {
     color: '#ffffff',
     backgroundColor: '#000000',
@@ -6088,6 +6092,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#881c1c',
   },
   'NCAAF-MAY': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
+  'NCAAF-MB': {
     color: '#ffffff',
     backgroundColor: '#000000',
   },
@@ -7447,6 +7455,10 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     color: '#ffffff',
     backgroundColor: '#000000',
   },
+  'NCAAF-UTIC': {
+    color: '#ffffff',
+    backgroundColor: '#000000',
+  },
   'NCAAF-UTM': {
     color: '#FF6700',
     backgroundColor: '#102a5c',
@@ -8692,7 +8704,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-AUR': {
-    color: '#ffffff',
+    color: '#00549f',
     backgroundColor: '#000000',
   },
   'NCCABB-BACN': {
@@ -8864,8 +8876,8 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-COE': {
-    color: '#ffffff',
-    backgroundColor: '#000000',
+    color: '#c8934a',
+    backgroundColor: '#881922',
   },
   'NCCABB-CofC': {
     color: '#9C8456',
@@ -10080,7 +10092,7 @@ export const ColorsTeamEnum: Record<string, { color: string; backgroundColor: st
     backgroundColor: '#000000',
   },
   'NCCABB-TXLU': {
-    color: '#ffffff',
+    color: '#fdbe10',
     backgroundColor: '#000000',
   },
   'NCCABB-TXSO': {

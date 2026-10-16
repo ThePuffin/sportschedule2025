@@ -5,6 +5,7 @@ import {
   fetchGamesByLeagueDay,
   fetchSelectableTeams,
   getCanonicalTeamId,
+  getOlympicTeamGroupKey,
   getOlympicTeamIds,
   getTeamLeagueFromId,
   groupOlympicTeams,
@@ -87,6 +88,20 @@ describe("Olympic team identity helpers", () => {
       "OLYMPICS-BASKETBALL-WOMEN-USA",
     ]);
     expect(getOlympicTeamIds("NHL-BOS")).toEqual(["NHL-BOS"]);
+  });
+
+  it("recognizes unified Olympic display ids (genre + country only)", () => {
+    // The unified id `OLYMPICS-{GENDER}-{COUNTRY}` groups to itself.
+    expect(getOlympicTeamGroupKey("OLYMPICS-WOMEN-USA")).toBe("OLYMPICS-WOMEN-USA");
+    expect(getOlympicTeamGroupKey("OLYMPICS-MEN-FRA")).toBe("OLYMPICS-MEN-FRA");
+    // Expanding a unified id still yields both sport-specific ids for match calls.
+    expect(getOlympicTeamIds("OLYMPICS-WOMEN-USA")).toEqual([
+      "OLYMPICS-HOCKEY-WOMEN-USA",
+      "OLYMPICS-BASKETBALL-WOMEN-USA",
+    ]);
+    // League derivation collapses to the gender-level chip.
+    expect(getTeamLeagueFromId("OLYMPICS-WOMEN-USA")).toBe("OLYMPICS-WOMEN");
+    expect(getTeamLeagueFromId("OLYMPICS-MEN-FRA")).toBe("OLYMPICS-MEN");
   });
 
   it("groups duplicate Olympic country entries while keeping gender variants separate", () => {

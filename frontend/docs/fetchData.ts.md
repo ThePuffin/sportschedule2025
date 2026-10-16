@@ -104,10 +104,11 @@ must never lock the user out of every selector.
 
 ### Olympic team identity helpers
 
-- `getOlympicTeamIds(teamId)` maps a hockey or basketball Olympic team id to both sport-specific ids for the same country and gender. Non-Olympic ids are returned unchanged as a one-element array.
+- `getOlympicTeamGroupKey(teamId)` returns `OLYMPICS-{GENDER}-{COUNTRY}` for an Olympic team id, or `null` otherwise. It accepts both the sport-specific backend canonical ids (`OLYMPICS-HOCKEY-{GENDER}-{COUNTRY}`, `OLYMPICS-BASKETBALL-{GENDER}-{COUNTRY}`) and the unified display ids returned by `GET /teams` and `Teams.tsx` (`OLYMPICS-{GENDER}-{COUNTRY}`).
+- `getOlympicTeamIds(teamId)` maps a hockey or basketball Olympic team id to both sport-specific ids for the same country and gender. Non-Olympic ids are returned unchanged as a one-element array. Passing a unified id still yields both sport-specific ids (needed for match requests).
 - `groupOlympicTeams(teams)` keeps one selector entry per Olympic country/gender while preserving separate men's and women's entries. The displayed label remains the country name only; grouping is stable if an already-grouped list is processed again.
 - `getCanonicalTeamId(teamId, teams)` resolves an old sport-specific selection to the visible representative from the team list.
-- `getTeamIdentityKey(teamId)` and `teamsMatchSelection(teamId, selectedTeamId)` compare Olympic hockey and basketball entries as the same country/gender; other leagues remain exact-id matches.
+- `getTeamIdentityKey(teamId)` and `teamsMatchSelection(teamId, selectedTeamId)` compare Olympic hockey and basketball entries as the same country/gender; other leagues remain exact-id matches. Both now also treat unified ids (`OLYMPICS-{GENDER}-{COUNTRY}`) as matching their own gender/country group.
 - `getTeamLeagueFromId(uniqueId)` derives the league value carried by a team id: `OLYMPICS-HOCKEY/BASKETBALL-(MEN|WOMEN)-PAYS` → `OLYMPICS-MEN` / `OLYMPICS-WOMEN` (matching the league selector chips); any other id keeps its first segment (`NHL-BOS` → `NHL`). `teamsEnumToTeamArray()` now uses it for the `league` field instead of the raw first segment, so Olympic entries carry `OLYMPICS-MEN` / `OLYMPICS-WOMEN` rather than `OLYMPICS` (which matched no selector chip).
 
 ### `fetchRemainingGamesByTeam(teamSelected, startDate?)`

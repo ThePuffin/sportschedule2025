@@ -967,16 +967,19 @@ export class TeamService {
 
   /**
    * Deduplicates Olympic teams so there is a single entry per country and
-   * gender (`OLYMPICS-{MEN|WOMEN}-{PAYS}`),
-   * keeping the representative ID in its existing format
-   * (`OLYMPICS-{SPORT}-{GENDER}-{COUNTRY}`: the lexicographically smallest
-   * ID is retained). Non-Olympic teams pass through unchanged.
+   * gender (`OLYMPICS-{MEN|WOMEN}-{PAYS}`) in the display output
+   * (Teams.tsx and GET /teams).
    *
-   * Intended for static file output (Teams.tsx, ColorsTeam) and for the
-   * controller's HTTP output: `findAll()` is deliberately left untouched
-   * because GameService uses it for per-sport enrichment (_fetchUniqueGames)
-   * and for league discovery (getAllGames), which require every Olympic
-   * team.
+   * The representative ID is unified to `OLYMPICS-{GENDER}-{COUNTRY}`
+   * (e.g. `OLYMPICS-WOMEN-USA`) instead of keeping a sport-specific ID such as
+   * `OLYMPICS-HOCKEY-WOMEN-USA` or `OLYMPICS-BASKETBALL-WOMEN-USA`. This avoids
+   * arbitrarily dropping hockey (lexicographic tie-break) while still showing
+   * each country delegation only once in the selector.
+   *
+   * Non-Olympic teams pass through unchanged. `findAll()` is deliberately left
+   * untouched because GameService uses it for per-sport enrichment
+   * (_fetchUniqueGames) and for league discovery (getAllGames), which require
+   * every Olympic team with its sport-specific ID.
    */
   private dedupOlympicTeams(teams: any[]): any[] {
     const representatives = new Map<string, any>();
@@ -989,12 +992,13 @@ export class TeamService {
         continue;
       }
       const groupKey = `OLYMPICS-${match[1]}-${match[2]}`;
-      const existing = representatives.get(groupKey);
-      if (
-        !existing ||
-        String(team.uniqueId).localeCompare(String(existing.uniqueId)) < 0
-      ) {
-        representatives.set(groupKey, team);
+      // One entry per country and gender. The ID is unified to
+      // `OLYMPICS-{GENDER}-{COUNTRY}` so neither hockey nor basketball is
+      // arbitrarily favored (previous lexicographic tie-break kept basketball).
+      // The first team encountered wins the group; its sport-specific ID is
+      // still authoritative in the database (findAll is not deduplicated).
+      if (!representatives.has(groupKey)) {
+        representatives.set(groupKey, { ...team, uniqueId: groupKey });
       }
     }
     return Array.from(representatives.values());
@@ -1037,8 +1041,10 @@ export class TeamService {
       );
       // Olympic deduplication: one entry per country and gender in Teams.tsx
       // (the frontend selector must not display the same country twice for
-      // hockey + basketball). The representative ID keeps its existing format.
-      // The color entries below stay complete for match display.
+      // hockey + basketball). The representative ID is unified to
+      // `OLYMPICS-{GENDER}-{COUNTRY}` so neither sport is arbitrarily favored.
+      // The color entries below stay complete for match display (sport-specific
+      // IDs and colors are preserved there).
       const visibleTeamsDeduped = this.dedupOlympicTeams(visibleTeams);
       const lines = visibleTeamsDeduped.map(
         (team) => `  '${team.uniqueId}': '${team.label.replace(/'/g, "\\'")}',`,

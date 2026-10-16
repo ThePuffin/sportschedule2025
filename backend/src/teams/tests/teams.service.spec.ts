@@ -665,7 +665,7 @@ describe('TeamService', () => {
   });
 
   describe('dedupOlympicTeams', () => {
-    it('keeps a single Olympic entry per country and gender (representative ID retained)', () => {
+    it('keeps a single Olympic entry per country and gender (unified representative ID)', () => {
       const teams = [
         {
           uniqueId: 'OLYMPICS-HOCKEY-MEN-CAN',
@@ -688,15 +688,16 @@ describe('TeamService', () => {
       const result = service['dedupOlympicTeams'](teams);
 
       expect(result).toHaveLength(3);
+      // First team in the group wins; its ID is unified to
+      // `OLYMPICS-{GENDER}-{COUNTRY}` (no sport segment, neither hockey nor
+      // basketball arbitrarily favored).
       expect(result.map((t) => t.uniqueId)).toEqual([
-        'OLYMPICS-BASKETBALL-MEN-CAN', // lexicographically smallest ID
-        'OLYMPICS-BASKETBALL-WOMEN-USA',
+        'OLYMPICS-MEN-CAN',
+        'OLYMPICS-WOMEN-USA',
         'NHL-BOS',
       ]);
-      // The representative ID keeps its existing format (sport + gender + country).
-      expect(result[0].uniqueId).toMatch(
-        /^OLYMPICS-(HOCKEY|BASKETBALL)-MEN-CAN$/,
-      );
+      expect(result[0].uniqueId).toBe('OLYMPICS-MEN-CAN');
+      expect(result[1].uniqueId).toBe('OLYMPICS-WOMEN-USA');
     });
 
     it('does not deduplicate non-Olympic teams', () => {

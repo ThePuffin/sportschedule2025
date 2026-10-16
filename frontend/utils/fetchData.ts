@@ -194,8 +194,22 @@ const isCacheContentValid = (data: unknown): boolean => {
   return true;
 };
 
+/**
+ * Returns the Olympic grouping key `OLYMPICS-{GENDER}-{COUNTRY}` for an
+ * Olympic team id, or `null` for non-Olympic teams.
+ *
+ * Accepts both formats:
+ *  - sport-specific (backend canonical ids):
+ *    `OLYMPICS-HOCKEY-MEN-FRA` / `OLYMPICS-BASKETBALL-MEN-FRA`
+ *  - unified display ids (returned by `GET /teams` and `Teams.tsx`):
+ *    `OLYMPICS-MEN-FRA` / `OLYMPICS-WOMEN-USA`
+ *
+ * Non-Olympic ids return `null`.
+ */
 export const getOlympicTeamGroupKey = (teamId: string): string | null => {
-  const match = teamId.toUpperCase().match(/^OLYMPICS-(?:HOCKEY|BASKETBALL)-(MEN|WOMEN)-(.+)$/);
+  const match =
+    teamId.toUpperCase().match(/^OLYMPICS-(?:HOCKEY|BASKETBALL)-(MEN|WOMEN)-(.+)$/) ??
+    teamId.toUpperCase().match(/^OLYMPICS-(MEN|WOMEN)-(.+)$/);
   return match ? `OLYMPICS-${match[1]}-${match[2]}` : null;
 };
 
