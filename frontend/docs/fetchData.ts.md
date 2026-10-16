@@ -108,6 +108,7 @@ must never lock the user out of every selector.
 - `groupOlympicTeams(teams)` keeps one selector entry per Olympic country/gender while preserving separate men's and women's entries. The displayed label remains the country name only; grouping is stable if an already-grouped list is processed again.
 - `getCanonicalTeamId(teamId, teams)` resolves an old sport-specific selection to the visible representative from the team list.
 - `getTeamIdentityKey(teamId)` and `teamsMatchSelection(teamId, selectedTeamId)` compare Olympic hockey and basketball entries as the same country/gender; other leagues remain exact-id matches.
+- `getTeamLeagueFromId(uniqueId)` derives the league value carried by a team id: `OLYMPICS-HOCKEY/BASKETBALL-(MEN|WOMEN)-PAYS` → `OLYMPICS-MEN` / `OLYMPICS-WOMEN` (matching the league selector chips); any other id keeps its first segment (`NHL-BOS` → `NHL`). `teamsEnumToTeamArray()` now uses it for the `league` field instead of the raw first segment, so Olympic entries carry `OLYMPICS-MEN` / `OLYMPICS-WOMEN` rather than `OLYMPICS` (which matched no selector chip).
 
 ### `fetchRemainingGamesByTeam(teamSelected, startDate?)`
 

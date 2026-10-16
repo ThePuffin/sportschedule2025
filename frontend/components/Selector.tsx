@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { emoticonEnum, leagueLogos } from '@/constants/enum';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { getCache } from '@/utils/fetchData';
+import { getCache, getTeamLeagueFromId } from '@/utils/fetchData';
 import { SelectorProps } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
 import { Icon } from '@rneui/themed';
@@ -140,7 +140,9 @@ export default function Selector({
         const id = typeof item === 'string' ? item : item.uniqueId;
         const labelRaw = typeof item === 'string' ? item : item.label;
         const league =
-          typeof item === 'string' ? item : item.league || item.uniqueId;
+          typeof item === 'string'
+            ? item
+            : getTeamLeagueFromId(item.uniqueId);
 
         const label = labelRaw === 'All' ? translateWord('all') : labelRaw;
 

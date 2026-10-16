@@ -945,6 +945,41 @@ export class TeamService {
     return blocks.join('\n');
   }
 
+  /**
+   * Deduplicates Olympic teams so there is a single entry per country and
+   * gender (`OLYMPICS-{MEN|WOMEN}-{PAYS}`),
+   * keeping the representative ID in its existing format
+   * (`OLYMPICS-{SPORT}-{GENDER}-{COUNTRY}`: the lexicographically smallest
+   * ID is retained). Non-Olympic teams pass through unchanged.
+   *
+   * Intended for static file output (Teams.tsx, ColorsTeam) and for the
+   * controller's HTTP output: `findAll()` is deliberately left untouched
+   * because GameService uses it for per-sport enrichment (_fetchUniqueGames)
+   * and for league discovery (getAllGames), which require every Olympic
+   * team.
+   */
+  private dedupOlympicTeams(teams: any[]): any[] {
+    const representatives = new Map<string, any>();
+    for (const team of teams ?? []) {
+      const match = String(team?.uniqueId ?? '').match(
+        /^OLYMPICS-(?:HOCKEY|BASKETBALL)-(MEN|WOMEN)-(.+)$/,
+      );
+      if (!match) {
+        representatives.set(team?.uniqueId, team);
+        continue;
+      }
+      const groupKey = `OLYMPICS-${match[1]}-${match[2]}`;
+      const existing = representatives.get(groupKey);
+      if (
+        !existing ||
+        String(team.uniqueId).localeCompare(String(existing.uniqueId)) < 0
+      ) {
+        representatives.set(groupKey, team);
+      }
+    }
+    return Array.from(representatives.values());
+  }
+
   private async generateLeaguesTeamsAndColorsFiles() {
     try {
       // --- 1. Enums Leagues & Teams ---
@@ -978,10 +1013,14 @@ export class TeamService {
           (team.uniqueId?.startsWith(OLYMPICS_PREFIX)
             ? (gameCounts.get(team.uniqueId) ?? 0) >=
               TEAMS_CONSTANT_MIN_GAMES_OLYMPICS
-            : (gameCounts.get(team.uniqueId) ?? 0) >=
-              TEAMS_CONSTANT_MIN_GAMES),
+            : (gameCounts.get(team.uniqueId) ?? 0) >= TEAMS_CONSTANT_MIN_GAMES),
       );
-      const lines = visibleTeams.map(
+      // Olympic deduplication: one entry per country and gender in Teams.tsx
+      // (the frontend selector must not display the same country twice for
+      // hockey + basketball). The representative ID keeps its existing format.
+      // The color entries below stay complete for match display.
+      const visibleTeamsDeduped = this.dedupOlympicTeams(visibleTeams);
+      const lines = visibleTeamsDeduped.map(
         (team) => `  '${team.uniqueId}': '${team.label.replace(/'/g, "\\'")}',`,
       );
       const fileContent = `export const TeamsEnum: Record<string, string> = {\n${lines.join(

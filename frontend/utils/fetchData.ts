@@ -61,12 +61,12 @@ const pruneTeamGamesCache = (cache: TeamGamesCache): void => {
  * without waiting for the network. Fields not present in the constant get
  * sensible defaults; the API refresh later fills in the real metadata.
  */
-const teamsEnumToTeamArray = (): Team[] => {
+export const teamsEnumToTeamArray = (): Team[] => {
   return Object.entries(TeamsEnum).map(([uniqueId, label]) => ({
     uniqueId,
     id: uniqueId,
     label,
-    league: uniqueId.split("-")[0] ?? "",
+    league: getTeamLeagueFromId(uniqueId),
     teamLogo: "",
     teamLogoDark: "",
     teamCommonName: "",
@@ -210,6 +210,24 @@ export const getOlympicTeamIds = (teamId: string): string[] => {
 };
 
 export const getTeamIdentityKey = (teamId: string): string => getOlympicTeamGroupKey(teamId) ?? teamId;
+
+/**
+ * Derive the league value carried by a team id.
+ *
+ * Olympic ids are sport-specific (`OLYMPICS-HOCKEY-MEN-FRA`,
+ * `OLYMPICS-BASKETBALL-MEN-FRA`) but the league selector exposes one chip per
+ * gender (`OLYMPICS-MEN`, `OLYMPICS-WOMEN`). This helper collapses both sport
+ * variants to their gender-level league so they match the chips, while any
+ * other id keeps its first segment (`NHL-BOS` → `NHL`, `MLB-ARI` → `MLB`).
+ */
+export const getTeamLeagueFromId = (uniqueId: string): string => {
+  const groupKey = getOlympicTeamGroupKey(uniqueId);
+  if (groupKey) {
+    const match = groupKey.match(/^OLYMPICS-(MEN|WOMEN)-/);
+    return match ? `OLYMPICS-${match[1]}` : uniqueId.split("-")[0] ?? "";
+  }
+  return uniqueId.split("-")[0] ?? "";
+};
 
 export const teamsMatchSelection = (teamId: string, selectedTeamId: string): boolean =>
   getTeamIdentityKey(teamId) === getTeamIdentityKey(selectedTeamId);

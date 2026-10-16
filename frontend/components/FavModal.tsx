@@ -4,7 +4,15 @@ import TeamReorderSelector from '@/components/TeamReorderSelector';
 import { LeaguesEnum } from '@/constants/Leagues';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { fetchLeagues, fetchSelectableTeams, fetchTeams, getCache, restrictToSelectableTeams, saveCache } from '@/utils/fetchData';
+import {
+  fetchLeagues,
+  fetchSelectableTeams,
+  fetchTeams,
+  getCache,
+  getTeamLeagueFromId,
+  restrictToSelectableTeams,
+  saveCache,
+} from '@/utils/fetchData';
 import { syncToFirestore } from '@/utils/syncService';
 import { Team } from '@/utils/types';
 import { translateWord } from '@/utils/utils';
@@ -104,15 +112,18 @@ const FavModal = ({
     if (!isOpen) return;
 
     let cancelled = false;
-    // Both lists are 24 h-cached: the full one is usually already warm because
-    // the Schedule/Calendar screens load it, so this costs nothing extra.
-    Promise.all([fetchTeams(), fetchSelectableTeams()])
-      .then(([catalog, selectable]) => {
-        if (cancelled) return;
-        setAllTeams(catalog);
-        setSelectableTeams(selectable);
+    // The full catalog is instant (Teams.tsx or session cache) — it must be
+    // displayed without waiting for the selectable list.
+    fetchTeams().then((catalog) => {
+      if (!cancelled) setAllTeams(catalog);
+    });
+    // The selectable list can wait for the API, it is loaded separately so it
+    // does not block the catalog display.
+    fetchSelectableTeams()
+      .then((selectable) => {
+        if (!cancelled) setSelectableTeams(selectable);
       })
-      .catch((err) => console.error('Failed to load teams for favorites', err));
+      .catch((err) => console.error('Failed to load selectable teams for favorites', err));
 
     return () => {
       cancelled = true;
@@ -123,12 +134,14 @@ const FavModal = ({
   useEffect(() => {
     const onTeamsUpdated = async () => {
       if (!isOpen) return;
-      const [catalog, selectable] = await Promise.all([
-        fetchTeams(),
-        fetchSelectableTeams(),
-      ]);
-      setAllTeams(catalog);
-      setSelectableTeams(selectable);
+      fetchTeams().then((catalog) => {
+        setAllTeams(catalog);
+      });
+      fetchSelectableTeams()
+        .then((selectable) => {
+          setSelectableTeams(selectable);
+        })
+        .catch((err) => console.error('Failed to refresh selectable teams for favorites', err));
     };
     if (globalThis.window !== undefined) {
       globalThis.window.addEventListener(
@@ -155,7 +168,11 @@ const FavModal = ({
       return;
     }
 
-    const filteredFavorites = localFavorites.filter((team) => team !== '' && localLeagues.includes(team.split('-')[0]));
+    const filteredFavorites = localFavorites.filter(
+      (team) =>
+        team !== '' &&
+        localLeagues.includes(getTeamLeagueFromId(team)),
+    );
     onSave(filteredFavorites);
     saveCache('leaguesSelected', localLeagues);
     saveCache('showScores', showScores);

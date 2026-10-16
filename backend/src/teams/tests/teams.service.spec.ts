@@ -664,6 +664,61 @@ describe('TeamService', () => {
     });
   });
 
+  describe('dedupOlympicTeams', () => {
+    it('keeps a single Olympic entry per country and gender (representative ID retained)', () => {
+      const teams = [
+        {
+          uniqueId: 'OLYMPICS-HOCKEY-MEN-CAN',
+          label: 'Canada',
+          league: 'OLYMPICS-HOCKEY',
+        },
+        {
+          uniqueId: 'OLYMPICS-BASKETBALL-MEN-CAN',
+          label: 'Canada',
+          league: 'OLYMPICS-BASKETBALL',
+        },
+        {
+          uniqueId: 'OLYMPICS-BASKETBALL-WOMEN-USA',
+          label: 'USA',
+          league: 'OLYMPICS-BASKETBALL',
+        },
+        { uniqueId: 'NHL-BOS', label: 'Boston Bruins', league: 'NHL' },
+      ];
+
+      const result = service['dedupOlympicTeams'](teams);
+
+      expect(result).toHaveLength(3);
+      expect(result.map((t) => t.uniqueId)).toEqual([
+        'OLYMPICS-BASKETBALL-MEN-CAN', // lexicographically smallest ID
+        'OLYMPICS-BASKETBALL-WOMEN-USA',
+        'NHL-BOS',
+      ]);
+      // The representative ID keeps its existing format (sport + gender + country).
+      expect(result[0].uniqueId).toMatch(
+        /^OLYMPICS-(HOCKEY|BASKETBALL)-MEN-CAN$/,
+      );
+    });
+
+    it('does not deduplicate non-Olympic teams', () => {
+      const teams = [
+        { uniqueId: 'NHL-BOS', label: 'Boston Bruins', league: 'NHL' },
+        { uniqueId: 'NHL-TOR', label: 'Toronto Maple Leafs', league: 'NHL' },
+        { uniqueId: 'NBA-LAL', label: 'Lakers', league: 'NBA' },
+      ];
+
+      expect(
+        service['dedupOlympicTeams'](teams).map((t) => t.uniqueId),
+      ).toEqual(['NHL-BOS', 'NHL-TOR', 'NBA-LAL']);
+    });
+
+    it('gère un tableau vide ou undefined', () => {
+      expect(service['dedupOlympicTeams']([])).toEqual([]);
+      expect(
+        service['dedupOlympicTeams'](undefined as unknown as any[]),
+      ).toEqual([]);
+    });
+  });
+
   describe('remove', () => {
     it('should remove a team by its uniqueId and return the deleted document', async () => {
       const uniqueId = 'NHL-BOS';

@@ -2,6 +2,18 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+
+## Fixed: Olympic teams display and deduplication in team selectors
+
+Olympic teams were mishandled in the league-based team selector and silently dropped from favorites:
+- The `league` of an Olympic team derived from its id (`uniqueId.split('-')[0]` → `OLYMPICS`) never matched any league chip (`OLYMPICS-MEN` / `OLYMPICS-WOMEN`), so Olympic teams were hidden when a selector was filtered to the Olympics chip and shown regardless of the selected league otherwise.
+- `FavModal.handleSave()` filtered favorites with `team.split('-')[0]`, which yields `OLYMPICS` for Olympic ids — absent from the selected leagues — so Olympic favorites were silently excluded on save.
+
+- **`frontend/utils/fetchData.ts`** — new exported `getTeamLeagueFromId(uniqueId)` collapses `OLYMPICS-HOCKEY/BASKETBALL-(MEN|WOMEN)-PAYS` to `OLYMPICS-MEN` / `OLYMPICS-WOMEN` (any other id keeps its first segment). `teamsEnumToTeamArray()` (now exported) uses it for the `league` field.
+- **`frontend/components/Selector.tsx`** — `getOptions()` derives each option's `league` via `getTeamLeagueFromId()`.
+- **`frontend/components/FavModal.tsx`** — `handleSave()` filters favorites with `getTeamLeagueFromId(team)` so Olympic ids match their `OLYMPICS-MEN` / `OLYMPICS-WOMEN` chip and are no longer dropped.
+- **`frontend/utils/fetchData.test.ts`** — covers `getTeamLeagueFromId` and `teamsEnumToTeamArray` Olympic league derivation.
+
 ## Changed: instant team catalog on cold start (session storage + Teams.tsx fallback)
 
 `fetchTeams()` no longer waits for the network before showing teams. On app start it returns:
