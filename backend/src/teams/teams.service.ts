@@ -173,6 +173,26 @@ export class TeamService {
             teams = await hockeyData.getNHLTeams();
           }
         }
+        // `getESPNTeams()` now fails open (returns []) instead of throwing on
+        // non-JSON ESPN responses (Akamai 403 bot-block, etc.). When that
+        // happens for NHL, the catch block above is never triggered, so apply
+        // the HockeyData fallback here so the league still refreshes.
+        if (teams.length === 0 && league === League.NHL) {
+          try {
+            const hockeyData = new HockeyData();
+            teams = await hockeyData.getNHLTeams();
+            if (teams.length) {
+              console.info(
+                `NHL: recovered ${teams.length} team(s) via HockeyData fallback after ESPN returned no teams.`,
+              );
+            }
+          } catch (fallbackError) {
+            console.error(
+              `NHL: HockeyData fallback also failed:`,
+              fallbackError,
+            );
+          }
+        }
         if (teams.length) {
           activeTeams.push(...teams);
         }
