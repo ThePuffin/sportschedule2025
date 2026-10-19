@@ -101,14 +101,12 @@ One section of the league-grouped day payload returned by `GET /games/league-day
 
 ```typescript
 interface LeagueDayGroup {
-  key: string; // league code (`NHL`, `NBA`, …) or the special `FAVORITES` key
+  key: string; // league code (`NHL`, `NBA`, …)
   games: GameFormatted[];
 }
 ```
 
-The `FAVORITES` section (always first when present) repeats games that are also listed in
-their league section, which is why the screen de-duplicates them before building its flat
-`games` state.
+The route never returns a favorites section: no `favoriteTeams` param exists anymore (neither in the request nor in the API), and favorite games are filtered client-side by the star favorites chip, inside each league section.
 
 ### `AccordionProps`
 

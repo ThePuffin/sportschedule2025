@@ -79,10 +79,11 @@ export interface FilterGames {
 }
 
 /**
- * One section of the league-grouped day view returned by
+ * One section of the league-grouped day payload returned by
  * `GET /games/league-day/:gameDate` (used for past dates): `key` is a league
- * code (`NHL`, `NBA`, …) or the special `FAVORITES` key for the leading
- * favorites section (whose games are also kept in their league group).
+ * code (`NHL`, `NBA`, …). The route never returns a favorites section — the
+ * day screen filters favorite-team games client-side (star chip of the league
+ * filter), inside each league group.
  */
 export interface LeagueDayGroup {
   key: string;

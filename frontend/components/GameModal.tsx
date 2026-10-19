@@ -1,30 +1,19 @@
-import { ThemedText } from "@/components/ThemedText";
-import { maxFavoritesNumber } from "@/constants/Constants";
-import { GameStatus, League, leagueMapping } from "@/constants/enum";
+import { ThemedText } from '@/components/ThemedText';
+import { maxFavoritesNumber } from '@/constants/Constants';
+import { GameStatus, League, leagueMapping } from '@/constants/enum';
 import {
+  GameOutcome,
   getGamesStatus,
   getRecentForm,
-  GameOutcome,
   isGameAwaitingFinalization,
   RECENT_FORM_LENGTH,
-} from "@/utils/date";
-import { fetchLiveScores, fetchRecentFormGames } from "@/utils/fetchData";
-import { GameFormatted } from "@/utils/types";
-import {
-  addFavoriteTeam,
-  generateICSFile,
-  getTeamWikipediaUrl,
-  translateWord,
-} from "@/utils/utils";
-import { Icon } from "@rneui/themed";
-import { Ionicons } from "@expo/vector-icons";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+} from '@/utils/date';
+import { fetchLiveScores, fetchRecentFormGames } from '@/utils/fetchData';
+import { GameFormatted } from '@/utils/types';
+import { addFavoriteTeam, generateICSFile, getTeamWikipediaUrl, translateWord } from '@/utils/utils';
+import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@rneui/themed';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -35,10 +24,10 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  View,
   useColorScheme,
   useWindowDimensions,
-} from "react-native";
+  View,
+} from 'react-native';
 
 /**
  * Bundled placeholder shown when a team has no logo (same asset as the cards).
@@ -67,14 +56,14 @@ const getTeamNameFontSize = (teamNames: string[], isCompact: boolean) => {
   return 18;
 };
 
-const defaultLogo = require("../assets/images/default_logo.png");
+const defaultLogo = require('../assets/images/default_logo.png');
 
 /**
  * Color of the form dots: the same as the modal's own text, so the row reads as
  * a neutral indicator instead of borrowing a team color. Mirrors the
  * `lightColor` / `darkColor` the modal passes to its `ThemedText` labels.
  */
-const DOT_COLORS = { light: "#0f172a", dark: "#ffffff" };
+const DOT_COLORS = { light: '#0f172a', dark: '#ffffff' };
 
 /**
  * Bare Ionicons glyph per form outcome — the icons replace the former
@@ -86,13 +75,10 @@ const DOT_COLORS = { light: "#0f172a", dark: "#ffffff" };
  * happened" has no glyph of its own and reads better as a half circle than as
  * a plain dash.
  */
-const FORM_OUTCOME_ICONS: Record<
-  GameOutcome,
-  "checkmark" | "close" | "contrast"
-> = {
-  W: "checkmark",
-  L: "close",
-  D: "contrast",
+const FORM_OUTCOME_ICONS: Record<GameOutcome, 'checkmark' | 'close' | 'contrast'> = {
+  W: 'checkmark',
+  L: 'close',
+  D: 'contrast',
 };
 
 /**
@@ -101,9 +87,9 @@ const FORM_OUTCOME_ICONS: Record<
  * a sighted user, so the label is only a fallback for VoiceOver/TalkBack.
  */
 const FORM_OUTCOME_LABELS: Record<GameOutcome, string> = {
-  W: "Win",
-  L: "Loss",
-  D: "Draw",
+  W: 'Win',
+  L: 'Loss',
+  D: 'Draw',
 };
 
 interface GameModalProps {
@@ -154,8 +140,7 @@ export default function GameModal({
    */
   const formBefore = useMemo(() => {
     const start = new Date(data.startTimeUTC);
-    const isUpcoming =
-      Number.isNaN(start.getTime()) || start.getTime() > Date.now();
+    const isUpcoming = Number.isNaN(start.getTime()) || start.getTime() > Date.now();
     return isUpcoming ? undefined : start.toISOString();
   }, [data.startTimeUTC]);
 
@@ -168,11 +153,7 @@ export default function GameModal({
     async (teamId: string | undefined) => {
       if (!teamId) return [] as GameOutcome[];
       try {
-        const games = await fetchRecentFormGames(
-          teamId,
-          formBefore,
-          RECENT_FORM_LENGTH,
-        );
+        const games = await fetchRecentFormGames(teamId, formBefore, RECENT_FORM_LENGTH);
         return getRecentForm(games, teamId, RECENT_FORM_LENGTH, data.uniqueId);
       } catch {
         return [] as GameOutcome[];
@@ -186,15 +167,9 @@ export default function GameModal({
       const fetchLiveGameData = async () => {
         const gameTime = new Date(data.startTimeUTC);
         const now = new Date();
-        const hoursDiff =
-          (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
+        const hoursDiff = (now.getTime() - gameTime.getTime()) / (1000 * 60 * 60);
 
-        if (
-          hoursDiff > -0.25 &&
-          hoursDiff < 5 &&
-          data.gameStatus !== "FINAL" &&
-          data.gameStatus !== "FINISHED"
-        ) {
+        if (hoursDiff > -0.25 && hoursDiff < 5 && data.gameStatus !== 'FINAL' && data.gameStatus !== 'FINISHED') {
           const liveScores = await fetchLiveScores([data.uniqueId]);
           if (liveScores && liveScores.length > 0) {
             setLiveGame(liveScores[0]);
@@ -224,10 +199,7 @@ export default function GameModal({
     // flashes for a team that already answered.
     setFormLoading(true);
     const load = async () => {
-      const [away, home] = await Promise.all([
-        loadTeamForm(data.awayTeamId),
-        loadTeamForm(data.homeTeamId),
-      ]);
+      const [away, home] = await Promise.all([loadTeamForm(data.awayTeamId), loadTeamForm(data.homeTeamId)]);
       // The modal may have been closed (or another game opened) meanwhile.
       if (cancelled) return;
       setAwayForm(away);
@@ -266,35 +238,20 @@ export default function GameModal({
     dataChangedAt,
   } = displayData;
 
-  const teamNameFontSize = getTeamNameFontSize(
-    [awayTeam ?? "", homeTeam ?? ""],
-    useCompactTeamLayout,
-  );
+  const teamNameFontSize = getTeamNameFontSize([awayTeam ?? '', homeTeam ?? ''], useCompactTeamLayout);
 
   const hasScore = homeTeamScore != null && awayTeamScore != null;
   const status = getGamesStatus(displayData);
-  const isToday =
-    new Date().toDateString() === new Date(startTimeUTC).toDateString();
+  const isToday = new Date().toDateString() === new Date(startTimeUTC).toDateString();
   const isLive =
     (status as GameStatus) !== GameStatus.DELAYED &&
     ((status as GameStatus) === GameStatus.IN_PROGRESS ||
       (!!gameStatus &&
-        [
-          "Top",
-          "Bot",
-          "Mid",
-          "End",
-          "1st",
-          "2nd",
-          "3rd",
-          "4th",
-          "OT",
-          "Half",
-          "'",
-          "In SO",
-        ].some((s) => gameStatus.includes(s)) &&
-        !gameStatus.toUpperCase().includes("FINAL") &&
-        !gameStatus.toUpperCase().includes("ENDED")) ||
+        ['Top', 'Bot', 'Mid', 'End', '1st', '2nd', '3rd', '4th', 'OT', 'Half', "'", 'In SO'].some((s) =>
+          gameStatus.includes(s),
+        ) &&
+        !gameStatus.toUpperCase().includes('FINAL') &&
+        !gameStatus.toUpperCase().includes('ENDED')) ||
       (hasScore &&
         isToday &&
         (status as GameStatus) !== GameStatus.FINISHED &&
@@ -304,30 +261,29 @@ export default function GameModal({
     const normalizedStatus = status.toLowerCase();
     const normalizedClock = clock.toLowerCase();
     const variants = [normalizedClock];
-    if (normalizedClock.startsWith("00:")) {
-      variants.push(normalizedClock.replace(/^00:/, ""));
+    if (normalizedClock.startsWith('00:')) {
+      variants.push(normalizedClock.replace(/^00:/, ''));
     }
-    if (normalizedClock.startsWith("0:")) {
-      variants.push(normalizedClock.replace(/^0:/, ""));
+    if (normalizedClock.startsWith('0:')) {
+      variants.push(normalizedClock.replace(/^0:/, ''));
     }
     return variants.some((variant) => normalizedStatus.includes(variant));
   };
 
-  const livePeriodText =
-    gameStatus || (typeof gamePeriod === "number" ? `P${gamePeriod}` : "");
+  const livePeriodText = gameStatus || (typeof gamePeriod === 'number' ? `P${gamePeriod}` : '');
   const liveTimeText =
     gameClock && livePeriodText
       ? gameStatusAlreadyIncludesClock(livePeriodText, gameClock)
         ? livePeriodText
         : `${gameClock} - ${livePeriodText}`
-      : gameClock || livePeriodText || translateWord("inProgress");
+      : gameClock || livePeriodText || translateWord('inProgress');
   const showLiveScoreNumbers = hasScore;
   const serviceReportsNotTerminated =
     isLive ||
     (!!gameStatus &&
-      !gameStatus.toUpperCase().includes("FINAL") &&
-      gameStatus.toUpperCase() !== "FINISHED" &&
-      gameStatus.toUpperCase() !== "ENDED");
+      !gameStatus.toUpperCase().includes('FINAL') &&
+      gameStatus.toUpperCase() !== 'FINISHED' &&
+      gameStatus.toUpperCase() !== 'ENDED');
   // "Finalisation" (the provider never sent a score) is only shown once the
   // expected end of the match has passed AND the feed tells us nothing more:
   // no time left on the clock, or a feed frozen since `dataChangedAt`.
@@ -342,47 +298,36 @@ export default function GameModal({
     });
 
   const dateOptions: Intl.DateTimeFormatOptions = {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   };
 
-  const stadiumSearch =
-    (arenaName || "").replace(/\s+/g, "+") +
-    "," +
-    (placeName || "").replace(/\s+/g, "+");
-  const theme = useColorScheme() ?? "light";
-  const isDark = theme === "dark";
-  const iconColor = isDark ? "white" : "black";
-  const buttonBackgroundColor = isDark
-    ? "rgba(255, 255, 255, 0.2)"
-    : "rgba(0, 0, 0, 0.1)";
+  const stadiumSearch = (arenaName || '').replace(/\s+/g, '+') + ',' + (placeName || '').replace(/\s+/g, '+');
+  const theme = useColorScheme() ?? 'light';
+  const isDark = theme === 'dark';
+  const iconColor = isDark ? 'white' : 'black';
+  const buttonBackgroundColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)';
 
   // Missing or empty logo strings must resolve to the bundled `defaultLogo`
   // asset (a numeric `require()` id) when building the `<Image source>`.
-  const displayHomeLogo =
-    isDark && homeTeamLogoDark ? homeTeamLogoDark : homeTeamLogo;
-  const displayAwayLogo =
-    isDark && awayTeamLogoDark ? awayTeamLogoDark : awayTeamLogo;
+  const displayHomeLogo = isDark && homeTeamLogoDark ? homeTeamLogoDark : homeTeamLogo;
+  const displayAwayLogo = isDark && awayTeamLogoDark ? awayTeamLogoDark : awayTeamLogo;
 
   const getEspnStandingsUrl = (leagueKey: string) => {
-    const baseUrl = "https://www.espn.com";
+    const baseUrl = 'https://www.espn.com';
 
-    const path =
-      leagueMapping[leagueKey.toUpperCase() as keyof typeof leagueMapping];
+    const path = leagueMapping[leagueKey.toUpperCase() as keyof typeof leagueMapping];
 
     if (!path) return null;
 
     return `${baseUrl}/${path}`;
   };
 
-  const standingUrl =
-    league === League.PWHL
-      ? "https://www.thepwhl.com/stats/standings"
-      : getEspnStandingsUrl(league);
+  const standingUrl = league === League.PWHL ? 'https://www.thepwhl.com/stats/standings' : getEspnStandingsUrl(league);
 
   /**
    * Opens the team's Wikipedia article in the reader's language (falls back to
@@ -430,9 +375,7 @@ export default function GameModal({
       return () => animation.stop();
     }, [progress]);
 
-    const baseColor = isDark
-      ? "rgba(148, 163, 184, 0.25)"
-      : "rgba(100, 116, 139, 0.25)";
+    const baseColor = isDark ? 'rgba(148, 163, 184, 0.25)' : 'rgba(100, 116, 139, 0.25)';
 
     return (
       <View style={styles.formRow} testID="form-skeleton">
@@ -450,7 +393,7 @@ export default function GameModal({
                   opacity: progress.interpolate({
                     inputRange: [Math.min(start, 1), Math.min(end, 1)],
                     outputRange: [0.45, 1],
-                    extrapolate: "clamp",
+                    extrapolate: 'clamp',
                   }),
                 },
               ]}
@@ -493,11 +436,7 @@ export default function GameModal({
             accessibilityLabel={FORM_OUTCOME_LABELS[outcome]}
             testID={`form-dot-${index}`}
           >
-            <Ionicons
-              name={FORM_OUTCOME_ICONS[outcome]}
-              size={12}
-              color={color}
-            />
+            <Ionicons name={FORM_OUTCOME_ICONS[outcome]} size={12} color={color} />
           </View>
         ))}
       </View>
@@ -512,36 +451,28 @@ export default function GameModal({
       <TouchableOpacity
         style={styles.compactFavoriteButton}
         accessibilityRole="button"
-        accessibilityLabel={`${isFavorite ? "Remove" : "Add"} ${teamName} ${isFavorite ? "from" : "to"} favorites`}
+        accessibilityLabel={`${isFavorite ? 'Remove' : 'Add'} ${teamName} ${isFavorite ? 'from' : 'to'} favorites`}
         testID={`favorite-star-${teamId}`}
         onPress={() => addFavoriteTeam(favoriteTeams, teamId)}
       >
         <Icon
-          name={isFavorite ? "star" : "star-o"}
+          name={isFavorite ? 'star' : 'star-o'}
           type="font-awesome"
           size={14}
-          color={isFavorite ? "#FFD700" : "#94a3b8"}
+          color={isFavorite ? '#FFD700' : '#94a3b8'}
         />
       </TouchableOpacity>
     );
 
-    const formattedTeamName = teamName
-      ? teamName.replace(/ (?=[^ ]*$)/, "\n")
-      : "";
+    const formattedTeamName = teamName ? teamName.replace(/ (?=[^ ]*$)/, '\n') : '';
 
     if (useCompactTeamLayout) {
       return (
-        <View
-          style={styles.teamNameStack}
-          testID={`team-name-layout-${teamId}`}
-        >
+        <View style={styles.teamNameStack} testID={`team-name-layout-${teamId}`}>
           <ThemedText
             lightColor="#0f172a"
             darkColor="#ffffff"
-            style={[
-              styles.modalTeamName,
-              { fontSize: teamNameFontSize, width: "100%" },
-            ]}
+            style={[styles.modalTeamName, { fontSize: teamNameFontSize, width: '100%' }]}
             numberOfLines={2}
             adjustsFontSizeToFit
             minimumFontScale={0.75}
@@ -555,10 +486,7 @@ export default function GameModal({
     }
 
     return (
-      <View
-        style={styles.teamNameStack}
-        testID={`team-name-layout-${teamId}`}
-      >
+      <View style={styles.teamNameStack} testID={`team-name-layout-${teamId}`}>
         <ThemedText
           lightColor="#0f172a"
           darkColor="#ffffff"
@@ -569,10 +497,10 @@ export default function GameModal({
           {canToggleFavorite && (
             <Icon
               onPress={() => addFavoriteTeam(favoriteTeams, teamId)}
-              name={isFavorite ? "star" : "star-o"}
+              name={isFavorite ? 'star' : 'star-o'}
               type="font-awesome"
               size={14}
-              color={isFavorite ? "#FFD700" : "#94a3b8"}
+              color={isFavorite ? '#FFD700' : '#94a3b8'}
               style={{ marginLeft: 5 }}
               testID={`favorite-star-${teamId}`}
             />
@@ -584,49 +512,29 @@ export default function GameModal({
 
   const renderStatusText = () => {
     if (isLive) {
-      if (
-        (!gameClock || gameClock === "00:00") &&
-        gameStatus &&
-        gameStatus !== "IN_PROGRESS"
-      ) {
+      if ((!gameClock || gameClock === '00:00') && gameStatus && gameStatus !== 'IN_PROGRESS') {
         return (
-          <ThemedText
-            style={[styles.dateText, { color: "#ef4444", fontWeight: "bold" }]}
-          >
-            {gameStatus}
-          </ThemedText>
+          <ThemedText style={[styles.dateText, { color: '#ef4444', fontWeight: 'bold' }]}>{gameStatus}</ThemedText>
         );
       }
 
       return (
-        <ThemedText
-          style={[styles.dateText, { color: "#ef4444", fontWeight: "bold" }]}
-        >
-          {liveTimeText}
-        </ThemedText>
+        <ThemedText style={[styles.dateText, { color: '#ef4444', fontWeight: 'bold' }]}>{liveTimeText}</ThemedText>
       );
     }
 
     if (showFinalization) {
       return (
-        <ThemedText
-          lightColor="#475569"
-          darkColor="#CBD5E1"
-          style={styles.dateText}
-        >
-          {translateWord("final")}
+        <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+          {translateWord('final')}
         </ThemedText>
       );
     }
 
     if ((status as GameStatus) === GameStatus.DELAYED) {
       return (
-        <ThemedText
-          lightColor="#475569"
-          darkColor="#CBD5E1"
-          style={styles.dateText}
-        >
-          {translateWord("delayedGame")}
+        <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+          {translateWord('delayedGame')}
         </ThemedText>
       );
     }
@@ -634,64 +542,38 @@ export default function GameModal({
     if (hasScore) {
       if ((status as GameStatus) === GameStatus.FINISHED) {
         return (
-          <ThemedText
-            lightColor="#475569"
-            darkColor="#CBD5E1"
-            style={styles.dateText}
-          >
-            {translateWord("score")}
+          <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+            {translateWord('score')}
           </ThemedText>
         );
       }
 
-      const statusText =
-        (status as GameStatus) === GameStatus.FINAL
-          ? translateWord("final")
-          : translateWord("ended");
+      const statusText = (status as GameStatus) === GameStatus.FINAL ? translateWord('final') : translateWord('ended');
       return (
-        <ThemedText
-          lightColor="#475569"
-          darkColor="#CBD5E1"
-          style={styles.dateText}
-        >
+        <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
           {statusText}
         </ThemedText>
       );
     }
 
     return (
-      <ThemedText
-        lightColor="#475569"
-        darkColor="#CBD5E1"
-        style={styles.dateText}
-      >
-        {startTimeUTC
-          ? new Date(startTimeUTC).toLocaleDateString(undefined, dateOptions)
-          : ""}
+      <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.dateText}>
+        {startTimeUTC ? new Date(startTimeUTC).toLocaleDateString(undefined, dateOptions) : ''}
       </ThemedText>
     );
   };
 
   return (
-    <Modal
-      animationType="fade"
-      transparent={true}
-      visible={visible}
-      onRequestClose={onClose}
-    >
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.centeredView} onPress={onClose}>
-        <Pressable
-          style={[styles.modalView, gradientStyle]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Icon
-              name="close"
-              type="font-awesome"
-              size={20}
-              color={iconColor}
-            />
-          </TouchableOpacity>
+        <Pressable style={[styles.modalView, gradientStyle]} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.statusRow}>
+            <View style={styles.statusSpacer} />
+            {renderStatusText()}
+            <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+              <Icon name="close" type="font-awesome" size={20} color={iconColor} />
+            </TouchableOpacity>
+          </View>
 
           <ScrollView
             style={styles.modalScroll}
@@ -709,20 +591,14 @@ export default function GameModal({
                   onPress={() => openWikipediaTeam(awayTeam)}
                 >
                   <Image
-                    source={
-                      displayAwayLogo ? { uri: displayAwayLogo } : defaultLogo
-                    }
+                    source={displayAwayLogo ? { uri: displayAwayLogo } : defaultLogo}
                     style={styles.logo}
                     resizeMode="contain"
                   />
                 </TouchableOpacity>
                 {renderTeamName(awayTeam, awayTeamId)}
                 {awayTeamRecord && (
-                  <ThemedText
-                    lightColor="#475569"
-                    darkColor="#94a3b8"
-                    style={styles.recordText}
-                  >
+                  <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>
                     {awayTeamRecord}
                   </ThemedText>
                 )}
@@ -731,34 +607,18 @@ export default function GameModal({
 
               {showLiveScoreNumbers ? (
                 <View style={styles.scoreContainer}>
-                  <ThemedText
-                    lightColor="#0f172a"
-                    darkColor="#ffffff"
-                    style={styles.scoreText}
-                  >
+                  <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.scoreText}>
                     {awayTeamScore}
                   </ThemedText>
-                  <ThemedText
-                    lightColor="#475569"
-                    darkColor="#CBD5E1"
-                    style={styles.scoreDivider}
-                  >
+                  <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.scoreDivider}>
                     -
                   </ThemedText>
-                  <ThemedText
-                    lightColor="#0f172a"
-                    darkColor="#ffffff"
-                    style={styles.scoreText}
-                  >
+                  <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.scoreText}>
                     {homeTeamScore}
                   </ThemedText>
                 </View>
               ) : (
-                <ThemedText
-                  lightColor="#475569"
-                  darkColor="#CBD5E1"
-                  style={styles.modalVsText}
-                >
+                <ThemedText lightColor="#475569" darkColor="#CBD5E1" style={styles.modalVsText}>
                   @
                 </ThemedText>
               )}
@@ -773,27 +633,20 @@ export default function GameModal({
                   onPress={() => openWikipediaTeam(homeTeam)}
                 >
                   <Image
-                    source={
-                      displayHomeLogo ? { uri: displayHomeLogo } : defaultLogo
-                    }
+                    source={displayHomeLogo ? { uri: displayHomeLogo } : defaultLogo}
                     style={styles.logo}
                     resizeMode="contain"
                   />
                 </TouchableOpacity>
                 {renderTeamName(homeTeam, homeTeamId)}
                 {homeTeamRecord && (
-                  <ThemedText
-                    lightColor="#475569"
-                    darkColor="#94a3b8"
-                    style={styles.recordText}
-                  >
+                  <ThemedText lightColor="#475569" darkColor="#94a3b8" style={styles.recordText}>
                     {homeTeamRecord}
                   </ThemedText>
                 )}
                 {renderFormRow(homeForm, homeTeamId)}
               </View>
             </View>
-            {renderStatusText()}
 
             <View style={styles.actionsRow}>
               {isLive || hasScore ? (
@@ -803,10 +656,10 @@ export default function GameModal({
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
-                      textDecoration: "none",
-                      display: "flex",
+                      textDecoration: 'none',
+                      display: 'flex',
                       flex: 1,
-                      justifyContent: "center",
+                      justifyContent: 'center',
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -815,7 +668,7 @@ export default function GameModal({
                         styles.actionButton,
                         {
                           backgroundColor: buttonBackgroundColor,
-                          width: "100%",
+                          width: '100%',
                         },
                       ]}
                     >
@@ -826,12 +679,8 @@ export default function GameModal({
                         color={iconColor}
                         style={{ marginRight: 10 }}
                       />
-                      <ThemedText
-                        lightColor="#0f172a"
-                        darkColor="#ffffff"
-                        style={styles.actionButtonText}
-                      >
-                        {translateWord("gameDetails")}
+                      <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.actionButtonText}>
+                        {translateWord('gameDetails')}
                       </ThemedText>
                     </View>
                   </a>
@@ -841,10 +690,10 @@ export default function GameModal({
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        textDecoration: "none",
-                        display: "flex",
+                        textDecoration: 'none',
+                        display: 'flex',
                         flex: 1,
-                        justifyContent: "center",
+                        justifyContent: 'center',
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -853,7 +702,7 @@ export default function GameModal({
                           styles.actionButton,
                           {
                             backgroundColor: buttonBackgroundColor,
-                            width: "100%",
+                            width: '100%',
                           },
                         ]}
                       >
@@ -864,12 +713,8 @@ export default function GameModal({
                           color={iconColor}
                           style={{ marginRight: 10 }}
                         />
-                        <ThemedText
-                          lightColor="#0f172a"
-                          darkColor="#ffffff"
-                          style={styles.actionButtonText}
-                        >
-                          {translateWord("standings")}
+                        <ThemedText lightColor="#0f172a" darkColor="#ffffff" style={styles.actionButtonText}>
+                          {translateWord('standings')}
                         </ThemedText>
                       </View>
                     </a>
@@ -877,25 +722,14 @@ export default function GameModal({
                   {onRemoveFromFavorites && (
                     <View style={styles.buttonWrapper}>
                       <TouchableOpacity
-                        style={[
-                          styles.actionButton,
-                          { backgroundColor: buttonBackgroundColor },
-                        ]}
+                        style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
                         onPress={() => {
                           onRemoveFromFavorites(data);
                           onClose();
                         }}
                       >
-                        <Icon
-                          name="trash"
-                          type="font-awesome"
-                          size={18}
-                          color={iconColor}
-                          style={styles.buttonIcon}
-                        />
-                        <ThemedText style={styles.actionButtonText}>
-                          {translateWord("removeFromFavorites")}
-                        </ThemedText>
+                        <Icon name="trash" type="font-awesome" size={18} color={iconColor} style={styles.buttonIcon} />
+                        <ThemedText style={styles.actionButtonText}>{translateWord('removeFromFavorites')}</ThemedText>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -904,10 +738,7 @@ export default function GameModal({
                 <>
                   <View style={styles.buttonWrapper}>
                     <TouchableOpacity
-                      style={[
-                        styles.actionButton,
-                        { backgroundColor: buttonBackgroundColor },
-                      ]}
+                      style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
                       onPress={() => {
                         generateICSFile(data);
                         onClose();
@@ -920,9 +751,7 @@ export default function GameModal({
                         color={iconColor}
                         style={styles.buttonIcon}
                       />
-                      <ThemedText style={styles.actionButtonText}>
-                        {translateWord("downloadICS")}
-                      </ThemedText>
+                      <ThemedText style={styles.actionButtonText}>{translateWord('downloadICS')}</ThemedText>
                     </TouchableOpacity>
                   </View>
 
@@ -932,10 +761,7 @@ export default function GameModal({
                         // Favorites modal: the trash button replaces the
                         // "locate arena" action.
                         <TouchableOpacity
-                          style={[
-                            styles.actionButton,
-                            { backgroundColor: buttonBackgroundColor },
-                          ]}
+                          style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}
                           onPress={() => {
                             onRemoveFromFavorites(data);
                             onClose();
@@ -949,7 +775,7 @@ export default function GameModal({
                             style={styles.buttonIcon}
                           />
                           <ThemedText style={styles.actionButtonText}>
-                            {translateWord("removeFromFavorites")}
+                            {translateWord('removeFromFavorites')}
                           </ThemedText>
                         </TouchableOpacity>
                       ) : (
@@ -957,15 +783,10 @@ export default function GameModal({
                           href={`https://www.google.com/maps/search/?api=1&query=${stadiumSearch}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          style={{ textDecoration: "none" }}
+                          style={{ textDecoration: 'none' }}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <View
-                            style={[
-                              styles.actionButton,
-                              { backgroundColor: buttonBackgroundColor },
-                            ]}
-                          >
+                          <View style={[styles.actionButton, { backgroundColor: buttonBackgroundColor }]}>
                             <Icon
                               name="map-marker"
                               type="font-awesome"
@@ -973,9 +794,7 @@ export default function GameModal({
                               color={iconColor}
                               style={styles.buttonIcon}
                             />
-                            <ThemedText style={styles.actionButtonText}>
-                              {translateWord("localizeArena")}
-                            </ThemedText>
+                            <ThemedText style={styles.actionButtonText}>{translateWord('localizeArena')}</ThemedText>
                           </View>
                         </a>
                       )}
@@ -994,47 +813,66 @@ export default function GameModal({
 const styles = StyleSheet.create({
   centeredView: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalView: {
     margin: 20,
     borderRadius: 20,
     padding: 20,
-    alignItems: "center",
-    shadowColor: "#000",
+    alignItems: 'center',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
-    width: "90%",
+    width: '90%',
     maxWidth: 500,
     // The card must never exceed the viewport: its content (two team columns,
     // the form rows, the status line and the actions) is scrollable below.
-    maxHeight: "92%",
+    maxHeight: '92%',
+  },
+  statusRow: {
+    // Header row: status/date text on the line, close (X) at its right end.
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    // Vertical gap below the header — carried by the row since `dateText`
+    // no longer has its own bottom margin (it would misalign the row).
+    marginBottom: 20,
+  },
+  statusSpacer: {
+    // Invisible twin of the close button: it balances the row so the centered
+    // status text keeps the exact center of the card.
+    width: 30,
+    height: 30,
   },
   closeButton: {
-    alignSelf: "flex-end",
-    padding: 5,
+    // Fixed 30×30 box (20px icon + centering) mirroring `statusSpacer`, so the
+    // button never shifts the status text's center.
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalScroll: {
-    width: "100%",
+    width: '100%',
   },
   modalContent: {
-    alignItems: "center",
-    width: "100%",
+    alignItems: 'center',
+    width: '100%',
   },
   teamsContainer: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    width: "100%",
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    width: '100%',
     marginBottom: 20,
     paddingHorizontal: 10,
   },
   teamColumn: {
-    alignItems: "center",
+    alignItems: 'center',
     flex: 1,
   },
   logo: {
@@ -1043,31 +881,31 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   teamNameStack: {
-    alignItems: "center",
-    width: "100%",
+    alignItems: 'center',
+    width: '100%',
   },
   compactFavoriteButton: {
     width: 24,
     height: 22,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 2,
   },
   modalTeamName: {
     flex: 1,
     fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   recordText: {
     fontSize: 14,
     marginTop: 4,
-    textAlign: "center",
+    textAlign: 'center',
   },
   formRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     // Fixed height so the two rows can never stretch the modal further.
     height: 12,
     marginTop: 6,
@@ -1078,8 +916,8 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     marginHorizontal: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   formSkeletonPlaceholder: {
     // Same box as `formIconSlot` so the loading row has the exact same layout as
@@ -1092,38 +930,38 @@ const styles = StyleSheet.create({
   },
   modalTeamFullName: {
     fontSize: 16,
-    textAlign: "center",
+    textAlign: 'center',
     marginTop: 5,
   },
   scoreContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 70,
   },
   modalVsText: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginTop: 70,
   },
   scoreText: {
     fontSize: 32,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginHorizontal: 5,
     lineHeight: 32,
   },
   scoreDivider: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   actionsRow: {
-    flexDirection: "row",
-    width: "100%",
+    flexDirection: 'row',
+    width: '100%',
     gap: 12,
     marginTop: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    flexWrap: "wrap",
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   buttonWrapper: {
     flex: 1,
@@ -1131,28 +969,30 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   actionButton: {
-    flexDirection: "row",
+    flexDirection: 'row',
     height: 54,
-    width: "100%",
+    width: '100%',
     borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 10,
   },
   buttonIcon: {
     marginRight: 8,
   },
   actionButtonText: {
-    fontWeight: "bold",
+    fontWeight: 'bold',
     fontSize: 13,
-    textAlign: "center",
+    textAlign: 'center',
     flexShrink: 1,
   },
   dateText: {
-    marginBottom: 20,
+    // Fills the space between `statusSpacer` and the close button, so the text
+    // stays centered on the card while sitting on the same line as the (X).
+    flex: 1,
     fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    textTransform: "capitalize",
+    fontWeight: '600',
+    textAlign: 'center',
+    textTransform: 'capitalize',
   },
 });

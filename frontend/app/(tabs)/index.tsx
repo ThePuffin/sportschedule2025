@@ -69,17 +69,14 @@ const getFavoriteGameIndex = (game: GameFormatted, favoriteTeams: string[]) =>
       teamsMatchSelection(game.awayTeamId, teamId),
   );
 
-// Special key of the leading favorites section returned by the backend
-// (`/games/league-day`): those games are also listed in their league group.
-const FAVORITES_GROUP_KEY = 'FAVORITES';
-
 const gameIdentity = (game: GameFormatted) =>
   game.uniqueId || game._id || `${game.homeTeamId}-${game.awayTeamId}-${game.startTimeUTC}`;
 
 /**
- * The favorites section duplicates games already present in their league
- * group, so the flat `games` state (bookmarks, team filter, team list, live
- * scores) is built from a de-duplicated list.
+ * The flat `games` state (bookmarks, team filter, the day's team list, live
+ * scores) must not repeat a game, so it is built from a de-duplicated list
+ * (safety net over the league-grouped payload, which the backend may
+ * duplicate through its optional favorites section).
  */
 const dedupeGames = (games: GameFormatted[]) => {
   const seen = new Set<string>();
@@ -207,15 +204,8 @@ const GameofTheDayContent = () => {
   const dateRangePickerRef = useRef<DatePickerHandle>(null);
   const gamesRef = useRef<GameFormatted[]>([]);
   // League-grouped payload of a past day (`/games/league-day`): the backend
-  // already grouped the games by league and built the leading favorites
-  // section, so the screen renders it as-is.
+  // already grouped the games by league, so the screen renders it as-is.
   const [leagueDayGroups, setLeagueDayGroups] = useState<LeagueDayGroup[]>([]);
-  // Favorites are needed at fetch time (the backend builds the favorites
-  // section), so they are mirrored in a ref. `leagueDayFavoritesKeyRef` stores
-  // the favorites used by the last past-day fetch to avoid fetching it again
-  // when nothing changed.
-  const favoriteTeamsRef = useRef<string[]>(favoriteTeams);
-  const leagueDayFavoritesKeyRef = useRef('');
 
   const theme = useColorScheme() ?? 'light';
   const isDark = theme === 'dark';
@@ -233,10 +223,6 @@ const GameofTheDayContent = () => {
   useEffect(() => {
     gamesRef.current = games;
   }, [games]);
-
-  useEffect(() => {
-    favoriteTeamsRef.current = favoriteTeams;
-  }, [favoriteTeams]);
 
   // Dates strictly before today are displayed grouped by league (and not by
   // hour): see `visibleLeagueGroups` and `displayContent`.
@@ -394,6 +380,17 @@ const GameofTheDayContent = () => {
     return userLeagues.filter((league) => !activeLeaguesInGames.has(league));
   }, [games, userLeagues]);
 
+  /**
+   * Whether at least one game of the displayed day involves a favorite team:
+   * drives the star favorites chip (filled and clickable only when the filter
+   * would show something). Uses `getFavoriteGameIndex` so Olympic favorite ids
+   * match their games in both sports.
+   */
+  const hasFavorites = useMemo(
+    () => games.some((game) => getFavoriteGameIndex(game, favoriteTeams) !== -1),
+    [games, favoriteTeams],
+  );
+
   const disabledFilters: string[] = useMemo(() => {
     const disabled: string[] = [...disabledLeagues];
     // The favorites (bookmark) chip only opens a list when at least one favorite game exists
@@ -402,8 +399,13 @@ const GameofTheDayContent = () => {
     if (!isAnyGameSelectedToday) {
       disabled.push('BOOKMARKS');
     }
+    // The star favorites chip follows the same rule: dimmed and not tappable
+    // when no game of the displayed day involves a favorite team.
+    if (!hasFavorites) {
+      disabled.push('FAVORITES');
+    }
     return disabled;
-  }, [disabledLeagues, isAnyGameSelectedToday]);
+  }, [disabledLeagues, isAnyGameSelectedToday, hasFavorites]);
 
   const visibleGamesByHour = useMemo(() => {
     const selectedTeam = selectedTeamUniqueId || teamSelectedId;
@@ -481,37 +483,45 @@ const GameofTheDayContent = () => {
 
     const scheduledGrouped = groupGamesByHour(scheduled);
 
+    // Hour sections are kept in chronological order by their first game
+    // (sorted hour-key strings alone are not timezone-safe).
+    const scheduledSections = Object.keys(scheduledGrouped)
+      .sort()
+      .map((hour) => ({ hour, games: sortGamesByFavorites(scheduledGrouped[hour]) }));
+
+    scheduledSections.sort((a, b) => {
+      const timeA = a.games[0]?.startTimeUTC ? new Date(a.games[0].startTimeUTC).getTime() : 0;
+      const timeB = b.games[0]?.startTimeUTC ? new Date(b.games[0].startTimeUTC).getTime() : 0;
+      return timeA - timeB;
+    });
+
+    // Fixed accordion order of the day view: In Progress → Final →
+    // Scheduled (by hour) → Ended (always at the bottom). Empty sections
+    // are simply omitted.
     const groups: { hour: string; games: GameFormatted[] }[] = [];
 
     if (inProgress.length > 0) {
       groups.push({ hour: translateWord('inProgress'), games: sortGamesByFavorites(inProgress) });
     }
 
-    Object.keys(scheduledGrouped)
-      .sort()
-      .forEach((hour) => {
-        groups.push({ hour, games: sortGamesByFavorites(scheduledGrouped[hour]) });
-      });
-
-    groups.sort((a, b) => {
-      const timeA = a.games[0]?.startTimeUTC ? new Date(a.games[0].startTimeUTC).getTime() : 0;
-      const timeB = b.games[0]?.startTimeUTC ? new Date(b.games[0].startTimeUTC).getTime() : 0;
-      return timeA - timeB;
-    });
     if (final.length > 0) {
       groups.push({ hour: translateWord('final'), games: sortGamesByFavorites(final) });
     }
+
+    groups.push(...scheduledSections);
+
     if (finished.length > 0) {
       groups.push({ hour: translateWord('ended'), games: sortGamesByFavorites(finished) });
     }
 
     return groups;
-  }, [games, selectLeagues, teamSelectedId, selectedTeamUniqueId, activeFilter, favoriteTeams]);
+  }, [games, selectLeagues, teamSelectedId, selectedTeamUniqueId, activeFilter, favoriteTeams, gamesSelected]);
 
   // Past days are rendered from the league groups built by the backend
   // (`/games/league-day`). Only the client-side filters are applied here
-  // (selected leagues, team, favorites/bookmarks chips): the grouping, the
-  // group order and the favorites section all come from the API.
+  // (selected leagues, team, favorites/bookmarks chips): the grouping and the
+  // group order come from the API. The star favorites chip filters
+  // favorite-team games inside each league group.
   const visibleLeagueGroups = useMemo(() => {
     const selectedTeam = selectedTeamUniqueId || teamSelectedId;
     const matchesFilters = (game: GameFormatted) =>
@@ -528,18 +538,17 @@ const GameofTheDayContent = () => {
         gamesSelected.some((g) => g.uniqueId === game.uniqueId || g._id === game._id));
 
     return leagueDayGroups
-      .filter((group) => activeFilter !== 'FAVORITES' || group.key === FAVORITES_GROUP_KEY)
       .map((group) => ({ ...group, games: group.games.filter(matchesFilters) }))
       .filter((group) => group.games.length > 0);
   }, [leagueDayGroups, selectLeagues, teamSelectedId, selectedTeamUniqueId, activeFilter, favoriteTeams, gamesSelected]);
 
-  // Sections actually rendered: one per league (leading with the favorites
-  // section) for a past day, one per hour group otherwise.
+  // Sections actually rendered: one per league for a past day, one per hour
+  // group otherwise.
   const visibleSections = useMemo(() => {
     if (isPastDay) {
       return visibleLeagueGroups.map((group) => ({
         key: group.key,
-        label: group.key === FAVORITES_GROUP_KEY ? translateWord('favorites') : group.key,
+        label: group.key,
         games: group.games,
       }));
     }
@@ -564,12 +573,11 @@ const GameofTheDayContent = () => {
           saveCache('gamesDay', gamesDayCache.current);
         }
         // Past dates are grouped by league instead of by hour: the backend
-        // builds the groups, their order and the leading favorites section, so
-        // the screen only has to render the payload.
-        const requestedFavorites = favoriteTeamsRef.current || [];
-        leagueDayFavoritesKeyRef.current = requestedFavorites.join(',');
+        // builds the groups and their order, so the screen only has to render
+        // the payload. Favorite filtering is client-side (star chip of the
+        // league filter), so the backend favorites section is not requested.
         try {
-          const groups = await fetchGamesByLeagueDay(YYYYMMDD, 1000, undefined, requestedFavorites);
+          const groups = await fetchGamesByLeagueDay(YYYYMMDD, 1000);
           setLeagueDayGroups(groups);
           setGames(dedupeGames(groups.flatMap((group) => group.games)));
         } catch (error: unknown) {
@@ -831,10 +839,6 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
     };
     // selectedTeamUniqueId replaces games for team resolution (day-independent).
   }, [isLoading, visibleGroupCount, selectDate, selectedTeamUniqueId, teamSelectedId, selectLeagues, activeFilter]);
-
-  const hasFavorites = useMemo(() => {
-    return games.some((game) => favoriteTeams.includes(game.homeTeamId) || favoriteTeams.includes(game.awayTeamId));
-  }, [games, favoriteTeams]);
 
   useEffect(() => {
     if (activeFilter === 'FAVORITES' && !hasFavorites && !isLoading) {
@@ -1138,18 +1142,6 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
     initializeGames();
   }, [firestoreReady]); // Only run once on mount (once firestore is ready)
 
-  // The favorites section of a past day is computed by the backend, so that
-  // day must be fetched again when the favorite teams change. Leagues, team and
-  // bookmarks are filtered client-side and need no refetch. Declared after the
-  // init effect so the initial fetch has already registered its favorites key.
-  useEffect(() => {
-    if (!firestoreReady || !isPastDay) return;
-    const favoritesKey = (favoriteTeams || []).join(',');
-    if (favoritesKey === leagueDayFavoritesKeyRef.current) return;
-    leagueDayFavoritesKeyRef.current = favoritesKey;
-    getGamesFromApi(selectDate);
-  }, [firestoreReady, favoriteTeams, isPastDay, selectDate, getGamesFromApi]);
-
   useEffect(() => {
     const param = Array.isArray(dateParam) ? dateParam[0] : dateParam;
     let d = new Date();
@@ -1252,6 +1244,22 @@ const handleDateAccordionExpanded = useCallback((expanded: boolean) => {
                         data={[
                           { label: translateWord('all'), value: 'ALL' },
                           ...userLeagues.filter((l) => l !== 'ALL').map((l) => ({ label: l, value: l })),
+                          {
+                            // Star chip, right before BOOKMARKS (after ALL): shows only the games
+                            // involving a favorite team (any date). Filled when at least
+                            // one game of the displayed day involves a favorite, and
+                            // disabled otherwise (same availability rule as BOOKMARKS).
+                            label: '',
+                            value: 'FAVORITES',
+                            icon: (
+                              <Icon
+                                name={hasFavorites ? 'star' : 'star-o'}
+                                type="font-awesome"
+                                size={18}
+                                color={activeFilter === 'FAVORITES' ? selectedTextColor : defaultColor}
+                              />
+                            ),
+                          },
                           {
                             label: '',
                             value: 'BOOKMARKS',

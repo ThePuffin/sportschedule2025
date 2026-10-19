@@ -292,7 +292,7 @@ export class CronService implements OnModuleInit {
     this.isFetchingOldiesInProgress = true;
     try {
       const currentYear = new Date().getFullYear();
-      const maxYearsBeforeDelete = this.gameService.maxYearBeforeDelete; // 9
+      const maxYearsBeforeDelete = this.gameService.maxYearBeforeDelete; // 7
       const minYear = currentYear - maxYearsBeforeDelete;
       const maxOldieYear = currentYear - 1; // Prior year (exclude in-progress season)
 
@@ -345,6 +345,20 @@ export class CronService implements OnModuleInit {
           `[Cron] Error checking ${randomLeague} for ${randomYear}:`,
           error,
         );
+      }
+
+      // Refresh up to 10 playoff series without a declared winner so the whole
+      // series displays the correct "XXX wins series X-Y" label. Series are
+      // picked at random so the same ones are not processed on every run.
+      try {
+        const result = await this.gameService.refreshUndecidedPlayoffSeries(10);
+        if (result.updated > 0) {
+          console.info(
+            `[Cron] Oldies playoff series refresh: updated ${result.updated} game(s) across ${result.series.length} series: ${result.series.join('; ')}`,
+          );
+        }
+      } catch (err) {
+        console.error('[Cron] Error refreshing undecided playoff series:', err);
       }
     } finally {
       this.isFetchingOldiesInProgress = false;
@@ -489,9 +503,29 @@ export class CronService implements OnModuleInit {
     }
   }
 
-  @Cron('0 4 * * 0') // WEEKLY ON SUNDAY AT 4AM (UTC) — purge stale teams without active games
+  @Cron('0 4 * * 0') // WEEKLY ON SUNDAY AT 4AM (UTC) — cleanup old games, then purge stale teams without active games
   async purgeStaleTeams() {
     try {
+      // Retention cleanup FIRST: delete games older than `maxYearBeforeDelete`
+      // (6 years) and preseason games older than `preseasonYearsToKeep` (1
+      // year), plus duplicates among active games. Running it before the team
+      // purge matters: removing old games can leave teams without any active
+      // game, which is exactly what the stale-team purge below then collects.
+      console.info(
+        '[Cron] Running weekly cleanup of duplicates and old games...',
+      );
+      try {
+        const cleanup = await this.gameService.removeDuplicatesAndOlds();
+        console.info(
+          `[Cron] Weekly games cleanup done: ${JSON.stringify(cleanup)}.`,
+        );
+      } catch (err) {
+        // Fail-soft: a cleanup failure must never block the team purge below.
+        console.error(
+          '[Cron] Error running weekly games cleanup:',
+          (err as any)?.message || err,
+        );
+      }
       console.info(
         '[Cron] Running weekly purge of stale teams without active games...',
       );

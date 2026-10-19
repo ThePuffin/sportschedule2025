@@ -195,6 +195,7 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
     } else {
       const selectedItem = items.find((item) => item.value === selectedFilter);
       const bookmarksItem = items.find((item) => item.value === 'BOOKMARKS' && item.value !== selectedFilter);
+      const favoritesItem = items.find((item) => item.value === 'FAVORITES' && item.value !== selectedFilter);
       const allItem = items.find(
         (item) => (item.value === 'ALL' || item.value === 'all' || item.value === '') && item.value !== selectedFilter,
       );
@@ -205,7 +206,8 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
           item.value !== 'ALL' &&
           item.value !== 'all' &&
           item.value !== '' &&
-          item.value !== 'BOOKMARKS',
+          item.value !== 'BOOKMARKS' &&
+          item.value !== 'FAVORITES',
       );
 
       const favoriteItems = remainingItems
@@ -218,6 +220,7 @@ export default function FilterSlider(props: Readonly<FilterSliderProps>) {
       items = [
         ...(selectedItem ? [selectedItem] : []),
         ...(allItem ? [allItem] : []),
+        ...(favoritesItem ? [favoritesItem] : []),
         ...(bookmarksItem ? [bookmarksItem] : []),
         ...favoriteItems,
         ...otherItems,

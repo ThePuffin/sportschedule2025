@@ -106,9 +106,9 @@ The `timeText` is determined by game status:
 2. **Postponed** → `"Match reporté"`
 3. **Interrupted/Delayed** (rain delay, suspended) → `"Match interrompu"` (translated `delayedGame`)
 4. **Finished/Final with score** → date/time or `"Détails du match"`
-5. **Started 4h+ ago** → game status / period
-6. **Live** → `"{clock} - {period}"` or `"En cours"`
-7. **Has score** → `"Final"` or period info
+5. **Started 4h+ ago** → game status (raw status keywords like `SCHEDULED` are translated and capitalized via `displayGameStatus`, e.g. `Programmé`; live clock/period text like `"20:00 - 2nd Period"` passes through unchanged) / period
+6. **Live** → `"{clock} - {period}"` when a clock/period is available (match in progress shows its time, e.g. `"20:00 - 2nd Period"`), otherwise the translated/capitalized status keyword or `"En cours"` as fallback
+7. **Has score** → `"Final"` or translated/capitalized status keyword + period info
 8. **Scheduled** → start time
 
 Interrupted/delayed games (`GameStatus.DELAYED`) are excluded from the live badge (no pulsing dot) since they aren't actively in progress.

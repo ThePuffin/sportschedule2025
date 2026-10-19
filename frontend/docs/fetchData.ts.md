@@ -53,13 +53,12 @@ Core fetch strategy:
 
 Fetches games for a specific date, grouped by hour. Uses sessionStorage with 2-minute TTL. Includes `leagues` param from `leaguesSelected` cache.
 
-### `fetchGamesByLeagueDay(date, limit?, skip?, favoriteTeams?)`
+### `fetchGamesByLeagueDay(date, limit?, skip?)`
 
-Fetches games for a specific date, **grouped by league** (`GET /games/league-day/:gameDate`), used by the day view for **past dates**. Returns `LeagueDayGroup[]` (the `groups` array of the response) where the first entry may be the special `FAVORITES` key (favorite-team games, also kept in their league group) followed by one entry per league in alphabetical order (games oldest-to-newest within each group).
+Fetches games for a specific date, **grouped by league** (`GET /games/league-day/:gameDate`), used by the day view for **past dates**. Returns `LeagueDayGroup[]` (the `groups` array of the response), one entry per league in alphabetical order (games oldest-to-newest within each group). The route takes no `favoriteTeams` param at all (support removed from the API): favorite games are filtered **client-side** by the star FAVORITES chip of the day view, inside each league group.
 
-- Query params: `leagues` (from the `leaguesSelected` cache, `+`-joined), `maxResults`, `skip`, `favoriteTeams` (`+`-joined team uniqueIds)
-- Olympic favorite-team ids are expanded to both hockey and basketball ids before the request, so the backend's past-day FAVORITES section includes games from both sports.
-- sessionStorage cache (2-minute TTL) keyed on the date **and** all params, so a favorites change gets its own entry
+- Query params: `leagues` (from the `leaguesSelected` cache, `+`-joined), `maxResults`, `skip`
+- sessionStorage cache (2-minute TTL) keyed on the date **and** all params
 - Returns `[]` when the request fails and no cache is available (the strategy caches the raw `{ groups }` object, which the helper unwraps)
 
 ### `fetchLeagues(setLeaguesAvailable)`

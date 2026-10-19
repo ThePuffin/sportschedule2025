@@ -296,6 +296,25 @@ describe('GameService', () => {
       expect(game.seriesStatus).toBe('Game 3');
     });
 
+    it('never lets a game-number label overwrite a stored evolution', async () => {
+      const game = buildGame();
+
+      await (service as any).syncGameWithScore(
+        {
+          gameStatus: 'FINISHED',
+          isFinal: true,
+          homeTeamScore: 7,
+          awayTeamScore: 4,
+          seriesSummary: 'NLCS - Game 3',
+          seriesStatus: 'Game 3',
+        },
+        game,
+      );
+
+      expect(game.seriesStatus).toBe('MIL leads 2-1');
+      expect(game.seriesSummary).toBe('NLCS - Game 3');
+    });
+
     it('propagates the refreshed record onto the season games of both teams', async () => {
       const propagateSpy = jest
         .spyOn(service as any, '_propagateTeamRecordToSeasonGames')
@@ -317,6 +336,97 @@ describe('GameService', () => {
       expect(propagateSpy).toHaveBeenCalledWith('MLB', 'MLB-MIL', '103-59');
       expect(propagateSpy).toHaveBeenCalledWith('MLB', 'MLB-LAD', '100-62');
       propagateSpy.mockRestore();
+    });
+
+    it('replaces a stored series evolution when the fresh payload has no seriesStatus but a valid seriesSummary evolution', async () => {
+      const game = buildGame();
+      // Reproduces the reported bug: stored "CLE leads series 2-1", ESPN
+      // reports the current evolution only in seriesSummary ("Series tied 2-2")
+      // while seriesStatus comes back empty.
+      game.seriesStatus = 'CLE leads series 2-1';
+      game.seriesSummary = 'ALDS - Game 3';
+
+      await (service as any).syncGameWithScore(
+        {
+          gameStatus: 'FINISHED',
+          isFinal: true,
+          homeTeamScore: 7,
+          awayTeamScore: 3,
+          homeTeamRecord: '100-62',
+          awayTeamRecord: '97-65',
+          seriesSummary: 'Series tied 2-2',
+          seriesStatus: '',
+        },
+        game,
+      );
+
+      expect(game.seriesSummary).toBe('Series tied 2-2');
+      expect(game.seriesStatus).toBe('Series tied 2-2');
+      expect(game.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates the refreshed series status to all other games of the same series', async () => {
+      const game = buildGame();
+      game._id = 'game-4-id';
+      game.seriesStatus = 'CLE leads series 2-1';
+      game.seriesSummary = 'ALDS - Game 4';
+
+      await (service as any).syncGameWithScore(
+        {
+          gameStatus: 'FINISHED',
+          isFinal: true,
+          homeTeamScore: 7,
+          awayTeamScore: 3,
+          seriesSummary: 'Series tied 2-2',
+          seriesStatus: '',
+        },
+        game,
+      );
+
+      // The primary game is updated.
+      expect(game.seriesStatus).toBe('Series tied 2-2');
+
+      // All other games of the same series (same league, same two teams,
+      // either home/away direction) are updated too.
+      expect(mockGameModel.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          league: League.MLB,
+          _id: { $ne: 'game-4-id' },
+          $or: [
+            { homeTeamId: 'MLB-MIL', awayTeamId: 'MLB-LAD' },
+            { homeTeamId: 'MLB-LAD', awayTeamId: 'MLB-MIL' },
+          ],
+          seriesSummary: { $exists: true, $nin: [null, ''] },
+          seriesStatus: { $ne: 'Series tied 2-2' },
+        }),
+        { $set: { seriesStatus: 'Series tied 2-2' } },
+      );
+    });
+
+    it('replaces a stale stored seriesStatus when ESPN seriesStatus is stale but seriesSummary is more advanced', async () => {
+      const game = buildGame();
+      game.seriesStatus = 'CLE leads series 2-1';
+      game.seriesSummary = 'ALCS - Game 4';
+
+      // ESPN reports seriesStatus with the OLD value ("CLE leads series 2-1")
+      // but seriesSummary with the NEW, more advanced value ("Series tied 2-2").
+      await (service as any).syncGameWithScore(
+        {
+          gameStatus: 'FINISHED',
+          isFinal: true,
+          homeTeamScore: 3,
+          awayTeamScore: 5,
+          seriesSummary: 'Series tied 2-2',
+          seriesStatus: 'CLE leads series 2-1',
+        },
+        game,
+      );
+
+      // seriesStatus must be replaced by the more advanced evolution from
+      // seriesSummary (total 4 > total 3).
+      expect(game.seriesSummary).toBe('Series tied 2-2');
+      expect(game.seriesStatus).toBe('Series tied 2-2');
+      expect(game.save).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -418,6 +528,77 @@ describe('GameService', () => {
 
       expect(stored.seriesStatus).toBe('MIL leads 3-0');
       expect(stored.seriesSummary).toBe('NLCS - Game 3');
+    });
+
+    it('never moves a decided series backwards (wins 4-0 kept over leads 3-0)', async () => {
+      const stored = buildStoredGame();
+      stored.seriesStatus = 'MIL wins series 4-0';
+      givenStoredGame(stored);
+
+      await service.create({
+        uniqueId: stored.uniqueId,
+        seriesStatus: 'MIL leads 3-0',
+        seriesSummary: 'NLCS - Game 4',
+      } as any);
+
+      expect(stored.seriesStatus).toBe('MIL wins series 4-0');
+    });
+
+    it('rejects an impossible fresh evolution (8-0) and self-heals it later', async () => {
+      const stored = buildStoredGame();
+      givenStoredGame(stored);
+
+      await service.create({
+        uniqueId: stored.uniqueId,
+        seriesStatus: 'MIL wins series 8-0',
+        seriesSummary: 'NLCS - Game 4',
+      } as any);
+
+      expect(stored.seriesStatus).toBe('MIL leads 3-0');
+
+      await service.create({
+        uniqueId: stored.uniqueId,
+        seriesStatus: 'MIL wins series 4-0',
+        seriesSummary: 'NLCS - Game 4',
+      } as any);
+
+      expect(stored.seriesStatus).toBe('MIL wins series 4-0');
+    });
+
+    it('never replaces a stored evolution with a game-number label', async () => {
+      const stored = buildStoredGame();
+      givenStoredGame(stored);
+
+      await service.create({
+        uniqueId: stored.uniqueId,
+        seriesStatus: 'Game 3',
+        seriesSummary: 'NLCS - Game 3',
+      } as any);
+
+      expect(stored.seriesStatus).toBe('MIL leads 3-0');
+
+      await service.create({
+        uniqueId: stored.uniqueId,
+        seriesStatus: 'NLCS - Game 4',
+        seriesSummary: 'NLCS - Game 4',
+      } as any);
+
+      expect(stored.seriesStatus).toBe('MIL leads 3-0');
+    });
+
+    it('reroutes a game-number label to the summary when no status is stored', async () => {
+      const stored = buildStoredGame();
+      stored.seriesStatus = '';
+      stored.seriesSummary = '';
+      givenStoredGame(stored);
+
+      await service.create({
+        uniqueId: stored.uniqueId,
+        seriesStatus: 'Game 3',
+      } as any);
+
+      expect(stored.seriesStatus ?? '').toBe('');
+      expect(stored.seriesSummary).toBe('Game 3');
     });
   });
 
@@ -913,22 +1094,176 @@ describe('GameService', () => {
   });
 
   describe('computed series status (no stored seriesStatus)', () => {
-    const playoffGame = (overrides = {}) => ({
-      uniqueId: 'g1',
-      league: 'MLB',
-      gameDate: '2026-10-15',
-      startTimeUTC: '2026-10-15T23:00:00Z',
-      homeTeamId: 'MLB-MIL',
-      awayTeamId: 'MLB-LAD',
-      homeTeamShort: 'MIL',
-      awayTeamShort: 'LAD',
-      recordSeasonType: 3,
-      seriesStatus: '',
-      seriesSummary: '',
-      ...overrides,
+    let gameSeq = 0;
+    const playoffGame = (overrides: any = {}) => {
+      gameSeq += 1;
+      return {
+        uniqueId: `g${gameSeq}`,
+        league: 'MLB',
+        gameDate: '2026-10-15',
+        startTimeUTC: `2026-10-15T2${gameSeq % 10}:00:00Z`,
+        homeTeamId: 'MLB-MIL',
+        awayTeamId: 'MLB-LAD',
+        homeTeamShort: 'MIL',
+        awayTeamShort: 'LAD',
+        recordSeasonType: 3,
+        seriesStatus: '',
+        seriesSummary: '',
+        ...overrides,
+      };
+    };
+
+    beforeEach(() => {
+      gameSeq = 0;
     });
 
+    // NOTE: `playoffGame()` auto-assigns a distinct `uniqueId` AND a distinct
+    // start time per game, so fixtures built without explicit overrides are
+    // never mistaken for duplicates (same teams at the same hour) by the
+    // slot-dedupe of `_computeSeriesStatus`.
+
     describe('_computeSeriesStatus', () => {
+      it('prefers the last game stored evolution over recomputation (decided series)', () => {
+        const seriesGames = [
+          { ...playoffGame(), homeTeamScore: 5, awayTeamScore: 3 },
+          {
+            ...playoffGame(),
+            uniqueId: 'g4',
+            startTimeUTC: '2026-10-16T23:00:00Z',
+            gameDate: '2026-10-16',
+            homeTeamScore: 6,
+            awayTeamScore: 4,
+            // Clincher (16 oct.): authoritative final status.
+            seriesStatus: 'MIL wins series 4-0',
+          },
+        ];
+        const current = { ...playoffGame(), uniqueId: 'g1' };
+        expect((service as any)._computeSeriesStatus(seriesGames, current)).toBe(
+          'MIL wins series 4-0',
+        );
+      });
+
+      it('shows the ongoing-series status from the last game on every game', () => {
+        const seriesGames = [
+          {
+            ...playoffGame(),
+            startTimeUTC: '2026-10-15T23:00:00Z',
+            homeTeamScore: 6,
+            awayTeamScore: 2,
+            seriesStatus: 'MIL leads 3-0',
+          },
+          { ...playoffGame(), uniqueId: 'g4', startTimeUTC: '2026-10-18T23:00:00Z' },
+        ];
+        const future = {
+          ...playoffGame(),
+          uniqueId: 'g4',
+          startTimeUTC: '2026-10-18T23:00:00Z',
+        };
+        expect((service as any)._computeSeriesStatus(seriesGames, future)).toBe(
+          'MIL leads 3-0',
+        );
+      });
+
+      it('ignores an impossible stored evolution ("8-0") and computes instead', () => {
+        const seriesGames = [
+          { ...playoffGame(), homeTeamScore: 5, awayTeamScore: 3 },
+          {
+            ...playoffGame(),
+            uniqueId: 'g2',
+            homeTeamScore: 2,
+            awayTeamScore: 4,
+            seriesStatus: 'MIL wins series 8-0',
+          },
+          { ...playoffGame(), uniqueId: 'g3', homeTeamScore: 1, awayTeamScore: 7 },
+        ];
+        const current = { ...playoffGame() };
+        expect((service as any)._computeSeriesStatus(seriesGames, current)).toBe(
+          'LAD leads 2-1',
+        );
+      });
+
+      it('never counts more than 7 games (duplicate rows cannot make 8-0)', () => {
+        const seriesGames = Array.from({ length: 8 }, (_, i) => ({
+          ...playoffGame(),
+          uniqueId: `dup-${i}`,
+          startTimeUTC: `2026-10-1${i % 7}T23:00:00Z`,
+          homeTeamScore: 6,
+          awayTeamScore: 2,
+        }));
+        const current = { ...playoffGame() };
+        expect((service as any)._computeSeriesStatus(seriesGames, current)).toBe('');
+      });
+
+      it('counts a duplicated fixture (same teams, same time) only once', () => {
+        const fixture = {
+          ...playoffGame(),
+          startTimeUTC: '2026-10-15T23:00:00Z',
+          homeTeamScore: 6,
+          awayTeamScore: 2,
+        };
+        const seriesGames = [
+          fixture,
+          // Same fixture stored under a second id (re-fetch twin row).
+          { ...fixture, uniqueId: 'g2-twin' },
+          {
+            ...playoffGame(),
+            uniqueId: 'g3',
+            startTimeUTC: '2026-10-16T23:00:00Z',
+            homeTeamScore: 1,
+            awayTeamScore: 7,
+          },
+        ];
+        const current = {
+          ...playoffGame(),
+          uniqueId: 'g3',
+          startTimeUTC: '2026-10-16T23:00:00Z',
+        };
+        // 1 win each — not 2-1: the twin row must not count twice.
+        expect((service as any)._computeSeriesStatus(seriesGames, current)).toBe(
+          'Series tied 1-1',
+        );
+      });
+
+      it('counts a duplicated fixture with swapped home/away only once', () => {
+        const seriesGames = [
+          {
+            ...playoffGame(),
+            startTimeUTC: '2026-10-15T23:00:00Z',
+            homeTeamScore: 6,
+            awayTeamScore: 2,
+          },
+          {
+            ...playoffGame(),
+            uniqueId: 'g2-swapped',
+            startTimeUTC: '2026-10-15T23:00:00Z',
+            // Same fixture, sides swapped in the stored row.
+            homeTeamId: 'MLB-LAD',
+            awayTeamId: 'MLB-MIL',
+            homeTeamShort: 'LAD',
+            awayTeamShort: 'MIL',
+            homeTeamScore: 2,
+            awayTeamScore: 6,
+          },
+          {
+            ...playoffGame(),
+            uniqueId: 'g3',
+            startTimeUTC: '2026-10-16T23:00:00Z',
+            homeTeamScore: 6,
+            awayTeamScore: 2,
+          },
+        ];
+        const current = {
+          ...playoffGame(),
+          uniqueId: 'g3',
+          startTimeUTC: '2026-10-16T23:00:00Z',
+        };
+        // Only 2 distinct fixtures played (both MIL wins): no evolution yet
+        // from a single fixture counted twice, and no doubled 3-0.
+        expect((service as any)._computeSeriesStatus(seriesGames, current)).toBe(
+          'MIL leads 2-0',
+        );
+      });
+
       it('returns "X leads Y-Z" when one team leads', () => {
         const seriesGames = [
           { ...playoffGame(), homeTeamScore: 5, awayTeamScore: 3 },
@@ -1019,17 +1354,52 @@ describe('GameService', () => {
     describe('_precomputeSeriesStatus', () => {
       it('computes and stores status for playoff games without seriesStatus', async () => {
         const games = [
-          { ...playoffGame(), uniqueId: 'g1', seriesStatus: '', seriesSummary: '' },
-          { ...playoffGame(), uniqueId: 'g2', seriesStatus: '', seriesSummary: '' },
+          {
+            ...playoffGame(),
+            uniqueId: 'g1',
+            gameDate: '2026-10-15',
+            startTimeUTC: '2026-10-15T23:00:00Z',
+            seriesStatus: '',
+            seriesSummary: '',
+          },
+          {
+            ...playoffGame(),
+            uniqueId: 'g2',
+            gameDate: '2026-10-15',
+            startTimeUTC: '2026-10-15T23:00:00Z',
+            seriesStatus: '',
+            seriesSummary: '',
+          },
         ];
 
         mockGameModel.find.mockReturnValue({
           sort: jest.fn().mockReturnThis(),
           lean: jest.fn().mockReturnThis(),
           exec: jest.fn().mockResolvedValue([
-            { ...playoffGame(), uniqueId: 'g1', homeTeamScore: 5, awayTeamScore: 3 },
-            { ...playoffGame(), uniqueId: 'g2', homeTeamScore: 2, awayTeamScore: 4 },
-            { ...playoffGame(), uniqueId: 'g3', homeTeamScore: 1, awayTeamScore: 7 },
+            {
+              ...playoffGame(),
+              uniqueId: 'db1',
+              startTimeUTC: '2026-10-13T23:00:00Z',
+              gameDate: '2026-10-13',
+              homeTeamScore: 5,
+              awayTeamScore: 3,
+            },
+            {
+              ...playoffGame(),
+              uniqueId: 'db2',
+              startTimeUTC: '2026-10-14T23:00:00Z',
+              gameDate: '2026-10-14',
+              homeTeamScore: 2,
+              awayTeamScore: 4,
+            },
+            {
+              ...playoffGame(),
+              uniqueId: 'db3',
+              startTimeUTC: '2026-10-15T23:00:00Z',
+              gameDate: '2026-10-15',
+              homeTeamScore: 1,
+              awayTeamScore: 7,
+            },
           ]),
         });
 
@@ -2574,6 +2944,120 @@ describe('GameService', () => {
 
       createSpy.mockRestore();
     });
+
+    it('backfills a stored game that has no recordSeasonType', async () => {
+      const currentYear = new Date().getFullYear();
+      const pastTime = new Date();
+      pastTime.setHours(pastTime.getHours() - 2);
+
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      // Stored before `recordSeasonType` was persisted: same id, same scores,
+      // same records, but no phase at all — e.g. a 2021 NHL preseason game that
+      // the 1-year preseason retention can never match without the field.
+      mockGameModel.exec.mockResolvedValue([
+        {
+          uniqueId: 'existing-no-phase',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+        },
+      ]);
+
+      (service as any)._fetchUniqueGames = jest.fn().mockResolvedValue([
+        {
+          uniqueId: 'existing-no-phase',
+          league: League.NHL,
+          homeTeamId: 'NHL-BOS',
+          awayTeamId: 'NHL-TOR',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+          startTimeUTC: pastTime.toISOString(),
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+          recordSeasonType: 1,
+        },
+      ]);
+      (service as any)._deleteUnlinkedTeams = jest
+        .fn()
+        .mockResolvedValue(undefined);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+        season: currentYear - 1,
+        addMissingOnly: true,
+      });
+
+      // Identical scores and records but a missing phase -> refreshed instead of
+      // skipped, so `create()` persists `recordSeasonType` and the game becomes
+      // visible to the preseason retention filter.
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uniqueId: 'existing-no-phase',
+          recordSeasonType: 1,
+        }),
+      );
+
+      createSpy.mockRestore();
+    });
+
+    it('skips a stored game whose scores, records and phase already match', async () => {
+      const currentYear = new Date().getFullYear();
+      const pastTime = new Date();
+      pastTime.setHours(pastTime.getHours() - 2);
+
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({} as any);
+
+      mockGameModel.exec.mockResolvedValue([
+        {
+          uniqueId: 'existing-with-phase',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+          recordSeasonType: 1,
+        },
+      ]);
+
+      (service as any)._fetchUniqueGames = jest.fn().mockResolvedValue([
+        {
+          uniqueId: 'existing-with-phase',
+          league: League.NHL,
+          homeTeamId: 'NHL-BOS',
+          awayTeamId: 'NHL-TOR',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+          startTimeUTC: pastTime.toISOString(),
+          homeTeamRecord: '33-39-10',
+          awayTeamRecord: '42-32-7',
+          recordSeasonType: 1,
+        },
+      ]);
+      (service as any)._deleteUnlinkedTeams = jest
+        .fn()
+        .mockResolvedValue(undefined);
+
+      await service.getLeagueGames({
+        league: League.NHL,
+        forceUpdate: true,
+        skipCascade: true,
+        season: currentYear - 1,
+        addMissingOnly: true,
+      });
+
+      // Both sides carry the same phase -> still skipped (the check converges).
+      expect(createSpy).not.toHaveBeenCalled();
+
+      createSpy.mockRestore();
+    });
   });
 
   describe('create: record protection', () => {
@@ -3166,6 +3650,7 @@ describe('GameService', () => {
     it('is cleared after the duplicate/old-games cleanup', async () => {
       mockGameModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
       mockGameModel.exec.mockResolvedValue([]);
+      mockGameModel.aggregate.mockResolvedValue([]);
 
       await service.removeDuplicatesAndOlds();
 
@@ -3187,6 +3672,138 @@ describe('GameService', () => {
 
       expect(result.action).toBe('purged');
       expect(mockTeamService.clearActiveGameCountCache).toHaveBeenCalled();
+    });
+  });
+
+  describe('removeDuplicatesAndOlds retention', () => {
+    it('deletes games older than maxYearBeforeDelete and preseason games older than 1 year', async () => {
+      jest.spyOn(console, 'info').mockImplementation(() => undefined);
+      mockGameModel.aggregate.mockResolvedValue([]);
+      mockGameModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+      mockGameModel.exec.mockResolvedValue([]);
+
+      await service.removeDuplicatesAndOlds();
+
+      // Two real deletions in DB: old games + old preseason games.
+      expect(mockGameModel.deleteMany).toHaveBeenCalledTimes(2);
+
+      // 1st call: games older than maxYearBeforeDelete (no phase filter).
+      const oldGamesFilter = mockGameModel.deleteMany.mock.calls[0][0];
+      expect(oldGamesFilter.recordSeasonType).toBeUndefined();
+      expect(JSON.stringify(oldGamesFilter)).toContain('$lt');
+
+      // 2nd call: preseason only, with a ~1-year cutoff.
+      const preseasonFilter = mockGameModel.deleteMany.mock.calls[1][0];
+      expect(preseasonFilter.recordSeasonType).toBe(1);
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const usedCutoff =
+        preseasonFilter.$or?.[0]?.startTimeUTC?.$lt ??
+        preseasonFilter.$or?.[1]?.gameDate?.$lt;
+      expect(usedCutoff).toBeDefined();
+      const cutoffDate = new Date(
+        typeof usedCutoff === 'string' && usedCutoff.length === 10
+          ? `${usedCutoff}T00:00:00.000Z`
+          : usedCutoff,
+      );
+      // Cutoff must be within a few days of "1 year ago" (day-boundary rounding).
+      expect(
+        Math.abs(cutoffDate.getTime() - oneYearAgo.getTime()),
+      ).toBeLessThan(3 * 24 * 60 * 60 * 1000);
+
+      (console.info as jest.Mock).mockRestore();
+    });
+
+    it('returns a per-league summary of deleted games', async () => {
+      jest.spyOn(console, 'info').mockImplementation(() => undefined);
+      // aggregate is called twice (old games + preseason); both return the same breakdown here.
+      mockGameModel.aggregate.mockResolvedValue([
+        { _id: 'NHL', count: 2 },
+        { _id: 'NFL', count: 1 },
+      ]);
+      mockGameModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+      mockGameModel.exec.mockResolvedValue([]); // no duplicates
+
+      const result = await service.removeDuplicatesAndOlds();
+
+      expect(result.totalDeleted).toBe(6); // 3 old + 3 preseason + 0 duplicates
+      expect(result.deletedByLeague).toEqual({ NHL: 4, NFL: 2 });
+      expect(result.details.oldGames).toEqual({
+        total: 3,
+        byLeague: { NHL: 2, NFL: 1 },
+      });
+      expect(result.details.preseasonGames).toEqual({
+        total: 3,
+        byLeague: { NHL: 2, NFL: 1 },
+      });
+      expect(result.details.duplicates).toEqual({
+        total: 0,
+        byLeague: {},
+      });
+
+      (console.info as jest.Mock).mockRestore();
+    });
+
+    it('counts duplicates from the in-memory objects and includes them in the summary', async () => {
+      jest.spyOn(console, 'info').mockImplementation(() => undefined);
+      mockGameModel.aggregate.mockResolvedValue([]); // no old / preseason games
+      mockGameModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+      // Two active games share the same team+time key → one duplicate.
+      mockGameModel.exec.mockResolvedValue([
+        {
+          uniqueId: 'DUP-1',
+          league: 'NHL',
+          teamSelectedId: 'T1',
+          startTimeUTC: '2026-01-01T00:00:00.000Z',
+          homeTeamScore: null,
+          awayTeamScore: null,
+        },
+        {
+          uniqueId: 'DUP-2',
+          league: 'NHL',
+          teamSelectedId: 'T1',
+          startTimeUTC: '2026-01-01T00:00:00.000Z',
+          homeTeamScore: 2,
+          awayTeamScore: 1,
+        },
+      ]);
+
+      const removeSpy = jest
+        .spyOn(service as any, 'remove')
+        .mockResolvedValue(undefined);
+
+      const result = await service.removeDuplicatesAndOlds();
+
+      expect(result.totalDeleted).toBe(1);
+      expect(result.deletedByLeague).toEqual({ NHL: 1 });
+      expect(result.details.duplicates.total).toBe(1);
+      expect(removeSpy).toHaveBeenCalledWith('DUP-1'); // the no-score copy is removed
+
+      removeSpy.mockRestore();
+      (console.info as jest.Mock).mockRestore();
+    });
+
+    it('reads active games with a projected lean query to stay within the heap budget', async () => {
+      // Regression guard for the Render 502: the dedup used to hydrate every
+      // active game as a full Mongoose document, OOM-killing the 460 MB heap.
+      jest.spyOn(console, 'info').mockImplementation(() => undefined);
+      mockGameModel.aggregate.mockResolvedValue([]);
+      mockGameModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+      mockGameModel.exec.mockResolvedValue([]);
+
+      await service.removeDuplicatesAndOlds();
+
+      expect(mockGameModel.select).toHaveBeenCalledWith({
+        uniqueId: 1,
+        league: 1,
+        teamSelectedId: 1,
+        startTimeUTC: 1,
+        homeTeamScore: 1,
+        awayTeamScore: 1,
+      });
+      expect(mockGameModel.lean).toHaveBeenCalled();
+
+      (console.info as jest.Mock).mockRestore();
     });
   });
 
@@ -3885,28 +4502,18 @@ describe('GameService', () => {
       mockTeamService.findAll.mockResolvedValue([]);
     });
 
-    it('groups the day by league (alphabetical order) and puts favorites first', async () => {
+    it('sorts games oldest-to-most-recent inside every league group', async () => {
       mockGameModel.exec.mockResolvedValue([nhlGame2, nbaGame, nhlGame]);
 
-      const result = await service.findByDateLeague(
-        '2026-01-10',
-        undefined,
-        undefined,
-        undefined,
-        'NHL-BOS',
-      );
+      const result = await service.findByDateLeague('2026-01-10');
 
       expect(result.groups.map((group) => group.key)).toEqual([
-        'FAVORITES',
         League.NBA,
         League.NHL,
       ]);
-      // The favorite game is duplicated in its league group.
-      expect(result.groups[0].games).toHaveLength(1);
-      expect(result.groups[0].games[0].uniqueId).toBe('NHL-1');
       // Games are ordered from oldest to most recent within each group,
       // even though the DB returned them in reverse order.
-      expect(result.groups[2].games.map((game) => game.uniqueId)).toEqual([
+      expect(result.groups[1].games.map((game) => game.uniqueId)).toEqual([
         'NHL-1',
         'NHL-2',
       ]);
@@ -3921,40 +4528,6 @@ describe('GameService', () => {
         League.MLB,
         League.NBA,
         League.NHL,
-      ]);
-    });
-
-    it('omits the favorites group when no favorite team plays that day', async () => {
-      mockGameModel.exec.mockResolvedValue([nhlGame, nbaGame]);
-
-      const result = await service.findByDateLeague(
-        '2026-01-10',
-        undefined,
-        undefined,
-        undefined,
-        'MLB-CHC',
-      );
-
-      expect(result.groups.map((group) => group.key)).toEqual([
-        League.NBA,
-        League.NHL,
-      ]);
-    });
-
-    it('matches favorites on the away team as well', async () => {
-      mockGameModel.exec.mockResolvedValue([nhlGame, nbaGame]);
-
-      const result = await service.findByDateLeague(
-        '2026-01-10',
-        undefined,
-        undefined,
-        undefined,
-        'NBA-BOS',
-      );
-
-      expect(result.groups[0].key).toBe('FAVORITES');
-      expect(result.groups[0].games.map((game) => game.uniqueId)).toEqual([
-        'NBA-1',
       ]);
     });
 
@@ -3984,6 +4557,98 @@ describe('GameService', () => {
       expect(result).toEqual({ groups: [] });
       expect(getAllGamesSpy).not.toHaveBeenCalled();
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('findResultsByLeague', () => {
+    const finishedGame = (
+      uniqueId: string,
+      gameDate: string,
+      startTimeUTC: string,
+    ) => ({
+      uniqueId,
+      league: League.NHL,
+      homeTeamId: 'NHL-BOS',
+      awayTeamId: 'NHL-TOR',
+      teamSelectedId: 'NHL-BOS',
+      gameDate,
+      startTimeUTC,
+      gameStatus: 'FINISHED',
+      isActive: true,
+      selectedTeam: true,
+      recordSeasonType: 2,
+      homeTeamScore: 2,
+      awayTeamScore: 1,
+    });
+
+    beforeEach(() => {
+      mockTeamService.findAll.mockResolvedValue([]);
+    });
+
+    it('defaults to the 4-year window and the 5000-result cap', async () => {
+      mockGameModel.exec.mockResolvedValue([]);
+
+      await service.findResultsByLeague('NHL');
+
+      const fourYearsAgo = new Date();
+      fourYearsAgo.setFullYear(fourYearsAgo.getFullYear() - 4);
+      const expectedStartDate = `${fourYearsAgo.getFullYear()}-${String(
+        fourYearsAgo.getMonth() + 1,
+      ).padStart(2, '0')}-${String(fourYearsAgo.getDate()).padStart(2, '0')}`;
+
+      const filter = mockGameModel.find.mock.calls[0][0];
+      expect(filter.isActive).toBe(true);
+      expect(filter.league).toBe('NHL');
+      expect(filter.gameDate.$gte).toBe(expectedStartDate);
+      expect(mockGameModel.limit).toHaveBeenCalledWith(5000);
+    });
+
+    it('queries newest-first so the cap keeps the most recent games, and returns days chronologically', async () => {
+      // The DB answers newest-first (as the query asks): the descending sort
+      // is an implementation detail of the cap, the payload must stay
+      // chronological for every consumer.
+      mockGameModel.exec.mockResolvedValue([
+        finishedGame('NHL-2', '2025-12-02', '2025-12-02T19:00:00.000Z'),
+        finishedGame('NHL-1', '2025-12-01', '2025-12-01T19:00:00.000Z'),
+      ]);
+
+      const result = await service.findResultsByLeague(
+        'NHL',
+        '2022-01-01',
+        5000,
+      );
+
+      expect(mockGameModel.sort).toHaveBeenCalledWith({ startTimeUTC: -1 });
+      expect(Object.keys(result)).toEqual(['2025-12-01', '2025-12-02']);
+      expect(result['2025-12-01'].map((game: any) => game.uniqueId)).toEqual([
+        'NHL-1',
+      ]);
+    });
+
+    it('forwards an explicit startDate and maxResults', async () => {
+      mockGameModel.exec.mockResolvedValue([]);
+
+      await service.findResultsByLeague('NCAAB', '2024-06-15', 1200);
+
+      const filter = mockGameModel.find.mock.calls[0][0];
+      expect(filter.gameDate.$gte).toBe('2024-06-15');
+      expect(filter.league).toBe('NCAAB');
+      expect(mockGameModel.limit).toHaveBeenCalledWith(1200);
+    });
+
+    it('drops days left empty by the score filter', async () => {
+      mockGameModel.exec.mockResolvedValue([
+        finishedGame('NHL-1', '2025-12-01', '2025-12-01T19:00:00.000Z'),
+        {
+          ...finishedGame('NHL-3', '2025-12-02', '2025-12-02T19:00:00.000Z'),
+          homeTeamScore: null,
+          awayTeamScore: null,
+        },
+      ]);
+
+      const result = await service.findResultsByLeague('NHL');
+
+      expect(Object.keys(result)).toEqual(['2025-12-01']);
     });
   });
 
@@ -4034,6 +4699,146 @@ describe('GameService', () => {
       expect(result).toEqual(purgeResult);
       expect(mockTeamService.purgeStaleTeamsWithoutGames).toHaveBeenCalledWith(
         new Set(['NHL-BOS']),
+      );
+    });
+  });
+
+  describe('refreshUndecidedPlayoffSeries', () => {
+    it('returns no updates when there are no undecided playoff series', async () => {
+      mockGameModel.find.mockReturnThis();
+      mockGameModel.lean.mockReturnThis();
+      mockGameModel.exec.mockResolvedValue([]);
+
+      const result = await (service as any).refreshUndecidedPlayoffSeries(10);
+
+      expect(result).toEqual({ updated: 0, series: [] });
+      expect(mockGameModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recordSeasonType: 3,
+          isActive: true,
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('returns no updates when no series has a clear winner', async () => {
+      // Two undecided games of the same series, neither team has 3+ wins
+      const game1 = {
+        _id: 'g1',
+        league: League.MLB,
+        homeTeamId: 'MLB-MIL',
+        awayTeamId: 'MLB-LAD',
+        startTimeUTC: '2026-10-10T00:00:00.000Z',
+        homeTeamScore: 5,
+        awayTeamScore: 3,
+        seriesStatus: '',
+      };
+      const game2 = {
+        _id: 'g2',
+        league: League.MLB,
+        homeTeamId: 'MLB-MIL',
+        awayTeamId: 'MLB-LAD',
+        startTimeUTC: '2026-10-12T00:00:00.000Z',
+        homeTeamScore: 2,
+        awayTeamScore: 7,
+        seriesStatus: '',
+      };
+
+      mockGameModel.find
+        .mockReturnValueOnce({
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue([game1, game2]),
+        })
+        .mockReturnValueOnce({
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue([game1, game2]),
+        });
+
+      const result = await (service as any).refreshUndecidedPlayoffSeries(10);
+
+      // 1-1: no team has 3 wins (best-of-5) or 4 wins (best-of-7)
+      expect(result).toEqual({ updated: 0, series: [] });
+      expect(mockGameModel.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('updates all games of a series when one team clearly won', async () => {
+      const seasonStart = new Date(2026, 0, 1).toISOString();
+      const seasonEnd = new Date(2027, 0, 1).toISOString();
+
+      // Undecided games (no seriesStatus winner)
+      const undecidedGames = [
+        {
+          _id: 'g1',
+          league: League.MLB,
+          homeTeamId: 'MLB-MIL',
+          awayTeamId: 'MLB-LAD',
+          startTimeUTC: '2026-10-08T00:00:00.000Z',
+          homeTeamScore: 5,
+          awayTeamScore: 3,
+          seriesStatus: '',
+        },
+        {
+          _id: 'g2',
+          league: League.MLB,
+          homeTeamId: 'MLB-LAD',
+          awayTeamId: 'MLB-MIL',
+          startTimeUTC: '2026-10-10T00:00:00.000Z',
+          homeTeamScore: 1,
+          awayTeamScore: 8,
+          seriesStatus: '',
+        },
+        {
+          _id: 'g3',
+          league: League.MLB,
+          homeTeamId: 'MLB-MIL',
+          awayTeamId: 'MLB-LAD',
+          startTimeUTC: '2026-10-12T00:00:00.000Z',
+          homeTeamScore: 2,
+          awayTeamScore: 6,
+          seriesStatus: '',
+        },
+        {
+          _id: 'g4',
+          league: League.MLB,
+          homeTeamId: 'MLB-LAD',
+          awayTeamId: 'MLB-MIL',
+          startTimeUTC: '2026-10-14T00:00:00.000Z',
+          homeTeamScore: 0,
+          awayTeamScore: 4,
+          seriesStatus: '',
+        },
+      ];
+
+      mockGameModel.find
+        .mockReturnValueOnce({
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue(undecidedGames),
+        })
+        // Second call: fetch ALL games of the series (same 4 games)
+        .mockReturnValueOnce({
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue(undecidedGames),
+        });
+
+      mockGameModel.updateMany.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ modifiedCount: 4 }),
+      });
+
+      const result = await (service as any).refreshUndecidedPlayoffSeries(10);
+
+      expect(result.updated).toBe(4);
+      expect(result.series.length).toBe(1);
+      expect(result.series[0]).toContain('MLB-MIL beats MLB-LAD');
+      expect(mockGameModel.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          league: League.MLB,
+          recordSeasonType: 3,
+          startTimeUTC: {
+            $gte: seasonStart,
+            $lt: seasonEnd,
+          },
+        }),
+        { $set: { seriesStatus: 'MLB-MIL wins series 3-1' } },
       );
     });
   });

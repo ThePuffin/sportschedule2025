@@ -4,7 +4,7 @@
 
 The **Game of the Day** tab (also called "Programme du jour") displays all games for a selected date, grouped by hour. It allows filtering by league, team, favorites, bookmarks, and supports live score updates.
 
-For a date **strictly before today**, the day is no longer grouped by hour but **by league**: the screen fetches `GET /games/league-day/:gameDate`, which returns one section per league plus a leading **favorites** section (favorite-team games are kept in their league section too). See `getGamesFromApi`, `visibleLeagueGroups` and `visibleSections`.
+For a date **strictly before today**, the day is no longer grouped by hour but **by league**: the screen fetches `GET /games/league-day/:gameDate`, which returns one section per league. Favorite games are shown through the star **FAVORITES** chip of the league filter, which filters each section client-side. See `getGamesFromApi`, `visibleLeagueGroups` and `visibleSections`.
 
 ## Selection stability
 
@@ -16,11 +16,12 @@ The team selector uses the stable callback identifier `teamsOfDay`. `Selector` c
 - **Date navigation** via `SliderDatePicker` (horizontal date slider)
 - **Calendar picker** — an imperatively-controlled `DateRangePicker` (single-date mode) is rendered alongside the slider; its dropdown is opened by the magnifier icon in `SliderDatePicker` (`onSearch`) and writes the picked date back to `selectDate` via `handleDateChange`
 - **Swipe gestures** to navigate between days (PanResponder)
-- **League filter** via `FilterSlider` (ALL, specific leagues, BOOKMARKS)
+- **League filter** via `FilterSlider` (ALL, star FAVORITES, BOOKMARKS, specific leagues)
+- **Star FAVORITES chip** — filters the displayed day to favorite-team games, for **past, scheduled and in-progress** dates alike; positioned between ALL and BOOKMARKS, and dimmed/non-clickable when the displayed day has no favorite game
 - **Team filter** via `TeamFilter` (search icon + slider)
 - **Live score updates** every 30 seconds via `fetchLiveScores`
-- **Games grouped by hour** with status sections (In Progress, Scheduled, Final, Ended) — for **today and upcoming** dates
-- **Games grouped by league** — for **past** dates, with a **separate favorites section first** (games kept in their league section)
+- **Games grouped by hour** with status sections in a fixed order — **In Progress, Final, Scheduled (by hour), Ended** — for **today and upcoming** dates
+- **Games grouped by league** — for **past** dates (sections come straight from the API; the star FAVORITES chip filters favorite games inside each section)
 - **Favorite teams sorting** — favorite team games appear first
 - **Bookmark selection** — select up to 10 games
 - **Retry mechanism** — auto-retries fetching when no games are found
@@ -46,9 +47,7 @@ The team selector uses the stable callback identifier `teamsOfDay`. `Selector` c
 | `closestRequestRef`       | `Ref<string>`          | Dedupe key (date + leagues + team + filter) of the last `closest` request |
 | `dateAccordionExpanded`   | `boolean`              | Whether the date filter accordion is open. Defaults to `true` (open on every screen size) |
 | `leagueAccordionExpanded` | `boolean`              | Whether the league filter accordion is open. Defaults to `width >= ACCORDION_MAX_WIDTH` — closed on medium screens (so only the date filter is open there), open on large screens |
-| `leagueDayGroups`         | `LeagueDayGroup[]`     | League-grouped payload of a **past day** (from `/games/league-day`): one entry per league, plus a leading `FAVORITES` entry when a favorite team plays that day |
-| `favoriteTeamsRef`        | `Ref<string[]>`        | Mirror of `favoriteTeams` read at fetch time (the favorite team ids are sent to the backend, which builds the favorites section) |
-| `leagueDayFavoritesKeyRef`| `Ref<string>`          | Favorites key used by the last past-day fetch — prevents refetching the same day when the favorites did not change |
+| `leagueDayGroups`         | `LeagueDayGroup[]`     | League-grouped payload of a **past day** (from `/games/league-day`): one entry per league |
 
 ## Key Functions
 
@@ -65,7 +64,7 @@ Groups games by hour (`"HH:00"` format) based on `startTimeUTC`.
 Helpers for the league-grouped past-day view:
 
 - `gameIdentity(game)` — stable key of a game (`uniqueId`, else `_id`, else teams + start time).
-- `dedupeGames(games)` — drops duplicates; needed because the backend `FAVORITES` section repeats games already present in their league section, while the flat `games` state (bookmarks, team list, live scores) must contain each game once.
+- `dedupeGames(games)` — safety net dropping duplicates from the league-grouped payload (the backend may repeat a game through its optional favorites section); the flat `games` state (bookmarks, team list, live scores) must contain each game once.
 - `refreshLeagueGroups(groups, updatedGames)` — applies refreshed live scores (matched by `gameIdentity`) into the existing league groups without rebuilding them: the grouping and its order always come from the backend.
 
 ### `getNextGamesFromApi(date)`
@@ -84,7 +83,7 @@ Fetches live scores for games that started within the last 15 minutes and are no
 
 Fetches games for a specific date:
 
-- **Past date** (`YYYYMMDD < today`): drops any cached flat games for that day and calls `fetchGamesByLeagueDay(YYYYMMDD, 1000, undefined, favoriteTeams)` → sets `leagueDayGroups` from the returned sections and `games` from `dedupeGames(groups.flatMap(g => g.games))`. On failure both are reset to empty.
+- **Past date** (`YYYYMMDD < today`): drops any cached flat games for that day and calls `fetchGamesByLeagueDay(YYYYMMDD, 1000)` (no `favoriteTeams` param: favorites are filtered client-side by the star chip) → sets `leagueDayGroups` from the returned sections and `games` from `dedupeGames(groups.flatMap(g => g.games))`. On failure both are reset to empty.
 - Checks cache first (`gamesDayCache`)
 - For today: merges recent yesterday games (within 3 hours, no score)
 - Fetches from API if not cached
@@ -142,25 +141,28 @@ On mount, `fetchTeams()` is called to guarantee the `teams` cache (24h) is avail
 
 Filters and groups games **for today / upcoming dates**:
 
-1. Filters by `isActive`, `selectLeagues`, `teamSelectedId`, `activeFilter`
+1. Filters by `isActive`, `selectLeagues`, `teamSelectedId`, `activeFilter` (the BOOKMARKS chip keeps only bookmarked games through `gamesSelected`, which is part of the memo dependencies — the list reacts immediately to a bookmark toggle)
 2. Sorts by `startTimeUTC`
 3. Categorizes games: `inProgress`, `scheduled`, `final`, `finished`
-4. Groups scheduled games by hour
-5. Sorts favorite team games first
+4. Groups scheduled games by hour, keeping those sections chronological (by first game start time)
+5. Sorts favorite team games first inside every section
+6. Assembles the sections in a fixed order: **In Progress → Final → Scheduled (by hour) → Ended** (always last); empty sections are omitted
+
+The `activeFilter` is applied **before** the status categorization, so the star `FAVORITES` chip shows favorite games in every section — In Progress, Final, Scheduled and Ended — on today and upcoming dates too.
 
 Olympic favorites match hockey and basketball ids for the same country/gender, so a favorite saved from one sport also highlights and filters the other sport's games.
 
 ### `visibleLeagueGroups`
 
-Filters the **past-day** sections returned by the backend (`leagueDayGroups`) with the client-side filters only (`isActive`, `selectLeagues`, `teamSelectedId`, favorites/bookmarks `activeFilter`), then drops empty sections. The grouping, the section order and the favorites extraction are untouched — they come from the API.
+Filters the **past-day** sections returned by the backend (`leagueDayGroups`) with the client-side filters only (`isActive`, `selectLeagues`, `teamSelectedId`, favorites/bookmarks `activeFilter`), then drops empty sections. The grouping and the section order come from the API.
 
-When `activeFilter === 'FAVORITES'`, only the `FAVORITES` section is kept (every section is still filtered by the selected leagues).
+When `activeFilter === 'FAVORITES'` (star chip), each league section keeps only favorite-team games (`getFavoriteGameIndex`), so favorites are displayed grouped by league.
 
 ### `visibleSections`
 
 Normalizes the sections actually rendered as `{ key, label, games }`:
 
-- **past day** → `visibleLeagueGroups`, where the `FAVORITES` key is labelled with `translateWord('favorites')` and every other key is the league code used as-is;
+- **past day** → `visibleLeagueGroups`, keyed/labelled by the league code;
 - **otherwise** → `visibleGamesByHour`, keyed/labelled by the hour label.
 
 ### `visibleGroupCount`
@@ -177,13 +179,13 @@ Builds a unique list of teams from today's games, keyed by `uniqueId`.
 (compared through `gameDate`, falling back to the local date of `startTimeUTC`). It drives both the
 bookmark chip icon (`bookmark` when filled, `bookmark-o` when outlined) and its enabled state.
 
+### `hasFavorites`
+
+`true` when at least one game of the displayed day involves a favorite team, computed with `getFavoriteGameIndex(game, favoriteTeams) !== -1` so Olympic favorite ids match their games in both sports. It drives the star FAVORITES chip: filled (`star`) when `true`, outlined (`star-o`) when `false`, and included in `disabledFilters` when `false`.
+
 ### `disabledFilters`
 
-Leagues with no active games today + `BOOKMARKS` while no bookmarked game is scheduled for the
-selected date (`!isAnyGameSelectedToday`). The bookmark chip is then dimmed and **not clickable**
-(`FilterSlider` `disabledValues`), so an empty bookmarks list can never be opened — the same
-condition as the outlined bookmark icon. Note it no longer keys off `gamesSelected.length === 0`
-only: bookmarks from other dates are invisible for the displayed day.
+Leagues with no active games today + `BOOKMARKS` while no bookmarked game is scheduled for the selected date (`!isAnyGameSelectedToday`) + `FAVORITES` while no game of the displayed day involves a favorite team (`!hasFavorites`). The concerned chip is dimmed and **not clickable** (`FilterSlider` `disabledValues`), so an empty list can never be opened — each chip follows the same condition as its outlined icon. Note the bookmark rule no longer keys off `gamesSelected.length === 0` only: bookmarks from other dates are invisible for the displayed day.
 
 ## Data Flow
 
@@ -193,9 +195,14 @@ only: bookmarks from other dates are invisible for the displayed day.
 4. Live scores update every 30 seconds while the tab is focused (past days: refreshed inside `leagueDayGroups` via `refreshLeagueGroups`)
 5. UI renders one accordion per section
 
-## Favorites Section Refetch
+## Star FAVORITES Chip (client-side, no refetch)
 
-The favorites section of a past day is computed by the **backend**, so the favorite team ids are sent with `/games/league-day`. A dedicated effect (declared after the init effect) refetches the selected past day when `favoriteTeams` differs from `leagueDayFavoritesKeyRef` — the key used by the last past-day fetch — so opening/closing the day or listing leagues never triggers an extra request. Leagues, team and bookmarks filters stay client-side (`visibleLeagueGroups`) and need no refetch.
+The `FAVORITES` filter is a star chip in the league `FilterSlider`, sorted between ALL and BOOKMARKS (filled `star` while at least one game of the displayed day involves a favorite team, outlined `star-o` otherwise). When active it keeps only favorite-team games (`getFavoriteGameIndex`, Olympic-aware) on **any** date:
+
+- **today / upcoming dates** → inside `visibleGamesByHour`, before the status categorization, so past (Final/Ended), in-progress and scheduled favorite games are all shown;
+- **past dates** → inside each league group of `visibleLeagueGroups`, so favorites stay grouped by league.
+
+Because filtering is client-side, changing the favorite teams never refetches the day (leagues, team and bookmarks already worked that way). The chip follows the same availability rule as BOOKMARKS: it is dimmed and non-clickable (`disabledFilters`) when the displayed day has no favorite game.
 
 ## Loading State on Date Change
 

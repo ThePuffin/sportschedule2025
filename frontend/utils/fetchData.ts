@@ -395,7 +395,6 @@ export const fetchGamesByLeagueDay = async (
   date: string,
   limit?: number,
   skip?: number,
-  favoriteTeams?: string[],
 ): Promise<LeagueDayGroup[]> => {
   const leaguesSelected = getCache<string[]>("leaguesSelected") || [];
   let cacheKey = `games_league_day_${date}`;
@@ -416,15 +415,6 @@ export const fetchGamesByLeagueDay = async (
   if (skip) {
     params.append("skip", skip.toString());
     cacheKey += `_skip_${skip}`;
-  }
-
-  const favoriteTeamsParam = Array.from(
-    new Set((favoriteTeams || []).filter(Boolean).flatMap(getOlympicTeamIds)),
-  );
-  if (favoriteTeamsParam.length > 0) {
-    const favorites = favoriteTeamsParam.join("+");
-    params.append("favoriteTeams", favorites);
-    cacheKey += `_fav_${favorites}`;
   }
 
   if (params.toString()) url += `?${params.toString()}`;

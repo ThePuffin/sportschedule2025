@@ -47,6 +47,41 @@ function markGameRevealed(gameKey: string): void {
   }
 }
 
+/**
+ * Raw backend `gameStatus` values that are plain status **keywords** rather than
+ * a live clock/period string (e.g. `"20:00 - 2nd Period"`). When the card would
+ * display one of these raw keywords, it is translated — and capitalized
+ * (first letter uppercase, e.g. `SCHEDULED` → `Programmé`) — instead.
+ * Anything that is *not* a known keyword (notably the live clock/period text, or
+ * provider quirks like `"HALFTIME"` / `"FT"`) is returned unchanged, so a match in
+ * progress keeps showing its time exactly as before.
+ */
+const STATUS_KEYWORDS: Record<string, string> = {
+  SCHEDULED: 'scheduled',
+  IN_PROGRESS: 'inProgress',
+  POSTPONED: 'postponedGame',
+  DELAYED: 'delayedGame',
+  CANCELED: 'canceled',
+  CANCELLED: 'canceled',
+  FINISHED: 'ended',
+  FINAL: 'ended',
+  ENDED: 'ended',
+};
+
+/**
+ * Turns a raw backend `gameStatus` into a human-readable, localized label.
+ * Known status keywords are translated via `translateWord` and capitalized
+ * (first letter uppercase, rest lowercase); any other value (a live
+ * clock/period string) is returned as-is.
+ */
+function displayGameStatus(gameStatus?: string | null): string {
+  if (!gameStatus) return '';
+  const translationKey = STATUS_KEYWORDS[gameStatus.trim().toUpperCase()];
+  if (!translationKey) return gameStatus;
+  const translated = translateWord(translationKey).toLowerCase();
+  return translated.charAt(0).toUpperCase() + translated.slice(1);
+}
+
 export default function CardLarge({
   data,
   showDate = false,
@@ -461,11 +496,15 @@ export default function CardLarge({
       timeText = translateWord('gameDetails');
     }
   } else if (isStarted4hAgo && !serviceReportsNotTerminated) {
-    // If we have gameStatus or gamePeriod info, display it instead of generic "ended"
+    // If we have gameStatus or gamePeriod info, display it instead of generic "ended".
+    // Raw status keywords (e.g. "SCHEDULED") are translated and lowercased via
+    // displayGameStatus; live clock/period text passes through unchanged.
     if (gameStatus && typeof gamePeriod === 'number') {
-      timeText = hasPeriodInGameStatus(gameStatus) ? gameStatus : `${gameStatus} - P${gamePeriod}`;
+      timeText = hasPeriodInGameStatus(gameStatus)
+        ? displayGameStatus(gameStatus)
+        : `${displayGameStatus(gameStatus)} - P${gamePeriod}`;
     } else if (gameStatus) {
-      timeText = gameStatus;
+      timeText = displayGameStatus(gameStatus);
     } else if (typeof gamePeriod === 'number') {
       timeText = `P${gamePeriod}`;
     } else {
@@ -481,17 +520,20 @@ export default function CardLarge({
     } else if (gameClock) {
       timeText = `${gameClock}`;
     } else if (livePeriodText) {
-      timeText = livePeriodText;
+      timeText = displayGameStatus(livePeriodText);
     } else {
       timeText = translateWord('inProgress');
     }
   } else if (hasScore) {
     if (isToday) {
-      // Display gameStatus and gamePeriod if available, otherwise show inProgress
+      // Display gameStatus and gamePeriod if available, otherwise show inProgress.
+      // Status keywords are translated/lowercased; live time text is kept as-is.
       if (gameStatus && typeof gamePeriod === 'number') {
-        timeText = hasPeriodInGameStatus(gameStatus) ? gameStatus : `${gameStatus} - P${gamePeriod}`;
+        timeText = hasPeriodInGameStatus(gameStatus)
+          ? displayGameStatus(gameStatus)
+          : `${displayGameStatus(gameStatus)} - P${gamePeriod}`;
       } else if (gameStatus) {
-        timeText = gameStatus;
+        timeText = displayGameStatus(gameStatus);
       } else if (typeof gamePeriod === 'number') {
         timeText = `P${gamePeriod}`;
       } else {

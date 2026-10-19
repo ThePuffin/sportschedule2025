@@ -202,15 +202,14 @@ describe("Olympic team schedule requests", () => {
 });
 
 describe("fetchGamesByLeagueDay", () => {
-  it("expands Olympic favorite ids so both sports appear in the favorites section", async () => {
+  it("requests league groups without any favoriteTeams param (favorites are filtered client-side)", async () => {
     mockSuccessfulFetch({ groups: [] });
 
-    await fetchGamesByLeagueDay("2024-08-08", undefined, undefined, ["OLYMPICS-HOCKEY-MEN-FRA"]);
+    await fetchGamesByLeagueDay("2024-08-08", 1000);
 
     const requestUrl = new URL(lastRequestedUrl(), "https://localhost");
-    expect(requestUrl.searchParams.get("favoriteTeams")).toBe(
-      "OLYMPICS-HOCKEY-MEN-FRA+OLYMPICS-BASKETBALL-MEN-FRA",
-    );
+    expect(requestUrl.searchParams.get("favoriteTeams")).toBeNull();
+    expect(requestUrl.searchParams.get("maxResults")).toBe("1000");
   });
 });
 

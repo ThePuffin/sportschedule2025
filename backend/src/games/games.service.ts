@@ -22,6 +22,7 @@ import {
   getOlympicSeasonTeams,
   getRecordSeasonType,
   getSeasonFinals,
+  getTeamRecord,
   getTeamRecordFromSchedule,
   getTeamsSchedule,
 } from '../utils/fetchData/espnAllData';
@@ -66,7 +67,16 @@ export class GameService {
     private readonly refreshTimestampService: RefreshTimestampService,
   ) {}
 
-  maxYearBeforeDelete = 9;
+  maxYearBeforeDelete = 7;
+  // Preseason games are only kept for this many years (they have little
+  // historical value once the season is over). Applied in
+  // `removeDuplicatesAndOlds()` via `recordSeasonType === 1`.
+  preseasonYearsToKeep = 1;
+  // League-results bounds served by `findResultsByLeague()` when the client
+  // sends none: "5000 results or 4 years", whichever comes first. A team
+  // selection (`findResultsByTeam()`) keeps the full retention window.
+  leagueResultsYearsToKeep = 4;
+  leagueResultsMaxResults = 5000;
   // Purge games that are still active/resolved-less several months after their start
   // (e.g. a PWHL game stuck on 2026-05-11 whose final result can never be fetched).
   staleGameMaxAgeDays = 90;
@@ -118,6 +128,21 @@ export class GameService {
   private _isSeriesEvolution(value?: string): boolean {
     if (!value || typeof value !== 'string') return false;
     return this.seriesEvolutionPattern.test(value.trim());
+  }
+
+  /**
+   * Whether a label is a mere game-number / round label (e.g. `"Game 3"`,
+   * `"NLCS - Game 3"`, `"Game 2 of 3"`). Such labels describe *which* game of
+   * the series a document is — they never describe the series advancement and
+   * must never be stored in `seriesStatus` nor overwrite a stored evolution.
+   * They belong in `seriesSummary` only.
+   */
+  private _isGameNumberLabel(value?: string): boolean {
+    if (!value || typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    if (this._isSeriesEvolution(trimmed)) return false;
+    return /\bgame\s+\d+\b/i.test(trimmed);
   }
 
   // Capacity-based purge configuration
@@ -252,6 +277,62 @@ export class GameService {
   private _computedSeriesStatusMap = new Map<string, string>();
 
   /**
+   * Extracts the `X-Y` score from a series evolution label (e.g. `3-0` in
+   * `"MIL leads 3-0"` or `"MIL wins series 4-0"`). Returns `null` when the
+   * label carries no score (e.g. `"Series over"`) or when it is not a string.
+   */
+  private _parseSeriesScore(value?: string): { leader: number; trailer: number; total: number } | null {
+    if (!value || typeof value !== 'string') return null;
+    const match = value.match(/(\d+)\s*[-–]\s*(\d+)/);
+    if (!match) return null;
+    const a = Number.parseInt(match[1], 10);
+    const b = Number.parseInt(match[2], 10);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return { leader: Math.max(a, b), trailer: Math.min(a, b), total: a + b };
+  }
+
+  /**
+   * Whether a series evolution label carries a plausible best-of-7 score.
+   * A series can never show more than 4 wins for one team or more than 7
+   * games in total, so labels such as `"MIL wins series 8-0"` (produced by
+   * double-counted duplicates or a truncated provider payload) are rejected.
+   * `leads`/`wins` require a strict leader, `tied` requires equality.
+   */
+  private _isValidSeriesEvolution(value?: string): boolean {
+    if (!this._isSeriesEvolution(value)) return false;
+    const trimmed = (value as string).trim();
+    const score = this._parseSeriesScore(trimmed);
+    // Labels without a score ("Series over") are accepted as-is.
+    if (!score) return true;
+    if (score.leader > 4 || score.total > 7) return false;
+    const lower = trimmed.toLowerCase();
+    const isTied = /\b(?:series\s+)?tied\b/.test(lower);
+    if (isTied) return score.leader === score.trailer;
+    return score.leader > score.trailer;
+  }
+
+  /**
+   * Whether a fresh series evolution may replace the stored one. The stored
+   * advancement is never wiped (empty / non-evolution payloads are rejected
+   * by the callers), and a valid evolution only replaces another valid
+   * evolution when it does not move the series backwards: the total number
+   * of games (`X+Y`) must grow or stay equal, so `"MIL leads 3-0"` can
+   * become `"MIL wins series 4-0"` but `"MIL wins series 4-0"` can never
+   * fall back to `"MIL leads 3-0"`. An invalid stored label (e.g. `"8-0"`)
+   * self-heals: any valid evolution replaces it.
+   */
+  private _mayReplaceSeriesStatus(stored?: string, incoming?: string): boolean {
+    if (!incoming || !this._isValidSeriesEvolution(incoming)) return false;
+    if (!stored || !this._isSeriesEvolution(stored)) return true;
+    if (!this._isValidSeriesEvolution(stored)) return true;
+    const storedScore = this._parseSeriesScore(stored);
+    const incomingScore = this._parseSeriesScore(incoming);
+    // Scoreless labels ("Series over") always carry new information.
+    if (!storedScore || !incomingScore) return true;
+    return incomingScore.total >= storedScore.total;
+  }
+
+  /**
    * Playoff series label shown **in priority of the season record** in the
    * record slots of the responses (display-time only: the persisted
    * `homeTeamRecord` / `awayTeamRecord` are never modified here).
@@ -270,8 +351,14 @@ export class GameService {
     const summary =
       typeof game.seriesSummary === 'string' ? game.seriesSummary.trim() : '';
 
-    // 1. Stored series status takes priority.
-    if (status) {
+    // 1. Stored series status takes priority — unless it is an impossible
+    //    label (e.g. "MIL wins series 8-0" from a past double-count bug).
+    //    Such a label is ignored so the display falls through to the
+    //    computed evolution or the round label instead of showing "8-0".
+    if (status && this._isValidSeriesEvolution(status)) {
+      return this._seriesDisplayForPhase(game, status);
+    }
+    if (status && !this._isSeriesEvolution(status)) {
       return this._seriesDisplayForPhase(game, status);
     }
 
@@ -333,12 +420,80 @@ export class GameService {
   }
 
   /**
+   * Fixture slot of a game inside its series: same league, same two teams
+   * (in either home/away order) at the same start time. Two documents sharing
+   * a slot are duplicates of the same fixture (re-fetch twin rows, per-team
+   * views, doubleheaders stored twice) and must only count once. Returns `''`
+   * when the game has no usable time or teams, so it never collides with a
+   * real slot.
+   */
+  private _seriesSlotKey(game: any): string {
+    const time =
+      typeof game?.startTimeUTC === 'string' && game.startTimeUTC
+        ? game.startTimeUTC
+        : typeof game?.gameDate === 'string' && game.gameDate
+          ? game.gameDate
+          : '';
+    const home = game?.homeTeamId;
+    const away = game?.awayTeamId;
+    const league = game?.league;
+    if (!time || !home || !away || !league || home === away) return '';
+    const [a, b] = [String(home), String(away)].sort();
+    return `${league}|${time}|${a}|${b}`;
+  }
+
+  /**
+   * Sort timestamp of a game for series ordering (start time, then date).
+   * Returns 0 when unparseable so the game sorts first rather than breaking
+   * the ordering.
+   */
+  private _gameSortTime(game: any): number {
+    const raw = game?.startTimeUTC || game?.gameDate;
+    const ms = raw ? new Date(raw).getTime() : NaN;
+    return Number.isFinite(ms) ? ms : 0;
+  }
+
+  /**
+   * Returns the stored series evolution of the **last game** of the series
+   * (absolute latest, win or ongoing). That label — `"MIL wins series 4-0"`
+   * on the clincher, or `"MIL leads 3-0"` / `"Series tied 2-2"` while the
+   * series is ongoing — is authoritative for the whole series: every game
+   * between the two teams displays it without recomputation. A decided
+   * series (`wins`/`over`) found anywhere wins over an earlier `leads`, so a
+   * stale `leads 3-0` propagated onto a later game never hides the final
+   * `wins 4-0`. Returns `''` when no game carries a usable stored status.
+   */
+  private _latestStoredSeriesStatus(seriesGames: any[], _currentGame?: any): string {
+    let latestLeads = '';
+    const ordered = [...seriesGames].sort(
+      (a, b) => this._gameSortTime(a) - this._gameSortTime(b),
+    );
+    for (const game of ordered) {
+      const status =
+        typeof game.seriesStatus === 'string' ? game.seriesStatus.trim() : '';
+      if (!status || !this._isValidSeriesEvolution(status)) continue;
+      // A decided series is final: return it immediately, it applies to the
+      // whole series (e.g. the 16 oct. clincher says "wins 4-0").
+      if (this._isSeriesDecided(status)) return status;
+      latestLeads = status;
+    }
+    return latestLeads;
+  }
+
+  /**
    * Computes the playoff series status for `currentGame` from the full list of
-   * games in the same series. Returns a label such as `"MIL leads 3-0"`,
-   * `"Series tied 2-2"` or `"MIL wins series 4-2"`, or `''` when there aren't
-   * enough completed games to determine a status.
+   * games in the same series. Strategy (per user request):
+   * 1. Look at the **last played game** of the series: when it carries a
+   *    valid stored evolution (especially `"X wins series Y-Z"`), that label
+   *    is authoritative and returned as-is — no recomputation needed.
+   * 2. Otherwise, count wins from completed games (deduplicated, numeric
+   *    scores, only games played up to `currentGame`) and return
+   *    `"MIL leads 3-0"`, `"Series tied 2-2"` or `"MIL wins series 4-2"`,
+   *    or `''` when there aren't enough completed games.
    */
   private _computeSeriesStatus(seriesGames: any[], currentGame: any): string {
+    const latestStored = this._latestStoredSeriesStatus(seriesGames, currentGame);
+    if (latestStored) return latestStored;
     const team1Id = currentGame.homeTeamId;
     const team2Id = currentGame.awayTeamId;
     const team1Name = currentGame.homeTeamShort || currentGame.homeTeam || team1Id;
@@ -347,21 +502,59 @@ export class GameService {
     let team1Wins = 0;
     let team2Wins = 0;
     let completedGames = 0;
+    const seenGameKeys = new Set<string>();
+    const seenSlots = new Set<string>();
+    // Only games played up to the displayed card count: the 15 oct. card
+    // shows the series as it stood then (3-0), the 16 oct. clincher 4-0.
+    const cutoff = this._gameSortTime(currentGame);
 
     for (const game of seriesGames) {
+      if (cutoff && this._gameSortTime(game) > cutoff) continue;
+      // Dedupe — two layers. (1) Same stored row twice (`uniqueId`): the same
+      // matchup can be stored twice (e.g. one document per team view, or a
+      // re-fetch that created a second row). (2) Same fixture twice under two
+      // different ids: same league, same two teams (either home/away side)
+      // and same start time. Counting either duplicate would double the wins
+      // and produce impossible labels such as "MIL wins series 8-0".
+      const dedupeKey =
+        (typeof game.uniqueId === 'string' && game.uniqueId) ||
+        `${game.startTimeUTC || game.gameDate || ''}|${game.homeTeamId}|${game.awayTeamId}|${game.homeTeamScore}-${game.awayTeamScore}`;
+      if (seenGameKeys.has(dedupeKey)) continue;
+      seenGameKeys.add(dedupeKey);
+      const slotKey = this._seriesSlotKey(game);
+      if (slotKey) {
+        if (seenSlots.has(slotKey)) continue;
+        seenSlots.add(slotKey);
+      }
       const homeScore = game.homeTeamScore;
       const awayScore = game.awayTeamScore;
       if (homeScore === null || homeScore === undefined || awayScore === null || awayScore === undefined) {
         continue;
       }
+      // Scores may arrive as strings from some providers: "6" > "10" is
+      // true lexicographically, so compare numerically. A non-numeric or
+      // tied score never counts as a win for either side.
+      const home = Number(homeScore);
+      const away = Number(awayScore);
+      if (!Number.isFinite(home) || !Number.isFinite(away) || home === away) {
+        continue;
+      }
       completedGames++;
-      if (homeScore > awayScore) {
+      if (home > away) {
         if (game.homeTeamId === team1Id) team1Wins++;
         else if (game.homeTeamId === team2Id) team2Wins++;
-      } else if (awayScore > homeScore) {
+      } else if (away > home) {
         if (game.awayTeamId === team1Id) team1Wins++;
         else if (game.awayTeamId === team2Id) team2Wins++;
       }
+    }
+
+    // Clamp: a best-of-7 series can never hold more than 4 wins per team or
+    // more than 7 completed games. Anything above that proves duplicates (or
+    // cross-series contamination) slipped through the key filter, so the
+    // status is left empty rather than displaying an impossible "8-0".
+    if (team1Wins > 4 || team2Wins > 4 || completedGames > 7) {
+      return '';
     }
 
     // Un seul match joué ne constitue pas une série avec évolution :
@@ -391,16 +584,24 @@ export class GameService {
 
   /**
    * Pre-computes series statuses for the playoff games in `games` that are
-   * missing a stored `seriesStatus`. Groups them by series key, fetches all
-   * games of each series from the DB in a single query, and stores the
-   * computed status per `uniqueId` in `_computedSeriesStatusMap`.
+   * missing a stored `seriesStatus` — or carry an impossible one ("8-0").
+   * Groups them by strict series key (league + season + both teams, playoffs
+   * only), fetches all games of each series from the DB in a single query
+   * (this covers current series and oldies alike), and stores the result in
+   * `_computedSeriesStatusMap`: the latest game's stored evolution when it
+   * exists (e.g. "MIL wins series 4-0"), otherwise a win count computed from
+   * completed games. `_playoffSeriesDisplay()` consults this map when the
+   * stored `seriesStatus` is empty or invalid.
    */
   private async _precomputeSeriesStatus(games: any[]): Promise<void> {
     this._computedSeriesStatusMap.clear();
 
     const needsCompute = games.filter((g) => {
       const status = typeof g.seriesStatus === 'string' ? g.seriesStatus.trim() : '';
-      if (status) return false;
+      // An invalid stored evolution ("8-0") is treated as missing so the
+      // display self-heals via the latest game / computed count.
+      if (status && this._isValidSeriesEvolution(status)) return false;
+      if (status && !this._isSeriesEvolution(status)) return false;
       if (!this._isPlayoffGame(g)) return false;
       if (!g.uniqueId) return false;
       return true;
@@ -574,15 +775,23 @@ export class GameService {
             }
           });
 
-          // Playoff series fields: a stored series evolution (`seriesStatus`
-          // such as "MIL leads 3-0") may only ever be replaced by another
-          // evolution ("LAD ties series 2-2", "MIL wins series 4-0"). The
-          // team-schedule endpoint used by the refresh cron carries no
+          // Playoff series fields — strict series scope: only playoff games
+          // (`recordSeasonType === 3`) between the same two teams in the same
+          // season belong to one series. A stored series evolution
+          // (`seriesStatus` such as "MIL leads 3-0") is never wiped and may
+          // only be replaced by a *forward* evolution (victory, tie or final
+          // result): "MIL leads 3-0" can become "MIL wins series 4-0", but
+          // "MIL wins series 4-0" can never fall back to "MIL leads 3-0".
+          // A mere game-number / round label ("Game 3", "NLCS - Game 3") only
+          // says *which* game of the series a document is: it belongs in
+          // `seriesSummary`, never in `seriesStatus`, and can never overwrite
+          // a stored evolution.
+          // The team-schedule endpoint used by the refresh cron carries no
           // `series.summary` at all, so its empty status would wipe the
-          // stored one on every refresh and the display would fall back to
-          // the round label ("NLDS - Game 3"). A stored non-evolution value
-          // (e.g. PWHL's "Game 2") keeps the previous rule: any non-empty
-          // fresh value overwrites it.
+          // stored one on every refresh. Impossible labels ("8-0") are
+          // rejected outright and self-heal on the next valid evolution.
+          // A stored non-evolution value (e.g. PWHL's "Game 2") keeps the
+          // previous rule: any non-empty fresh value overwrites it.
           const storedSeriesStatus =
             typeof existingGame.seriesStatus === 'string'
               ? existingGame.seriesStatus.trim()
@@ -592,15 +801,102 @@ export class GameService {
               typeof gameDto.seriesStatus === 'string'
                 ? gameDto.seriesStatus.trim()
                 : '';
+            // ESPN sometimes reports the series evolution in seriesSummary
+            // rather than seriesStatus; promote it so the forward-only
+            // comparison can run against the stored evolution. seriesSummary
+            // takes precedence when it carries a MORE ADVANCED evolution
+            // (more games played) than seriesStatus.
+            let effectiveIncomingSeriesStatus = incomingSeriesStatus;
+            if (gameDto.seriesSummary) {
+              const summaryTrimmed = gameDto.seriesSummary.trim();
+              if (
+                this._isSeriesEvolution(summaryTrimmed) &&
+                this._isValidSeriesEvolution(summaryTrimmed)
+              ) {
+                const currentScore = this._parseSeriesScore(
+                  effectiveIncomingSeriesStatus,
+                );
+                const summaryScore = this._parseSeriesScore(summaryTrimmed);
+                if (
+                  !currentScore ||
+                  (summaryScore && summaryScore.total > currentScore.total)
+                ) {
+                  effectiveIncomingSeriesStatus = summaryTrimmed;
+                  gameDto.seriesStatus = effectiveIncomingSeriesStatus;
+                }
+              }
+            }
             const storedIsEvolution =
               this._isSeriesEvolution(storedSeriesStatus);
+            // NOTE: a stored game-number label ("Game 2") is deliberately NOT
+            // an evolution, so the PWHL non-empty rule below still updates it.
             const incomingIsEvolution =
-              this._isSeriesEvolution(incomingSeriesStatus);
+              this._isSeriesEvolution(effectiveIncomingSeriesStatus);
             if (
-              !incomingSeriesStatus ||
+              !effectiveIncomingSeriesStatus ||
               (storedIsEvolution && !incomingIsEvolution)
             ) {
               delete gameDto.seriesStatus;
+            } else if (
+              storedIsEvolution &&
+              this._isGameNumberLabel(effectiveIncomingSeriesStatus)
+            ) {
+              // Belt and braces: a game-number label is a non-evolution, but
+              // it must *explicitly* never replace an evolution — it is not
+              // even a candidate status, just a round label for the summary.
+              delete gameDto.seriesStatus;
+            } else if (
+              storedIsEvolution &&
+              incomingIsEvolution &&
+              !this._mayReplaceSeriesStatus(
+                storedSeriesStatus,
+                effectiveIncomingSeriesStatus
+              )
+            ) {
+              delete gameDto.seriesStatus;
+            }
+          } else {
+            const incomingSeriesStatus =
+              typeof gameDto.seriesStatus === 'string'
+                ? gameDto.seriesStatus.trim()
+                : '';
+            if (this._isGameNumberLabel(incomingSeriesStatus)) {
+              // Never store a game-number label as an evolution: reroute it
+              // to the round label when the summary is empty.
+              delete gameDto.seriesStatus;
+              if (!gameDto.seriesSummary) {
+                gameDto.seriesSummary = incomingSeriesStatus;
+              }
+            } else if (
+              incomingSeriesStatus &&
+              this._isSeriesEvolution(incomingSeriesStatus) &&
+              !this._isValidSeriesEvolution(incomingSeriesStatus)
+            ) {
+              delete gameDto.seriesStatus;
+            } else if (
+              !incomingSeriesStatus &&
+              gameDto.seriesSummary &&
+              this._isSeriesEvolution(gameDto.seriesSummary.trim()) &&
+              this._isValidSeriesEvolution(gameDto.seriesSummary.trim())
+            ) {
+              // seriesStatus is empty but seriesSummary carries a valid
+              // evolution (ESPN sometimes reports it in the round label);
+              // promote it so it is stored and displayed.
+              gameDto.seriesStatus = gameDto.seriesSummary.trim();
+            } else if (
+              incomingSeriesStatus &&
+              gameDto.seriesSummary &&
+              this._isSeriesEvolution(incomingSeriesStatus) &&
+              this._isValidSeriesEvolution(incomingSeriesStatus) &&
+              this._isSeriesEvolution(gameDto.seriesSummary.trim()) &&
+              this._isValidSeriesEvolution(gameDto.seriesSummary.trim()) &&
+              this._parseSeriesScore(gameDto.seriesSummary.trim())!.total >
+                this._parseSeriesScore(incomingSeriesStatus)!.total
+            ) {
+              // seriesStatus carries an older evolution but seriesSummary
+              // reports a more advanced one (more games played); prefer the
+              // newer label so the stored series status is corrected.
+              gameDto.seriesStatus = gameDto.seriesSummary.trim();
             }
           }
 
@@ -836,6 +1132,34 @@ export class GameService {
    * months comfortably covers the longest post-season tail (a Game 7 in early
    * summer) while staying well clear of the next season's opening fixtures.
    */
+  /**
+   * Formats an ESPN team-detail record into the same `W-L[-T/-O]` string
+   * format the records cron has always stored (`extractCompetitorRecord` on
+   * event competitors). `otLosses` is the third number for hockey, `ties` the
+   * third number for soccer / NFL / college; NBA and baseball carry no third
+   * number, so a `0` is never appended.
+   */
+  private _toRecordString(record: {
+    wins: number;
+    losses: number;
+    ties?: number;
+    otLosses?: number;
+  }): string {
+    if (record.otLosses !== undefined && record.otLosses !== null) {
+      return `${record.wins}-${record.losses}-${record.otLosses}`;
+    }
+    if (record.ties !== undefined && record.ties !== null) {
+      return `${record.wins}-${record.losses}-${record.ties}`;
+    }
+    return `${record.wins}-${record.losses}`;
+  }
+
+  /**
+   * How long a league must have gone without a single game starting before its
+   * season — regular season **and** playoffs — is considered finished. Two
+   * months comfortably covers the longest post-season tail (a Game 7 in early
+   * summer) while staying well clear of the next season's opening fixtures.
+   */
   private static readonly SEASON_OVER_MONTHS = 2;
 
   /**
@@ -1045,10 +1369,73 @@ export class GameService {
         existingIds.add(team.uniqueId);
       }
     }
-    const leagueLogos = await this.getTeamsLogo(leagueTeams);
+    // Team logos are only needed by the PWHL path and by the
+    // full-schedule path (getLeagueGames). The records-only mode builds no
+    // game payloads, so it skips the logo lookup entirely.
+    let leagueLogos: Record<string, string> | undefined;
+    if (normalizedLeague === League.PWHL || teamRecords === undefined) {
+      leagueLogos = await this.getTeamsLogo(leagueTeams);
+    }
 
     let gamesObj = {};
-    if (normalizedLeague === League.PWHL) {
+
+    // Records-only mode (refreshCurrentSeasonRecords): only the per-team
+    // tallies are needed; the full schedules are discarded afterwards. Fetching
+    // them just to throw them away is what made this endpoint OOM the 460 MB
+    // heap. Per team we fetch the team's cumulative record directly (ESPN team
+    // detail) and fall back to its regular-season schedule when the detail
+    // endpoint carries no record (e.g. college hockey). No game object, no
+    // deduplication set, no applySeasonFinalRecords pass is ever built here.
+    // getLeagueGames() and the oldies dry-run still use the full schedule
+    // path below.
+    if (teamRecords) {
+      let detailFetched = 0;
+      let fallbackFetched = 0;
+      let failed = 0;
+      for (const team of leagueTeams) {
+        let record = '';
+        let fromDetail = false;
+        try {
+          const detail = await getTeamRecord(normalizedLeague, team.id);
+          if (detail?.record) {
+            record = this._toRecordString(detail.record);
+            fromDetail = record.length > 0;
+          }
+        } catch (error) {
+          console.error(
+            `[Records] Could not fetch the team detail record for ${normalizedLeague} ${team.uniqueId}:`,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        if (!record) {
+          try {
+            record = await getTeamRecordFromSchedule(normalizedLeague, team.id);
+          } catch (error) {
+            console.error(
+              `[Records] Could not fetch the team schedule record for ${normalizedLeague} ${team.uniqueId}:`,
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+        }
+        if (record) {
+          teamRecords.set(team.uniqueId, record);
+          if (fromDetail) {
+            detailFetched++;
+          } else {
+            fallbackFetched++;
+          }
+        } else {
+          failed++;
+        }
+      }
+      // Per-league completion log: the records-only mode fetches no schedule,
+      // so this replaces the per-team fetched-game count / distinct-game summary
+      // the full path logs (project rule: keep refresh observability).
+      console.info(
+        `[Records] ${normalizedLeague}: ${teamRecords.size}/${leagueTeams.length} team record(s) fetched ` +
+          `(${detailFetched} via team detail, ${fallbackFetched} via schedule fallback, ${failed} without record).`,
+      );
+    } else if (normalizedLeague === League.PWHL) {
       const hockeyData = new HockeyData();
       gamesObj = await hockeyData.getHockeySchedule(
         leagueTeams,
@@ -1332,6 +1719,158 @@ export class GameService {
       );
       return 0;
     }
+  }
+
+  /**
+   * Refreshes the seriesStatus of up to `limit` playoff series that have no
+   * declared winner (no "wins"/"over" in seriesStatus) but where all games of
+   * the series have been played and one team clearly won. The new label
+   * (e.g. "MIL wins series 4-2") is written to every game of the series so the
+   * whole series displays the correct result.
+   *
+   * Series are picked at random so the same ones are not processed on every run.
+   */
+  async refreshUndecidedPlayoffSeries(limit = 10): Promise<{ updated: number; series: string[] }> {
+    const now = new Date();
+
+    // Find playoff games with no declared winner in seriesStatus
+    const undecided = await this.gameModel
+      .find(
+        {
+          recordSeasonType: 3,
+          isActive: true,
+          $or: [
+            { seriesStatus: { $exists: false } },
+            { seriesStatus: '' },
+            { seriesStatus: { $not: /wins|over/i } },
+          ],
+        },
+        {
+          uniqueId: 1,
+          league: 1,
+          homeTeamId: 1,
+          awayTeamId: 1,
+          startTimeUTC: 1,
+          homeTeamScore: 1,
+          awayTeamScore: 1,
+          seriesStatus: 1,
+          _id: 1,
+        },
+      )
+      .lean()
+      .exec();
+
+    // Group by series: league + season year + both teams (sorted)
+    const seriesMap = new Map<
+      string,
+      {
+        league: string;
+        seasonYear: number;
+        teamA: string;
+        teamB: string;
+        gameIds: string[];
+      }
+    >();
+
+    for (const g of undecided) {
+      const seasonYear = new Date(g.startTimeUTC).getFullYear();
+      const teams = [g.homeTeamId, g.awayTeamId].sort().join('|');
+      const key = `${g.league}|${seasonYear}|${teams}`;
+      if (!seriesMap.has(key)) {
+        seriesMap.set(key, {
+          league: g.league,
+          seasonYear,
+          teamA: g.homeTeamId,
+          teamB: g.awayTeamId,
+          gameIds: [],
+        });
+      }
+      seriesMap.get(key)!.gameIds.push(g._id.toString());
+    }
+
+    // Pick up to `limit` series at random (Fisher-Yates shuffle)
+    const seriesKeys = Array.from(seriesMap.keys());
+    for (let i = seriesKeys.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [seriesKeys[i], seriesKeys[j]] = [seriesKeys[j], seriesKeys[i]];
+    }
+    const picked = seriesKeys.slice(0, limit);
+
+    let updated = 0;
+    const seriesUpdated: string[] = [];
+
+    for (const key of picked) {
+      const info = seriesMap.get(key)!;
+      // Fetch ALL games of this series (not just the undecided ones) to count wins
+      const seasonStart = new Date(info.seasonYear, 0, 1).toISOString();
+      const seasonEnd = new Date(info.seasonYear + 1, 0, 1).toISOString();
+      const seriesGames = await this.gameModel
+        .find({
+          league: info.league,
+          recordSeasonType: 3,
+          $or: [
+            { homeTeamId: info.teamA, awayTeamId: info.teamB },
+            { homeTeamId: info.teamB, awayTeamId: info.teamA },
+          ],
+          startTimeUTC: { $gte: seasonStart, $lt: seasonEnd },
+        })
+        .lean()
+        .exec();
+
+      if (seriesGames.length === 0) continue;
+
+      // Count wins per team
+      let winsA = 0;
+      let winsB = 0;
+      let gamesPlayed = 0;
+      for (const g of seriesGames) {
+        if (g.homeTeamScore == null || g.awayTeamScore == null) continue;
+        gamesPlayed++;
+        const homeIsTeamA = g.homeTeamId === info.teamA;
+        const homeWin = g.homeTeamScore > g.awayTeamScore;
+        if (homeIsTeamA) {
+          if (homeWin) winsA++; else winsB++;
+        } else {
+          if (homeWin) winsB++; else winsA++;
+        }
+      }
+
+      // Determine series winner (best-of-7: 4 wins; best-of-5: 3 wins)
+      const winsNeeded = gamesPlayed <= 5 ? 3 : 4;
+      let winner: string | null = null;
+      if (winsA >= winsNeeded) winner = info.teamA;
+      else if (winsB >= winsNeeded) winner = info.teamB;
+
+      if (!winner) continue; // No clear winner yet
+
+      const loser = winner === info.teamA ? info.teamB : info.teamA;
+      const winnerWins = winner === info.teamA ? winsA : winsB;
+      const loserWins = winner === info.teamA ? winsB : winsA;
+      const newStatus = `${winner} wins series ${winnerWins}-${loserWins}`;
+
+      // Update all games of this series
+      await this.gameModel
+        .updateMany(
+          {
+            league: info.league,
+            recordSeasonType: 3,
+            $or: [
+              { homeTeamId: info.teamA, awayTeamId: info.teamB },
+              { homeTeamId: info.teamB, awayTeamId: info.teamA },
+            ],
+            startTimeUTC: { $gte: seasonStart, $lt: seasonEnd },
+          },
+          { $set: { seriesStatus: newStatus } },
+        )
+        .exec();
+
+      updated += seriesGames.length;
+      seriesUpdated.push(
+        `${info.league} ${info.seasonYear}: ${winner} beats ${loser} ${winnerWins}-${loserWins}`,
+      );
+    }
+
+    return { updated, series: seriesUpdated };
   }
 
   async getLeagueGames(params): Promise<any> {
@@ -1673,9 +2212,11 @@ export class GameService {
       if (uniqueGames && uniqueGames.length > 0) {
         // Oldies recovery: only ever add missing games without overwriting an existing match.
         // A game is considered "already present" (same game) only when its uniqueId matches,
-        // both the home and the away scores match the stored ones AND the stored team records
-        // already match (or are absent) — so seasons fetched before per-game records existed
-        // are backfilled instead of being skipped forever.
+        // both the home and the away scores match the stored ones, AND the stored team records
+        // and season phase (`recordSeasonType`) already match (or are absent) — so seasons
+        // fetched before per-game records existed, and games stored before the phase was
+        // persisted (a preseason game invisible to the 1-year preseason retention), are
+        // backfilled instead of being skipped forever.
         // Otherwise we refresh it with the fresh (more complete) data.
         const existingResults = new Map<
           string,
@@ -1684,6 +2225,8 @@ export class GameService {
             awayTeamScore?: number;
             homeTeamRecord?: string;
             awayTeamRecord?: string;
+            recordSeasonType?: number;
+            seriesStatus?: string;
           }
         >();
         if (addMissingOnly) {
@@ -1698,6 +2241,8 @@ export class GameService {
                   awayTeamScore: 1,
                   homeTeamRecord: 1,
                   awayTeamRecord: 1,
+                  recordSeasonType: 1,
+                  seriesStatus: 1,
                   _id: 0,
                 },
               )
@@ -1709,6 +2254,8 @@ export class GameService {
                 awayTeamScore: g?.awayTeamScore,
                 homeTeamRecord: g?.homeTeamRecord,
                 awayTeamRecord: g?.awayTeamRecord,
+                recordSeasonType: g?.recordSeasonType,
+                seriesStatus: g?.seriesStatus,
               });
             }
           }
@@ -1735,13 +2282,22 @@ export class GameService {
           game.isActive = true;
 
           if (addMissingOnly) {
-            // Treat as "already present" only ifthe stored game has the same result
-            // (id AND home/away scores) and already carries the same team records.
-            // The records comparison is what backfills games stored before per-game
-            // records were introduced.
+            // Treat as "already present" only if the stored game has the same result
+            // (id AND home/away scores), already carries the same team records, and the
+            // same season phase. The records comparison backfills games stored before
+            // per-game records were introduced; the `recordSeasonType` comparison
+            // backfills games stored before the phase was persisted, so a preseason
+            // game becomes visible to the 1-year preseason retention. The phase only
+            // forces a refresh when the fetch carries a value (a provider that omits
+            // it must not rewrite the stored game on every run).
             const stored = game?.uniqueId
               ? existingResults.get(game?.uniqueId)
               : undefined;
+            const fetchedPhase = game?.recordSeasonType;
+            const samePhase =
+              fetchedPhase === undefined ||
+              fetchedPhase === null ||
+              (stored?.recordSeasonType ?? null) === fetchedPhase;
             const sameResult =
               stored &&
               (stored.homeTeamScore ?? null) ===
@@ -1749,7 +2305,9 @@ export class GameService {
               (stored.awayTeamScore ?? null) ===
                 (game?.awayTeamScore ?? null) &&
               (stored.homeTeamRecord ?? '') === (game?.homeTeamRecord ?? '') &&
-              (stored.awayTeamRecord ?? '') === (game?.awayTeamRecord ?? '');
+              (stored.awayTeamRecord ?? '') === (game?.awayTeamRecord ?? '') &&
+              (stored.seriesStatus ?? '') === (game?.seriesStatus ?? '') &&
+              samePhase;
             if (game?.uniqueId && sameResult) {
               skippedExisting++;
               logInsertProgress(idx + 1);
@@ -2280,6 +2838,16 @@ export class GameService {
       .slice(0, safeLimit);
   }
 
+  /**
+   * Completed results of a whole league, bounded by "5000 results or 4 years"
+   * when the client sends no bound: `startDate` defaults to
+   * `leagueResultsYearsToKeep` years ago and `maxResults` to
+   * `leagueResultsMaxResults`. The underlying query runs **newest-first** so
+   * the cap keeps the most recent games; `filterGames` then restores the
+   * chronological order of the returned `gamesByDay` payload. A team
+   * selection (`findResultsByTeam()`) is deliberately unbounded (outside the
+   * global retention window).
+   */
   async findResultsByLeague(
     league: string,
     startDate?: string,
@@ -2288,11 +2856,11 @@ export class GameService {
     if (!startDate) {
       const fewYearsAgo = new Date();
       fewYearsAgo.setFullYear(
-        fewYearsAgo.getFullYear() - this.maxYearBeforeDelete,
+        fewYearsAgo.getFullYear() - this.leagueResultsYearsToKeep,
       );
       startDate = readableDate(fewYearsAgo);
     }
-    maxResults = maxResults || 5000;
+    maxResults = maxResults || this.leagueResultsMaxResults;
 
     const today = readableDate(new Date());
 
@@ -2303,6 +2871,7 @@ export class GameService {
       clean: true,
       selectedTeam: true,
       maxResults,
+      sortDirection: 'desc',
     });
 
     for (const date in games) {
@@ -2349,6 +2918,7 @@ export class GameService {
     selectedTeam = undefined,
     isHome = undefined,
     clean = undefined,
+    sortDirection = undefined,
   }) {
     const filter: any = { isActive: true };
 
@@ -2383,7 +2953,7 @@ export class GameService {
 
     const filtredGames = await this.gameModel
       .find(filter)
-      .sort({ startTimeUTC: 1 })
+      .sort({ startTimeUTC: sortDirection === 'desc' ? -1 : 1 })
       .skip(skip ? Number.parseInt(skip, 10) : 0)
       .limit(maxResults ? Number.parseInt(maxResults, 10) : 0)
       .lean()
@@ -2408,6 +2978,12 @@ export class GameService {
           this._enrichGameWithTeamData(game, teamsMap),
         )
       : [];
+    // A descending query only exists so `limit` keeps the most recent games;
+    // the payload itself stays chronological (day keys, and within-day order
+    // after the per-team grouping below) for every consumer.
+    if (sortDirection === 'desc') {
+      games.reverse();
+    }
     const gamesByDay = {};
     const uniqueTeamSelectedIds = teamSelectedIds
       ? this.expandOlympicTeamIds(teamSelectedIds.split(',').map((item) => item.trim()).filter(Boolean))
@@ -2622,32 +3198,107 @@ export class GameService {
     // E.g., "2025-10-23" to match the format of your gameDate field
     const maxYearsAgoStr = maxYearsAgo.toISOString().split('T')[0];
 
-    // 1. Delete games older than 5 years directly in DB for efficiency
-    const deleteResult = await this.gameModel.deleteMany({
+    const oldFilter = {
       $or: [
         {
-          // Condition 1: startTimeUTC is valid and older than 5 years
+          // Condition 1: startTimeUTC is valid and older than the limit
           startTimeUTC: {
             $lt: maxYearsAgoISO,
             $nin: ['', null], // Ignore empty or null fields here
           },
         },
         {
-          // Condition 2 (safety net): gameDate is older than 5 years
+          // Condition 2 (safety net): gameDate is older than the limit
           gameDate: {
             $lt: maxYearsAgoStr,
             $nin: ['', null],
           },
         },
       ],
-    });
+    };
+
+    // Count old games by league BEFORE deleting them (per-league breakdown).
+    const oldByLeagueRows =
+      (await this.gameModel.aggregate([
+        { $match: oldFilter },
+        { $group: { _id: '$league', count: { $sum: 1 } } },
+      ])) || [];
+    const oldGamesByLeague: Record<string, number> = {};
+    for (const row of oldByLeagueRows) {
+      oldGamesByLeague[String(row._id)] = row.count;
+    }
+
+    // 1. Delete games older than maxYearBeforeDelete years directly in DB for efficiency
+    const deleteResult = await this.gameModel.deleteMany(oldFilter);
 
     console.info(
       `Deleted ${deleteResult.deletedCount} games older than ${this.maxYearBeforeDelete} years.`,
     );
 
-    // 2. Handle duplicates among remaining active games
-    const games = await this.gameModel.find({ isActive: true }).exec();
+    // 1b. Delete preseason games older than preseasonYearsToKeep years.
+    // Preseason has little historical value: a preseason game stays 1 year in
+    // the DB, then it is really removed (deleteMany), even when the regular
+    // retention window (maxYearBeforeDelete) has not expired yet.
+    const preseasonCutoff = new Date();
+    preseasonCutoff.setFullYear(
+      preseasonCutoff.getFullYear() - this.preseasonYearsToKeep,
+    );
+    const preseasonCutoffISO = preseasonCutoff.toISOString();
+    const preseasonCutoffStr = preseasonCutoff.toISOString().split('T')[0];
+
+    const preseasonFilter = {
+      recordSeasonType: 1,
+      $or: [
+        {
+          startTimeUTC: {
+            $lt: preseasonCutoffISO,
+            $nin: ['', null],
+          },
+        },
+        {
+          gameDate: {
+            $lt: preseasonCutoffStr,
+            $nin: ['', null],
+          },
+        },
+      ],
+    };
+
+    // Count old preseason games by league BEFORE deleting them.
+    const preseasonByLeagueRows =
+      (await this.gameModel.aggregate([
+        { $match: preseasonFilter },
+        { $group: { _id: '$league', count: { $sum: 1 } } },
+      ])) || [];
+    const preseasonGamesByLeague: Record<string, number> = {};
+    for (const row of preseasonByLeagueRows) {
+      preseasonGamesByLeague[String(row._id)] = row.count;
+    }
+
+    const preseasonDeleteResult = await this.gameModel.deleteMany(preseasonFilter);
+
+    console.info(
+      `Deleted ${preseasonDeleteResult.deletedCount} preseason games older than ${this.preseasonYearsToKeep} year(s).`,
+    );
+
+    // 2. Handle duplicates among remaining active games.
+    // Only the dedup key, the two scores and the league are needed below, so
+    // the query projects just those fields and uses `.lean()` to get plain JS
+    // objects instead of full Mongoose documents. Materialising every active
+    // game (full documents) into the Node heap is what OOM-killed the process
+    // behind Render's 460 MB limit and surfaced as a 502 on this endpoint.
+    const games = await this.gameModel
+      .find({ isActive: true })
+      .select({
+        uniqueId: 1,
+        league: 1,
+        teamSelectedId: 1,
+        startTimeUTC: 1,
+        homeTeamScore: 1,
+        awayTeamScore: 1,
+      })
+      .lean()
+      .exec();
     const duplicates = [];
     const gameMap = new Map();
 
@@ -2671,6 +3322,13 @@ export class GameService {
       }
     }
 
+    // Per-league breakdown of duplicate removals (we already have the objects).
+    const duplicatesByLeague: Record<string, number> = {};
+    for (const duplicate of duplicates) {
+      const league = String(duplicate.league);
+      duplicatesByLeague[league] = (duplicatesByLeague[league] || 0) + 1;
+    }
+
     for (const duplicate of duplicates) {
       await this.remove(duplicate.uniqueId);
     }
@@ -2679,6 +3337,41 @@ export class GameService {
     // per-team counts behind `GET /teams?minGames=…`.
     this.teamService.clearActiveGameCountCache?.();
     console.info('End of removing duplicates and old games...');
+
+    const oldTotal = Object.values(oldGamesByLeague).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    const preseasonTotal = Object.values(preseasonGamesByLeague).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    const duplicatesTotal = duplicates.length;
+
+    // Merge all three sources into a single per-league summary.
+    const deletedByLeague: Record<string, number> = {};
+    for (const map of [
+      oldGamesByLeague,
+      preseasonGamesByLeague,
+      duplicatesByLeague,
+    ]) {
+      for (const [league, count] of Object.entries(map)) {
+        deletedByLeague[league] = (deletedByLeague[league] || 0) + count;
+      }
+    }
+
+    return {
+      totalDeleted: oldTotal + preseasonTotal + duplicatesTotal,
+      deletedByLeague,
+      details: {
+        oldGames: { total: oldTotal, byLeague: oldGamesByLeague },
+        preseasonGames: {
+          total: preseasonTotal,
+          byLeague: preseasonGamesByLeague,
+        },
+        duplicates: { total: duplicatesTotal, byLeague: duplicatesByLeague },
+      },
+    };
   }
 
   async removeLeague(league: string): Promise<DeleteResult> {
@@ -3395,16 +4088,13 @@ export class GameService {
       game.dataChangedAt = now;
     }
     game.gameStatus = resolvedStatus;
-    // Series fields: the round label (`seriesSummary`) is only overwritten by
-    // a non-empty fresh value, and a series evolution (`seriesStatus` such as
-    // "MIL leads 3-0") is only overwritten by another evolution ("LAD ties
-    // series 2-2", "MIL wins series 4-0"). A sync answering with an empty
-    // status (the team-schedule endpoint carries no `series.summary`) or with
-    // a mere round label ("NLDS - Game 3") must not wipe the stored
-    // evolution, otherwise the display priority of
-    // `_enrichGameWithTeamData()` would fall back to `seriesSummary`. A
-    // stored non-evolution value (e.g. PWHL's "Game 2") still accepts any
-    // non-empty fresh value.
+    // Series fields — same strict-scope + forward-only rule as `create()`:
+    // the round label (`seriesSummary`) is only overwritten by a non-empty
+    // fresh value, and a stored evolution ("MIL leads 3-0") is never wiped
+    // and only moves forward ("MIL wins series 4-0"), never backwards.
+    // A game-number label ("Game 3", "NLCS - Game 3") belongs in the summary
+    // only and can never overwrite a stored evolution. Impossible labels
+    // ("8-0") are rejected so they self-heal.
     if (matchedScore.seriesSummary) {
       game.seriesSummary = matchedScore.seriesSummary;
     }
@@ -3412,12 +4102,105 @@ export class GameService {
       typeof matchedScore.seriesStatus === 'string'
         ? matchedScore.seriesStatus.trim()
         : '';
+    const storedSyncStatus =
+      typeof game.seriesStatus === 'string' ? game.seriesStatus.trim() : '';
+
+    // ESPN sometimes reports the current series evolution in the round label
+    // (seriesSummary, from notes[0].headline) rather than in series.summary.
+    // Use seriesSummary as the fresh series status when:
+    //   - seriesStatus is empty (ESPN omitted it), or
+    //   - seriesSummary carries a MORE ADVANCED evolution (more games played)
+    //     than seriesStatus (e.g. ESPN reports "CLE leads series 2-1" in
+    //     seriesStatus but "Series tied 2-2" in seriesSummary).
+    let effectiveFreshSeriesStatus = freshSeriesStatus;
+    if (matchedScore.seriesSummary) {
+      const summaryTrimmed = matchedScore.seriesSummary.trim();
+      if (
+        this._isSeriesEvolution(summaryTrimmed) &&
+        this._isValidSeriesEvolution(summaryTrimmed)
+      ) {
+        const currentScore = this._parseSeriesScore(
+          effectiveFreshSeriesStatus,
+        );
+        const summaryScore = this._parseSeriesScore(summaryTrimmed);
+        if (
+          !currentScore ||
+          (summaryScore && summaryScore.total > currentScore.total)
+        ) {
+          effectiveFreshSeriesStatus = summaryTrimmed;
+        }
+      }
+    }
+
+    if (this._isGameNumberLabel(freshSeriesStatus)) {
+      // Reroute to the round label — unless the stored status is itself a
+      // game number (PWHL labels every game "Game N"): then the plain
+      // non-empty rule applies below and the newer number wins.
+      if (!storedSyncStatus || !this._isGameNumberLabel(storedSyncStatus)) {
+        delete (matchedScore as any).seriesStatus;
+        if (!game.seriesSummary) game.seriesSummary = freshSeriesStatus;
+      }
+    }
+    // Use effectiveFreshSeriesStatus (may fall back to seriesSummary) for the
+    // series evolution update; only act when there is a fresh value to compare.
+    if (effectiveFreshSeriesStatus) {
+      if (!storedSyncStatus) {
+        if (
+          !this._isSeriesEvolution(effectiveFreshSeriesStatus) ||
+          this._isValidSeriesEvolution(effectiveFreshSeriesStatus)
+        ) {
+          game.seriesStatus = effectiveFreshSeriesStatus;
+        }
+      } else if (
+        !this._isSeriesEvolution(storedSyncStatus) &&
+        effectiveFreshSeriesStatus !== storedSyncStatus
+      ) {
+        game.seriesStatus = effectiveFreshSeriesStatus;
+      } else if (
+        this._mayReplaceSeriesStatus(
+          storedSyncStatus,
+          effectiveFreshSeriesStatus
+        )
+      ) {
+        game.seriesStatus = effectiveFreshSeriesStatus;
+      }
+    }
+
+    // Propagate the refreshed series status to every other game of the same
+    // series (same league, same two teams) so the whole series displays the
+    // current label instead of a stale one. Only playoff games (identified by
+    // a non-empty seriesSummary) are touched, so regular-season rematches
+    // between the same teams are never affected.
     if (
-      freshSeriesStatus &&
-      (!this._isSeriesEvolution(game.seriesStatus) ||
-        this._isSeriesEvolution(freshSeriesStatus))
+      game._id &&
+      game.seriesStatus &&
+      game.league &&
+      game.homeTeamId &&
+      game.awayTeamId
     ) {
-      game.seriesStatus = matchedScore.seriesStatus;
+      try {
+        await this.gameModel.updateMany(
+          {
+            league: game.league,
+            _id: { $ne: game._id },
+            $or: [
+              {
+                homeTeamId: game.homeTeamId,
+                awayTeamId: game.awayTeamId,
+              },
+              {
+                homeTeamId: game.awayTeamId,
+                awayTeamId: game.homeTeamId,
+              },
+            ],
+            seriesSummary: { $exists: true, $nin: [null, ''] },
+            seriesStatus: { $ne: game.seriesStatus },
+          },
+          { $set: { seriesStatus: game.seriesStatus } },
+        ).exec();
+      } catch {
+        // Propagation is best-effort: the primary game is already updated.
+      }
     }
 
     // Update team records.
@@ -3505,27 +4288,89 @@ export class GameService {
       }
     }
 
-    // Propagate series info to future games in the same series
-    // This allows users to see the series lead/status on future scheduled games
-    if (game.seriesSummary || game.seriesStatus) {
-      await this.gameModel
-        .updateMany(
-          {
-            league: game.league,
-            startTimeUTC: { $gt: game.startTimeUTC },
-            $or: [
-              { homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId },
-              { homeTeamId: game.awayTeamId, awayTeamId: game.homeTeamId },
-            ],
-          },
-          {
-            $set: {
-              seriesSummary: game.seriesSummary,
-              seriesStatus: game.seriesStatus,
-            },
-          },
-        )
-        .exec();
+    // Propagate series info to every game of the same playoff series
+    // (strict scope: playoffs between the same two teams in the same season).
+    // The latest game's stored evolution (e.g. "MIL wins series 4-0") is
+    // authoritative for the whole series, but the write never moves a game
+    // backwards: a stored "wins 4-0" is kept when the propagated label is an
+    // older "leads 3-0", and impossible labels ("8-0") are never written.
+    if (
+      game.seriesSummary ||
+      (game.seriesStatus && this._isValidSeriesEvolution(game.seriesStatus))
+    ) {
+      const season = (game.gameDate || '').slice(0, 4);
+      const seriesFilter: any = {
+        league: game.league,
+        startTimeUTC: { $ne: game.startTimeUTC },
+        $or: [
+          { homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId },
+          { homeTeamId: game.awayTeamId, awayTeamId: game.homeTeamId },
+        ],
+      };
+      // Only playoff games of the same season belong to the series.
+      if (season) {
+        seriesFilter.gameDate = {
+          $gte: `${season}-01-01`,
+          $lte: `${season}-12-31`,
+        };
+        seriesFilter.recordSeasonType = 3;
+      }
+      const setSeries: any = {};
+      if (game.seriesSummary) setSeries.seriesSummary = game.seriesSummary;
+      if (game.seriesStatus && this._isValidSeriesEvolution(game.seriesStatus)) {
+        setSeries.seriesStatus = game.seriesStatus;
+      }
+      const sameSeriesQuery: any = this.gameModel.find(seriesFilter, {
+        uniqueId: 1,
+        seriesStatus: 1,
+        _id: 0,
+      });
+      const sameSeriesLean =
+        typeof sameSeriesQuery?.lean === 'function'
+          ? sameSeriesQuery.lean()
+          : sameSeriesQuery;
+      const sameSeriesGames =
+        typeof sameSeriesLean?.exec === 'function'
+          ? await sameSeriesLean.exec()
+          : sameSeriesLean;
+      const forwardIds: string[] = [];
+      const fallbackIds: string[] = [];
+      for (const target of (Array.isArray(sameSeriesGames) ? sameSeriesGames : []) as any[]) {
+        if (!target?.uniqueId) continue;
+        const storedTarget =
+          typeof target.seriesStatus === 'string'
+            ? target.seriesStatus.trim()
+            : '';
+        if (
+          setSeries.seriesStatus &&
+          storedTarget &&
+          this._isSeriesEvolution(storedTarget) &&
+          this._isValidSeriesEvolution(storedTarget) &&
+          !this._mayReplaceSeriesStatus(
+            storedTarget,
+            String(setSeries.seriesStatus),
+          )
+        ) {
+          // Target is already ahead (e.g. "wins 4-0" vs propagated
+          // "leads 3-0"): keep its advancement, only refresh the label.
+          if (setSeries.seriesSummary) fallbackIds.push(target.uniqueId);
+          continue;
+        }
+        forwardIds.push(target.uniqueId);
+      }
+      if (fallbackIds.length > 0 && setSeries.seriesSummary) {
+        await this.gameModel
+          .updateMany(
+            { uniqueId: { $in: fallbackIds } },
+            { $set: { seriesSummary: setSeries.seriesSummary } },
+          )
+          .exec();
+      }
+      if (forwardIds.length > 0) {
+        await this.gameModel
+          .updateMany({ uniqueId: { $in: forwardIds } }, { $set: setSeries })
+          .exec();
+      }
     }
 
     // Update isActive based on resolved status
@@ -3709,33 +4554,28 @@ export class GameService {
    * 12-hour status guard) but grouped by **league** instead of by time slot.
    *
    * Used by the frontend day view for past dates, where a league is a more
-   * meaningful section than a kick-off hour. Everything (grouping, ordering,
-   * favorites extraction) is computed here so the client only renders the
-   * payload:
+   * meaningful section than a kick-off hour. Everything (grouping, ordering)
+   * is computed here so the client only renders the payload:
    *
    * ```
    * {
    *   groups: [
-   *     { key: 'FAVORITES', games: [...] }, // only when favoriteTeams matches
-   *     { key: 'MLB', games: [...] },       // leagues in alphabetical order
+   *     { key: 'MLB', games: [...] }, // leagues in alphabetical order
    *     { key: 'NBA', games: [...] },
    *   ]
    * }
    * ```
    *
-   * The `FAVORITES` group is a *duplicate* view: those games also stay in
-   * their league group. Within every group the games are ordered from oldest
-   * to most recent (`startTimeUTC` ascending).
-   *
-   * `favoriteTeams` is a comma / space / `+` separated list of team
-   * `uniqueId`s (e.g. `NHL-BOS,MLB-CHC`).
+   * Within every group the games are ordered from oldest to most recent
+   * (`startTimeUTC` ascending). Favorite-team games are *not* extracted into
+   * their own section anymore: the frontend star FAVORITES chip filters them
+   * client-side, inside each league group.
    */
   async findByDateLeague(
     gameDate: string,
     leagues?: string,
     maxResults?: number,
     skip?: number,
-    favoriteTeams?: string,
   ): Promise<{ groups: { key: string; games: any[] }[] }> {
     const games = await this._findEnrichedGamesForDay(
       gameDate,
@@ -3753,22 +4593,6 @@ export class GameService {
 
     const groups: { key: string; games: any[] }[] = [];
 
-    const favoriteIds = (favoriteTeams ?? '')
-      .split(/[ ,+]+/)
-      .map((teamId) => teamId.trim())
-      .filter((teamId) => teamId.length > 0);
-
-    if (favoriteIds.length > 0) {
-      const favoriteGames = games.filter(
-        (game) =>
-          favoriteIds.includes(game.homeTeamId) ||
-          favoriteIds.includes(game.awayTeamId),
-      );
-      if (favoriteGames.length > 0) {
-        groups.push({ key: 'FAVORITES', games: favoriteGames });
-      }
-    }
-
     const gamesByLeague = new Map<string, any[]>();
 
     games.forEach((game) => {
@@ -3784,10 +4608,6 @@ export class GameService {
     const byStartTimeAsc = (gameA: any, gameB: any) =>
       new Date(gameA.startTimeUTC).getTime() -
       new Date(gameB.startTimeUTC).getTime();
-
-    if (groups.length > 0) {
-      groups[0].games.sort(byStartTimeAsc);
-    }
 
     Array.from(gamesByLeague.keys())
       .sort((leagueA, leagueB) => leagueA.localeCompare(leagueB))

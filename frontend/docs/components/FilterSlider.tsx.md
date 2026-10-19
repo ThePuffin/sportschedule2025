@@ -7,7 +7,7 @@ The **FilterSlider** component displays a horizontal scrollable row of filter ch
 ## Key Features
 
 - **Horizontal scroll** — chips scroll horizontally with mouse drag support on web
-- **Sorting** — selected item first, then ALL, then BOOKMARKS, then favorites, then others
+- **Sorting** — selected item first, then ALL, then the star FAVORITES chip, then BOOKMARKS, then favorites, then others
 - **Multiple selection** — supports multi-select mode
 - **Disabled items** — dimmed and non-clickable
 - **Favorite highlighting** — favorite items appear first
@@ -48,10 +48,11 @@ Sorts items in this order:
 
 1. Currently selected item (first)
 2. ALL / all / empty value item
-3. BOOKMARKS item
-4. Favorite items (alphabetical)
-5. Other items (alphabetical)
-6. If `disabledValues` provided: active items first, then disabled items
+3. FAVORITES (star) item
+4. BOOKMARKS item
+5. Favorite items (alphabetical)
+6. Other items (alphabetical)
+7. If `disabledValues` provided: active items first, then disabled items
 
 ### Mouse drag scrolling (web)
 
