@@ -4,7 +4,6 @@ import {
   isGameAwaitingFinalization,
   isLiveFeedStale,
   STALE_FEED_MINUTES,
-  yearsBeforeCurrentYear,
 } from "@/utils/date";
 import type { GameFormatted } from "@/utils/types";
 
@@ -287,24 +286,5 @@ describe("isGameAwaitingFinalization with a silent feed", () => {
         gameClock: "02:00",
       }),
     ).toBe(false);
-  });
-});
-
-describe("yearsBeforeCurrentYear", () => {
-  it("returns January 1st N calendar years before the given date", () => {
-    // Mid-year date: keeps the four years before the current one
-    // (2022, 2023, 2024, 2025) plus the current year (2026) itself.
-    expect(yearsBeforeCurrentYear(4, new Date(2026, 9, 19))).toBe("2022-01-01");
-  });
-
-  it("is stable at the turn of the year", () => {
-    expect(yearsBeforeCurrentYear(4, new Date(2026, 0, 1))).toBe("2022-01-01");
-    expect(yearsBeforeCurrentYear(4, new Date(2026, 11, 31))).toBe(
-      "2022-01-01",
-    );
-  });
-
-  it("keeps the requested number of years", () => {
-    expect(yearsBeforeCurrentYear(1, new Date(2026, 5, 15))).toBe("2025-01-01");
   });
 });

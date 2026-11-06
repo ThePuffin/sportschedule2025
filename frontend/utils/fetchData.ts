@@ -281,19 +281,38 @@ const fetchWithTimeout = (
   url: string,
   timeoutMs: number = 6000,
   options: RequestInit = {},
+  signal?: AbortSignal,
 ) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
+  let externalAbortListener: (() => void) | null = null;
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      externalAbortListener = () => controller.abort();
+      signal.addEventListener('abort', externalAbortListener);
+    }
+  }
+
   const mergedOptions: RequestInit = { ...options, signal: controller.signal };
+
+  const removeListener = () => {
+    if (externalAbortListener && signal) {
+      signal.removeEventListener('abort', externalAbortListener);
+    }
+  };
 
   return fetch(url, mergedOptions)
     .then((res) => {
       clearTimeout(timeout);
+      removeListener();
       return res;
     })
     .catch((error) => {
       clearTimeout(timeout);
+      removeListener();
       throw error;
     });
 };
@@ -306,14 +325,19 @@ const fetchWithCacheStrategy = async <T>(
   customSaveCache?: (data: T) => void,
   retryTimeout: number = 10000,
   storage: Storage = localStorage,
+  signal?: AbortSignal,
 ): Promise<T> => {
   try {
-    const res = await fetchWithTimeout(url, 5000);
+    const res = await fetchWithTimeout(url, 5000, {}, signal);
     const data = (await res.json()) as T;
     if (cacheKey) saveCache(cacheKey, data, storage);
     if (customSaveCache) customSaveCache(data);
     return data;
-  } catch {
+  } catch (error) {
+    // If the caller aborted the request, do not fall back to cache or retry:
+    // propagate the abort so the UI can ignore the stale response.
+    if (signal?.aborted) throw error;
+
     console.warn(`Fetch failed for ${url} (5s). Checking cache...`);
 
     let cached: T | null = null;
@@ -332,7 +356,7 @@ const fetchWithCacheStrategy = async <T>(
     await new Promise((resolve) => setTimeout(resolve, 10000));
 
     try {
-      const res = await fetchWithTimeout(url, retryTimeout);
+      const res = await fetchWithTimeout(url, retryTimeout, {}, signal);
       const data = (await res.json()) as T;
       if (cacheKey) saveCache(cacheKey, data, storage);
       if (customSaveCache) customSaveCache(data);
@@ -348,6 +372,7 @@ export const fetchGamesByHour = async (
   date: string,
   limit?: number,
   skip?: number,
+  signal?: AbortSignal,
 ): Promise<{ [key: string]: GameFormatted[] }> => {
   const leaguesSelected = getCache<string[]>("leaguesSelected") || [];
   let cacheKey = `games_hour_${date}`;
@@ -388,6 +413,7 @@ export const fetchGamesByHour = async (
     undefined,
     100000,
     sessionStorage,
+    signal,
   );
 };
 
@@ -395,6 +421,7 @@ export const fetchGamesByLeagueDay = async (
   date: string,
   limit?: number,
   skip?: number,
+  signal?: AbortSignal,
 ): Promise<LeagueDayGroup[]> => {
   const leaguesSelected = getCache<string[]>("leaguesSelected") || [];
   let cacheKey = `games_league_day_${date}`;
@@ -435,35 +462,77 @@ export const fetchGamesByLeagueDay = async (
     undefined,
     100000,
     sessionStorage,
+    signal,
   );
 
   return data?.groups ?? [];
+};
+
+// Maximum validity of the leagues cache used by the index page. A cached value
+// is still returned to the UI within this window (stale-while-revalidate) with
+// no network call at all.
+const LEAGUES_CACHE_TTL_HOURS = 72;
+
+// If the cached value is older than this, a background refresh is triggered so
+// the list stays in sync (e.g. after a timezone change). The UI is never
+// blocked: the cached value is returned immediately and the cache is updated
+// once the background fetch settles.
+const LEAGUES_BACKGROUND_REFRESH_HOURS = 6;
+
+/** Fetches the leagues from the API, updates the cache and notifies the UI.
+ *  Used both for foreground fetches (cache expired) and background refreshes
+ *  (cache stale but still usable). */
+const fetchLeaguesData = async (
+  cacheKey: string,
+  setLeaguesAvailable: (leagues: string[]) => void,
+): Promise<string[]> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const res = await fetch(`${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`, {
+      signal: controller.signal,
+    });
+    const data = (await res.json()) as string[];
+    saveCache(cacheKey, data);
+    setLeaguesAvailable(data);
+    return data;
+  } catch (error) {
+    console.warn("Failed to refresh leagues cache", error);
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 export const fetchLeagues = async (
   setLeaguesAvailable: (leagues: string[]) => void,
 ) => {
   const cacheKey = "leagues";
+  const now = Date.now();
 
-  if (isCacheValid(cacheKey, 24)) {
-    const cached = getCache<string[]>(cacheKey);
-    if (cached) {
-      console.info("Using cached leagues");
-      setLeaguesAvailable(cached);
-      return cached;
+  const cached = getCache<string[]>(cacheKey);
+  const timestampStr = localStorage.getItem(`${cacheKey}_timestamp`);
+  const timestamp = timestampStr ? Number.parseInt(timestampStr, 10) : NaN;
+  const ttlMs = LEAGUES_CACHE_TTL_HOURS * 60 * 60 * 1000;
+  const isFresh = !Number.isNaN(timestamp) && now - timestamp < ttlMs;
+
+  // Cache hit and still fresh (< 24 h): return immediately without network.
+  if (isFresh && cached) {
+    console.info("Using cached leagues");
+    setLeaguesAvailable(cached);
+
+    // Stale-but-valid: trigger a background refresh if older than 6 h. This
+    // does not block the UI — the cached value is returned right away.
+    if (!Number.isNaN(timestamp) && now - timestamp > LEAGUES_BACKGROUND_REFRESH_HOURS * 60 * 60 * 1000) {
+      void fetchLeaguesData(cacheKey, setLeaguesAvailable);
     }
+
+    return cached;
   }
 
-  const data = await fetchWithCacheStrategy<string[]>(
-    `${EXPO_PUBLIC_API_BASE_URL}/teams/leagues`,
-    cacheKey,
-    [],
-    undefined,
-    undefined,
-    60000,
-  );
-  setLeaguesAvailable(data);
-  return data;
+  // Cache missing or expired (> 24 h): fetch and wait.
+  return fetchLeaguesData(cacheKey, setLeaguesAvailable);
 };
 
 export const fetchTeams = async (): Promise<Team[]> => {
@@ -618,6 +687,7 @@ export const restrictToSelectableTeams = (
 export const fetchRemainingGamesByTeam = async (
   teamSelected: string,
   startDate?: string,
+  signal?: AbortSignal,
 ) => {
   const teamIds = getOlympicTeamIds(teamSelected);
   const cacheTeamId = teamIds.join(",");
@@ -653,6 +723,8 @@ export const fetchRemainingGamesByTeam = async (
       }
     },
     60000,
+    undefined,
+    signal,
   );
 };
 
@@ -727,6 +799,7 @@ export const fetchRecentFormGames = async (
 export const fetchResultsByTeam = async (
   teamSelected: string,
   startDate?: string,
+  signal?: AbortSignal,
 ) => {
   const teamIds = getOlympicTeamIds(teamSelected);
   let url = `${EXPO_PUBLIC_API_BASE_URL}/games/team/${teamIds.join(",")}/results`;
@@ -740,6 +813,8 @@ export const fetchResultsByTeam = async (
     undefined,
     undefined,
     60000,
+    undefined,
+    signal,
   );
 };
 
@@ -747,6 +822,7 @@ export const fetchResultsByLeague = async (
   league: string,
   startDate?: string,
   maxResults?: number,
+  signal?: AbortSignal,
 ) => {
   let url = `${EXPO_PUBLIC_API_BASE_URL}/games/league/${league}/results`;
   if (startDate) {
@@ -762,6 +838,8 @@ export const fetchResultsByLeague = async (
     undefined,
     undefined,
     60000,
+    undefined,
+    signal,
   );
 };
 
@@ -771,6 +849,7 @@ export const fetchRemainingGamesByLeague = async (
   skip?: number,
   startDate?: string,
   isHome?: boolean,
+  signal?: AbortSignal,
 ) => {
   let cacheKey = `games_league_${league}`;
   if (limit) {
@@ -811,11 +890,16 @@ export const fetchRemainingGamesByLeague = async (
     undefined,
     undefined,
     60000,
+    undefined,
+    signal,
   );
 };
 
-export const smallFetchRemainingGamesByLeague = async (league: string) => {
-  return fetchRemainingGamesByLeague(league, 50, undefined, undefined, true);
+export const smallFetchRemainingGamesByLeague = async (
+  league: string,
+  signal?: AbortSignal,
+) => {
+  return fetchRemainingGamesByLeague(league, 50, undefined, undefined, true, signal);
 };
 
 export const refreshGamesLeague = async (league: string): Promise<void> => {
@@ -846,7 +930,10 @@ export const refreshTeams = async (endpoint: string): Promise<void> => {
   }
 };
 
-export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
+export const fetchGames = async (
+  date: string,
+  signal?: AbortSignal,
+): Promise<GameFormatted[]> => {
   date = date || new Date().toISOString().split("T")[0];
   return fetchWithCacheStrategy<GameFormatted[]>(
     `${EXPO_PUBLIC_API_BASE_URL}/games/date/${date}`,
@@ -855,11 +942,14 @@ export const fetchGames = async (date: string): Promise<GameFormatted[]> => {
     undefined,
     undefined,
     10000,
+    undefined,
+    signal,
   );
 };
 
 export const fetchLiveScores = async (
   gameIds: string[],
+  signal?: AbortSignal,
 ): Promise<GameFormatted[]> => {
   if (gameIds.length === 0) return [];
 
@@ -874,6 +964,7 @@ export const fetchLiveScores = async (
         },
         body: JSON.stringify({ gameIds }),
       },
+      signal,
     );
 
     if (res.ok) {
@@ -886,11 +977,14 @@ export const fetchLiveScores = async (
   }
 };
 
-export const fetchClosestDates = async (params: {
-  league?: string;
-  teamSelectedId?: string;
-  date?: string;
-}): Promise<{ previousDate: string | null; nextDate: string | null }> => {
+export const fetchClosestDates = async (
+  params: {
+    league?: string;
+    teamSelectedId?: string;
+    date?: string;
+  },
+  signal?: AbortSignal,
+): Promise<{ previousDate: string | null; nextDate: string | null }> => {
   const query = new URLSearchParams();
   if (params.league) {
     query.append("leagues", params.league);
@@ -912,10 +1006,16 @@ export const fetchClosestDates = async (params: {
     undefined,
     undefined,
     10000,
+    undefined,
+    signal,
   );
 };
 
-export const fetchDateRangeFromApi = async (leagues?: string[], force = false) => {
+export const fetchDateRangeFromApi = async (
+  leagues?: string[],
+  force = false,
+  signal?: AbortSignal,
+) => {
   try {
     const params = new URLSearchParams();
     if (leagues && leagues.length > 0) {
@@ -946,6 +1046,8 @@ export const fetchDateRangeFromApi = async (leagues?: string[], force = false) =
       undefined,
       undefined,
       60000,
+      undefined,
+      signal,
     );
     return dates;
   } catch (error) {

@@ -2,19 +2,130 @@
 
 > **📚 Per-file documentation:** For detailed AI-readable documentation of each file, see the [`frontend/docs/`](./docs/) directory. Each file has a corresponding `.md` file explaining its purpose, features, state, functions, and data flow.
 
+## Changed: Priority order for past-day league games
 
-## Changed: Schedule "All" selection requests league results over the four years before the current one
-
-When the Schedule screen is on the "All" pseudo-team with previous scores enabled, the league-results request (`GET /games/league/:league/results`) was sent without `startDate`, so the backend defaulted to its full retention window (up to 7 years, capped at 5000 results). For leagues with huge schedules — mainly the college leagues — this produced thousands of past games and dozens of month accordions.
-
-The request now carries `startDate = January 1st four years before the current year` (`yearsBeforeCurrentYear(4)`), so only the four years before the current one plus the current year itself are fetched — "5000 results or 4 years", matching the backend default cap. A **team** selection is deliberately untouched: it keeps fetching its complete history without any date bound (a team plays a few dozen games per season). The upcoming-games request is unchanged too: the backend already bounds it to today, i.e. the current/upcoming season.
+Past-day game sections now put games involving favorite teams first, bookmarked
+games second, and all remaining games last. Within each priority, games are
+ordered by start time from oldest to newest. The API-provided league grouping
+and league order are unchanged.
 
 ### Changes
 
-- **`frontend/utils/date.ts`** — new `yearsBeforeCurrentYear(years, now = new Date())` helper returning the `YYYY-MM-DD` of January 1st of the year `years` calendar years before `now` (built on `readableDate`).
-- **`frontend/app/(tabs)/schedule.tsx`** — `getGamesFromApi()` "All" branch passes `yearsBeforeCurrentYear(4)` as `startDate` to `fetchResultsByLeague`; the team branch keeps `fetchResultsByTeam` unbounded.
-- **`frontend/utils/date.test.ts`** — unit tests for the new helper.
-- **Docs** — `frontend/docs/date.ts.md` and `frontend/docs/schedule.tsx.md` updated.
+- **`frontend/app/(tabs)/index.tsx`** — `visibleLeagueGroups` applies the
+  client-side priority and chronological sorting after filtering each league.
+- **`frontend/docs/index.tsx.md`** — documents the past-day game ordering.
+
+## Fixed: Frontend React hook dependency warnings
+
+Corrected the remaining React hook dependency warnings across the frontend.
+Effects and callbacks now use their required dependencies or current callback
+references, and date-list effects settle when their current range is valid.
+This keeps initialization and selection refreshes responsive without repeated
+state-update loops.
+
+### Changes
+
+- **`frontend/app/(tabs)/_layout.tsx`**, **`frontend/app/(tabs)/calendar.tsx`**,
+  **`frontend/app/(tabs)/schedule.tsx`**, **`frontend/components/CardLarge.tsx`**,
+  and **`frontend/components/SliderDatePicker.tsx`** — corrected hook dependencies
+  and stabilized callbacks/initialization where appropriate.
+
+
+## Added: stale-while-revalidate for results on the Schedule screen
+
+When many games are in progress simultaneously, fetching results used to block the UI (`isLoading` stayed `true` until `fetchResultsByTeam` / `fetchResultsByLeague` completed). The Schedule screen now follows a stale-while-revalidate strategy:
+
+- **Cached results are displayed immediately** — the last known results stored under `scheduleResults_<team|league>` in localStorage are shown right away when `showPreviousScores` is enabled, with no network wait
+- **Games load normally** — remaining/upcoming games are fetched from the API with the loading indicator
+- **Results refresh in the background** — a fire-and-forget fetch updates scores without blocking; when it settles, the UI and the localStorage cache are replaced with the freshest results
+
+### Changes
+
+- **`frontend/app/(tabs)/schedule.tsx`** — `getGamesFromApi()` now reads cached results (`scheduleResults_<team|league>`) and calls `setResults()` synchronously before any network call; the inline `await fetchResultsByTeam` / `fetchResultsByLeague` + `setResults` was removed from both the `"all"` and team branches and replaced with a non-blocking background refresh (`void refreshResults()`) that updates state and cache once the fetch settles
+- **`frontend/docs/schedule.tsx.md`** — `getGamesFromApi()` and Data Flow sections updated to describe the stale-while-revalidate results behavior
+
+
+
+## Reduced: leagues cache on the index page (stale-while-revalidate: 72 h valid, background refresh after 6 h)
+
+The `leagues` cache used by the index page now follows a stale-while-revalidate strategy:
+- The cached value is returned immediately for up to **72 h** (no network call at all).
+- If the cached value is older than **6 h**, a background refresh is triggered so
+  the list stays in sync (e.g. after a timezone change) — the UI is never blocked,
+  the cached value is returned right away and the cache is updated once the
+  background fetch settles.
+- If the cache is missing or older than 72 h, the call fetches synchronously
+  and waits for the response.
+
+### Changes
+
+- **`frontend/utils/fetchData.ts`** — `fetchLeagues()` implements stale-while-revalidate
+  with `LEAGUES_CACHE_TTL_HOURS = 72` and `LEAGUES_BACKGROUND_REFRESH_HOURS = 6`,
+  plus a new internal `fetchLeaguesData()` helper used for both foreground and
+  background fetches.
+- **`frontend/docs/fetchData.ts.md`** — `fetchLeagues()` strategy updated.
+
+## Added: request cancellation (AbortController) on navigation / parameter change across all screens
+
+Every front-to-back API call can now be cancelled when the user changes page, date, or filter parameters, preventing useless backend calls from piling up.
+
+### Changes
+
+- **`frontend/utils/fetchData.ts`** — `fetchWithTimeout()` and `fetchWithCacheStrategy()` accept an optional `signal?: AbortSignal` as their last parameter and forward it to the underlying `fetch`. When the signal aborts, the error propagates immediately: no cache fallback and no retry, so a superseded request can never write stale data into the cache. All game-fetching helpers (`fetchGamesByHour`, `fetchGamesByLeagueDay`, `fetchGames`, `fetchLiveScores`, `fetchRemainingGamesByTeam`, `fetchResultsByTeam`, `fetchResultsByLeague`, `fetchRemainingGamesByLeague`, `smallFetchRemainingGamesByLeague`, `fetchDateRangeFromApi`, `fetchClosestDates`) now support cancellation.
+- **`frontend/app/(tabs)/schedule.tsx`** — the `getGamesFromApi(seq?, signal?)` chain forwards the signal to every helper it calls (`smallFetchRemainingGamesByLeague`, `fetchRemainingGamesByLeague`, `fetchResultsByLeague`, `fetchResultsByTeam`, `fetchRemainingGamesByTeam`). The 300 ms debounce on a team switch aborts the previous request, and the `fetchSequenceRef` guard ignores stale responses.
+- **`frontend/app/(tabs)/index.tsx`** — added `abortControllerRef` + `fetchSequenceRef` to `getGamesFromApi(dateToFetch, signal?)`. Any in-flight request is aborted when the date changes (slider, calendar, swipe, route param), on league update, on retry, and on unmount. Stale responses are ignored before every state update.
+- **`frontend/app/(tabs)/calendar.tsx`** — added `abortControllerRef` to `getGamesFromApi(startDate?, endDate?, signal?)`. The raw `fetch()` now passes `{ signal }`. Any in-flight request is aborted when the date range changes, when the team selection changes, on the `dateRangeUpdated` event, on mount re-initialization, and on unmount.
+- **Refresh screen untouched** — `frontend/app/refresh.tsx` (manual league/teams/scores refresh) intentionally keeps its long-running POST requests: aborting them would cancel a refresh the user explicitly asked for. `refreshGamesLeague()` and `refreshTeams()` therefore accept no `AbortSignal`.
+- **Docs** — `frontend/docs/fetchData.ts.md`, `frontend/docs/index.tsx.md`, `frontend/docs/calendar.tsx.md`, `frontend/docs/schedule.tsx.md` updated (signal parameters + abort flow).
+
+
+## Reverted: league-results bounds on the Schedule "All" selection (performance issues)
+
+The successive bounds added on the league-results route (`GET /games/league/:league/results`) — a frontend `startDate` ("N years" window), then a backend default ("5000 results or 4 years", then "2500 results, no date bound, newest-first") — caused performance issues. They are fully reverted on both sides:
+
+- the frontend no longer sends any `startDate` (the `yearsBeforeCurrentYear` helper and its tests are gone);
+- the backend is back to its historical contract: `findResultsByLeague()` defaults to `startDate = maxYearBeforeDelete` years ago and `maxResults = 5000` (oldest-first), `filterGames()` always applies the `gameDate` lower bound, and the `sortDirection` / `leagueResults*` additions are gone.
+
+### Changes
+
+- **`frontend/app/(tabs)/schedule.tsx`** — `getGamesFromApi()` "All" branch calls `fetchResultsByLeague` without `startDate` again; the team branch is unchanged.
+- **`frontend/utils/date.ts`** / **`frontend/utils/date.test.ts`** — `yearsBeforeCurrentYear` helper and tests removed.
+- **`backend/src/games/games.service.ts`** — `findResultsByLeague()` / `filterGames()` restored to the previous behaviour; `leagueResultsMaxResults` and `sortDirection` removed.
+- **`backend/src/games/tests/games.service.spec.ts`** — `findResultsByLeague` suite back to the retention-window / 5000-cap assertions.
+- **Docs** — `frontend/docs/schedule.tsx.md`, `backend/docs/games/games.service.ts.md`, `backend/docs/games/games.controller.ts.md` restored.
+
+## Fixed: request storm on rapid team/league selection in Schedule
+
+Every team/league change used to relaunch a chain of 2–3 sequential API calls without cancelling previous
+in-flight requests, piling up HTTP calls on the backend.
+
+### Changes
+
+- **`frontend/app/(tabs)/schedule.tsx`** — added a 300 ms debounce (`debounceTimerRef`) on selection changes,
+  an `AbortController` (`abortControllerRef`) that cancels the previous request before starting a new one,
+  and a `fetchSequenceRef` guard so responses from a superseded selection are ignored before every
+  `setGames`/`setResults`/`setIsLoading`.
+- **`frontend/utils/fetchData.ts`** — `fetchWithTimeout()` and `fetchWithCacheStrategy()` accept an optional
+  `signal?: AbortSignal`; when aborted the error propagates immediately (no cache fallback, no retry).
+  `fetchRemainingGamesByTeam()`, `fetchResultsByTeam()`, `fetchResultsByLeague()` and
+  `fetchRemainingGamesByLeague()` forward the signal.
+- **Docs** — `frontend/docs/schedule.tsx.md`, `frontend/docs/fetchData.ts.md` updated (new refs + abort flow).
+
+## Changed: Schedule screen no longer shows a blank screen for invalid league/team params
+
+When the Schedule screen is opened with URL params that do not match any known league or team (e.g. `/schedule?league=NBL&team=NBL-TET`), it previously ended with an empty `games` state and a blank/loading screen because `getGamesFromApi()` was never triggered.
+
+`getSelectedTeams()` now handles these cases:
+
+- **Unknown league**: a random available league is selected and the team is set to `'all'`
+- **Known league, unknown team**: the league is kept and the team is set to `'all'`
+
+In both cases the screen renders the league's games (`team = 'all'`) instead of staying blank.
+
+### Changes
+
+- **`frontend/app/(tabs)/schedule.tsx`** — `getSelectedTeams()`: when `forcedLeague` is not found in the teams catalog, picks a random league and forces `team = 'all'`; when the league is known but the forced team does not belong to it, forces `team = 'all'` for that league.
+- **Docs** — `frontend/docs/schedule.tsx.md` updated.
 
 ## Removed: legacy `FAVORITES` group handling from the day view
 
@@ -1106,7 +1217,7 @@ When the index tab shows `NoResults` for the displayed day, the screen now calls
 
 ## Feature: Schedule — "Enable history" button via `closest` route when no upcoming games
 
-When the Schedule tab has no upcoming games (`visibleGamesByMonth` empty) and history is not already enabled, the screen now calls `GET /games/dates/closest` — with `teamSelectedIds=<team>` (or `leagues=<league>` when team selection is `all`) — and if the response contains a `previousDate`, renders an "Activer l'historique" button (label `translateWord('enableHistory')`, `MaterialIcons` `history` icon, matching the provided image) above the "Pas de résultat" (`NoResults`) text. Clicking it enables `showPreviousScores` via `handlePreviousScoreToggle(true)`. The button is hidden while loading or once history is enabled, and requests are deduped per selection via `closestRequestRef`.
+When the Schedule tab has no upcoming games (`visibleGamesByMonth` empty) and history is not already enabled, the screen now calls `GET /games/dates/closest` — with `teamSelectedIds=<team>` (or `leagues=<league>` when team selection is `all`) — and if the response contains a `previousDate`, renders an "Enable history" button (label `translateWord('enableHistory')`, `MaterialIcons` `history` icon, matching the provided image) above the "No results" (`NoResults`) text. Clicking it enables `showPreviousScores` via `handlePreviousScoreToggle(true)`. The button is hidden while loading or once history is enabled, and requests are deduped per selection via `closestRequestRef`.
 
 ### Files
 

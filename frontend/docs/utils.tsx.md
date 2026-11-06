@@ -75,7 +75,7 @@ Builds an accordion label for filter sections, only showing the dynamic selectio
 
 Returns `{ prefix, value }` so callers can render the value with the same styling as the date filter (e.g. `<i><b>value</b></i>`).
 
-- `prefix` — translated prefix, e.g. `"Filtrer par ligue / équipe"`
+- `prefix` — translated prefix, e.g. `"Filter by league / team"`
 - `fallbackLabel` — label shown when no specific filter is active
 - `activeFilter` — selected league value (e.g. `"NFL"`). Ignored when `ALL`/`FAVORITES`/`BOOKMARKS`
 - `selectedTeam` — `{ league, abbrev }` of the selected team

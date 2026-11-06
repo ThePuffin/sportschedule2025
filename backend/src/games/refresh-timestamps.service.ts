@@ -59,6 +59,22 @@ export class RefreshTimestampService {
       .exec();
   }
 
+  async pruneOldTimestamps(): Promise<number> {
+    const oldestTimestamps = await this.refreshTimestampModel
+      .find({}, { _id: 1 })
+      .sort({ timestamp: -1, _id: -1 })
+      .skip(40)
+      .lean()
+      .exec();
+
+    if (oldestTimestamps.length === 0) return 0;
+
+    const result = await this.refreshTimestampModel.deleteMany({
+      _id: { $in: oldestTimestamps.map(({ _id }) => _id) },
+    });
+    return result.deletedCount ?? 0;
+  }
+
   /**
    * Returns true if a `recovery`-type RefreshTimestamp exists that is younger than
    * `maxAgeMs` (default 6 h). Used by the startup recovery gate to avoid replaying

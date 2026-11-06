@@ -1293,7 +1293,7 @@ export const translateWord = (word: string) => {
 };
 
 export interface FilterAccordionLabelParams {
-  /** Translated prefix, e.g. "Filtrer par ligue / équipe" */
+  /** Translated prefix, e.g. "Filter by league / team" */
   prefix: string;
   /** Label shown when no specific filter is active */
   fallbackLabel: string;
@@ -1306,7 +1306,7 @@ export interface FilterAccordionLabelParams {
 }
 
 export interface FilterAccordionLabelResult {
-  /** Translated prefix, e.g. "Filtrer par ligue / équipe" */
+  /** Translated prefix, e.g. "Filter by league / team" */
   prefix: string;
   /** The dynamic value shown after the colon, e.g. "MLB/CHC" or "NFL" */
   value: string;

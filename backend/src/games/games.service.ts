@@ -72,11 +72,6 @@ export class GameService {
   // historical value once the season is over). Applied in
   // `removeDuplicatesAndOlds()` via `recordSeasonType === 1`.
   preseasonYearsToKeep = 1;
-  // League-results bounds served by `findResultsByLeague()` when the client
-  // sends none: "5000 results or 4 years", whichever comes first. A team
-  // selection (`findResultsByTeam()`) keeps the full retention window.
-  leagueResultsYearsToKeep = 4;
-  leagueResultsMaxResults = 5000;
   // Purge games that are still active/resolved-less several months after their start
   // (e.g. a PWHL game stuck on 2026-05-11 whose final result can never be fetched).
   staleGameMaxAgeDays = 90;
@@ -196,7 +191,7 @@ export class GameService {
     const expandedIds = new Set<string>();
     for (const teamSelectedId of teamSelectedIds) {
       const id = teamSelectedId.trim().toUpperCase();
-      // Format unifié (frontend/backend Teams.tsx): OLYMPICS-{GENDER}-{COUNTRY}
+      // Unified format (frontend/backend Teams.tsx): OLYMPICS-{GENDER}-{COUNTRY}
       const unifiedMatch = id.match(/^OLYMPICS-(MEN|WOMEN)-(.+)$/);
       if (unifiedMatch) {
         const [, gender, country] = unifiedMatch;
@@ -204,7 +199,7 @@ export class GameService {
         expandedIds.add(`OLYMPICS-BASKETBALL-${gender}-${country}`);
         continue;
       }
-      // Format sport-specific (matchs stockés en DB): OLYMPICS-{HOCKEY|BASKETBALL}-{GENDER}-{COUNTRY}
+      // Sport-specific format (matches stored in DB): OLYMPICS-{HOCKEY|BASKETBALL}-{GENDER}-{COUNTRY}
       const sportMatch = id.match(
         /^OLYMPICS-(?:HOCKEY|BASKETBALL)-(MEN|WOMEN)-(.+)$/,
       );
@@ -557,8 +552,8 @@ export class GameService {
       return '';
     }
 
-    // Un seul match joué ne constitue pas une série avec évolution :
-    // on laisse tomber sur seriesSummary (ex: "NFC Divisional Playoffs").
+    // A single played game is not a series with an evolution:
+    // fall back to seriesSummary (e.g. "NFC Divisional Playoffs").
     if (completedGames <= 1 || (team1Wins === 0 && team2Wins === 0)) {
       return '';
     }
@@ -1873,6 +1868,217 @@ export class GameService {
     return { updated, series: seriesUpdated };
   }
 
+  /**
+   * Refreshes playoff games that still carry a "TBD" (To Be Determined)
+   * placeholder as one of the teams. TBD is used by ESPN when the opponent
+   * for a playoff game is not yet known (e.g. the winner of another series
+   * hasn't been decided).
+   *
+   * For each league that has TBD playoff games, re-fetches the full schedule
+   * with `forceUpdate: true`. The `sameResult` guard in `getLeagueGames()`
+   * now also compares home/away team IDs, so a stored TBD that ESPN has since
+   * resolved into a real team will be rewritten with the real name, logo,
+   * date and venue.
+   *
+   * After the refresh, any remaining TBD games whose team does not exist in
+   * the team database are deleted (they are orphaned placeholders that will
+   * never resolve).
+   */
+  async refreshTbdPlayoffGames(league?: string): Promise<{
+    updated: number;
+    deleted: number;
+    leagues: string[];
+  }> {
+    // Build the query filter, optionally scoped to a single league.
+    const baseFilter: any = {
+      recordSeasonType: 3,
+      isActive: true,
+      $or: [
+        { homeTeamId: /TBD/i },
+        { awayTeamId: /TBD/i },
+        { homeTeamShort: /TBD/i },
+        { awayTeamShort: /TBD/i },
+      ],
+    };
+    if (league) {
+      baseFilter.league = league.toUpperCase().trim();
+    }
+
+    // Find active playoff games with TBD as home or away team
+    const tbdGames = await this.gameModel
+      .find(
+        baseFilter,
+        {
+          uniqueId: 1,
+          league: 1,
+          homeTeamId: 1,
+          awayTeamId: 1,
+          homeTeamShort: 1,
+          awayTeamShort: 1,
+          _id: 1,
+        },
+      )
+      .lean()
+      .exec();
+
+    if (tbdGames.length === 0) {
+      return { updated: 0, deleted: 0, leagues: [] };
+    }
+
+    // Group by league
+    const leaguesWithTbd = new Set<string>();
+    for (const g of tbdGames) {
+      leaguesWithTbd.add(g.league);
+    }
+
+    const updatedLeagues: string[] = [];
+
+    // When called without a specific league (cron path), re-fetch each affected
+    // league so ESPN can resolve TBD into a real team. When called with a
+    // specific league (refreshByLeague path), the re-fetch was already done by
+    // getLeagueGames(), so we skip it to avoid a redundant fetch.
+    if (!league) {
+      for (const l of leaguesWithTbd) {
+        try {
+          await this.getLeagueGames({
+            league: l,
+            forceUpdate: true,
+            skipCascade: true,
+          });
+          updatedLeagues.push(l);
+          console.info(
+            `[TBD] Re-fetched league ${l} to resolve ${tbdGames.filter(
+              (g) => g.league === l,
+            ).length} TBD playoff game(s).`,
+          );
+        } catch (err) {
+          console.error(
+            `[TBD] Error re-fetching league ${l} for TBD resolution:`,
+            err,
+          );
+        }
+      }
+    } else {
+      updatedLeagues.push(league.toUpperCase().trim());
+    }
+
+    // After the re-fetch attempt, find remaining TBD games and delete orphaned
+    // ones. This runs independently of whether getLeagueGames() returned games,
+    // so off-season leagues still get their orphaned TBD matches cleaned up.
+    const stillTbd = await this.gameModel
+      .find(
+        {
+          recordSeasonType: 3,
+          isActive: true,
+          $or: [
+            { homeTeamId: /TBD/i },
+            { awayTeamId: /TBD/i },
+            { homeTeamShort: /TBD/i },
+            { awayTeamShort: /TBD/i },
+          ],
+        },
+        {
+          uniqueId: 1,
+          league: 1,
+          homeTeamId: 1,
+          awayTeamId: 1,
+          homeTeamShort: 1,
+          awayTeamShort: 1,
+          startTimeUTC: 1,
+          _id: 1,
+        },
+      )
+      .lean()
+      .exec();
+
+    console.info(
+      `[TBD] Found ${stillTbd.length} remaining TBD playoff game(s) after re-fetch.`,
+    );
+
+    let deleted = 0;
+    const now = new Date();
+
+    for (const g of stillTbd) {
+      // Identify which side carries the TBD placeholder (home or away).
+      // We check both id and short abbreviation because ESPN may populate one
+      // but not the other.
+      const homeIsTbd =
+        /TBD/i.test(g.homeTeamId ?? '') || /TBD/i.test(g.homeTeamShort ?? '');
+      const awayIsTbd =
+        /TBD/i.test(g.awayTeamId ?? '') || /TBD/i.test(g.awayTeamShort ?? '');
+
+      if (!homeIsTbd && !awayIsTbd) continue; // safety: should not happen
+
+      // The team id / short abbreviation to verify against the database.
+      // If both sides say TBD (should not happen in practice), check home first.
+      const tbdTeamId = homeIsTbd ? g.homeTeamId : g.awayTeamId;
+      const tbdTeamShort = homeIsTbd ? g.homeTeamShort : g.awayTeamShort;
+
+      // The opponent (real team) of this match.
+      const opponentId = homeIsTbd ? g.awayTeamId : g.homeTeamId;
+
+      // Look up the TBD team specifically. Real college teams can legitimately
+      // be abbreviated "TBD" (e.g. NCCABB-TBD), so we only delete when the TBD
+      // placeholder itself does not exist as a team in the database.
+      const tbdTeamExists =
+        tbdTeamId && (await this.teamService.findOne(tbdTeamId)) !== null;
+
+      // Also check by short abbreviation as a fallback (some providers store
+      // the abbrev but not the full id, or vice-versa).
+      const tbdShortExists =
+        tbdTeamShort &&
+        tbdTeamShort !== tbdTeamId &&
+        (await this.teamService.findOne(tbdTeamShort)) !== null;
+
+      const isRealTbdTeam = tbdTeamExists || tbdShortExists;
+
+      // Determine the season year of this game.
+      const seasonYear = g.startTimeUTC
+        ? new Date(g.startTimeUTC).getFullYear()
+        : now.getFullYear();
+      const seasonStart = new Date(seasonYear, 0, 1).toISOString();
+      const seasonEnd = new Date(seasonYear + 1, 0, 1).toISOString();
+
+      // Has the playoff series started for the opponent? We check whether the
+      // opponent already has any playoff game with a score this season in this
+      // league. If yes, any remaining TBD match involving this opponent will
+      // never resolve (TBD is a placeholder for a team that was never decided),
+      // so the match should be removed.
+      const opponentHasPlayedPlayoff = await this.gameModel.exists({
+        league: g.league,
+        recordSeasonType: 3,
+        startTimeUTC: { $gte: seasonStart, $lt: seasonEnd },
+        $or: [
+          { homeTeamId: opponentId, homeTeamScore: { $ne: null } },
+          { awayTeamId: opponentId, awayTeamScore: { $ne: null } },
+        ],
+      });
+
+      const seriesStarted = !!opponentHasPlayedPlayoff;
+
+      // Delete when:
+      //   - the playoff series has started (opponent already has scored games),
+      //   - AND the TBD side is NOT a real university team that exists in the DB
+      if (seriesStarted && !isRealTbdTeam) {
+        await this.gameModel.deleteOne({ _id: g._id }).exec();
+        deleted++;
+        console.info(
+          `[TBD] Deleted TBD playoff game ${g.uniqueId} (series started, tbd side: ${
+            homeIsTbd ? 'home' : 'away'
+          }, tbd id: ${tbdTeamId}, tbd short: ${tbdTeamShort}, opponent: ${
+            opponentId
+          }, league: ${g.league}, season: ${seasonYear})`,
+        );
+      }
+    }
+
+    return {
+      updated: tbdGames.length,
+      deleted,
+      leagues: updatedLeagues,
+    };
+  }
+
   async getLeagueGames(params): Promise<any> {
     const {
       league,
@@ -2227,6 +2433,10 @@ export class GameService {
             awayTeamRecord?: string;
             recordSeasonType?: number;
             seriesStatus?: string;
+            homeTeamId?: string;
+            awayTeamId?: string;
+            homeTeamShort?: string;
+            awayTeamShort?: string;
           }
         >();
         if (addMissingOnly) {
@@ -2243,6 +2453,10 @@ export class GameService {
                   awayTeamRecord: 1,
                   recordSeasonType: 1,
                   seriesStatus: 1,
+                  homeTeamId: 1,
+                  awayTeamId: 1,
+                  homeTeamShort: 1,
+                  awayTeamShort: 1,
                   _id: 0,
                 },
               )
@@ -2256,6 +2470,10 @@ export class GameService {
                 awayTeamRecord: g?.awayTeamRecord,
                 recordSeasonType: g?.recordSeasonType,
                 seriesStatus: g?.seriesStatus,
+                homeTeamId: g?.homeTeamId,
+                awayTeamId: g?.awayTeamId,
+                homeTeamShort: g?.homeTeamShort,
+                awayTeamShort: g?.awayTeamShort,
               });
             }
           }
@@ -2307,6 +2525,15 @@ export class GameService {
               (stored.homeTeamRecord ?? '') === (game?.homeTeamRecord ?? '') &&
               (stored.awayTeamRecord ?? '') === (game?.awayTeamRecord ?? '') &&
               (stored.seriesStatus ?? '') === (game?.seriesStatus ?? '') &&
+              // **TBD fix**: a stored TBD (To Be Determined) placeholder must
+              // never be considered "the same result" as a freshly resolved
+              // real team. Comparing home/away team IDs ensures that when ESPN
+              // resolves a playoff TBD into an actual team, the stored game is
+              // re-written with the real team name, logo, date and venue.
+              (stored.homeTeamId ?? '') === (game?.homeTeamId ?? '') &&
+              (stored.awayTeamId ?? '') === (game?.awayTeamId ?? '') &&
+              (stored.homeTeamShort ?? '') === (game?.homeTeamShort ?? '') &&
+              (stored.awayTeamShort ?? '') === (game?.awayTeamShort ?? '') &&
               samePhase;
             if (game?.uniqueId && sameResult) {
               skippedExisting++;
@@ -2838,16 +3065,6 @@ export class GameService {
       .slice(0, safeLimit);
   }
 
-  /**
-   * Completed results of a whole league, bounded by "5000 results or 4 years"
-   * when the client sends no bound: `startDate` defaults to
-   * `leagueResultsYearsToKeep` years ago and `maxResults` to
-   * `leagueResultsMaxResults`. The underlying query runs **newest-first** so
-   * the cap keeps the most recent games; `filterGames` then restores the
-   * chronological order of the returned `gamesByDay` payload. A team
-   * selection (`findResultsByTeam()`) is deliberately unbounded (outside the
-   * global retention window).
-   */
   async findResultsByLeague(
     league: string,
     startDate?: string,
@@ -2856,11 +3073,11 @@ export class GameService {
     if (!startDate) {
       const fewYearsAgo = new Date();
       fewYearsAgo.setFullYear(
-        fewYearsAgo.getFullYear() - this.leagueResultsYearsToKeep,
+        fewYearsAgo.getFullYear() - this.maxYearBeforeDelete,
       );
       startDate = readableDate(fewYearsAgo);
     }
-    maxResults = maxResults || this.leagueResultsMaxResults;
+    maxResults = maxResults || 5000;
 
     const today = readableDate(new Date());
 
@@ -2871,7 +3088,6 @@ export class GameService {
       clean: true,
       selectedTeam: true,
       maxResults,
-      sortDirection: 'desc',
     });
 
     for (const date in games) {
@@ -2918,7 +3134,6 @@ export class GameService {
     selectedTeam = undefined,
     isHome = undefined,
     clean = undefined,
-    sortDirection = undefined,
   }) {
     const filter: any = { isActive: true };
 
@@ -2953,7 +3168,7 @@ export class GameService {
 
     const filtredGames = await this.gameModel
       .find(filter)
-      .sort({ startTimeUTC: sortDirection === 'desc' ? -1 : 1 })
+      .sort({ startTimeUTC: 1 })
       .skip(skip ? Number.parseInt(skip, 10) : 0)
       .limit(maxResults ? Number.parseInt(maxResults, 10) : 0)
       .lean()
@@ -2978,16 +3193,22 @@ export class GameService {
           this._enrichGameWithTeamData(game, teamsMap),
         )
       : [];
-    // A descending query only exists so `limit` keeps the most recent games;
-    // the payload itself stays chronological (day keys, and within-day order
-    // after the per-team grouping below) for every consumer.
-    if (sortDirection === 'desc') {
-      games.reverse();
-    }
     const gamesByDay = {};
     const uniqueTeamSelectedIds = teamSelectedIds
       ? this.expandOlympicTeamIds(teamSelectedIds.split(',').map((item) => item.trim()).filter(Boolean))
       : this.getTeams(undefined, games);
+
+    // Index the fetched games in memory once: key = "YYYY-MM-DD|teamSelectedId".
+    // This avoids re-running games.filter() for every (date × team) combination
+    // in the loop below, which was O(days × teams × games).
+    const gamesByDateAndTeam = new Map<string, any[]>();
+    for (const game of games) {
+      if (!game.isActive) continue;
+      const key = `${game.gameDate}|${game.teamSelectedId}`;
+      const bucket = gamesByDateAndTeam.get(key);
+      if (bucket) bucket.push(game);
+      else gamesByDateAndTeam.set(key, [game]);
+    }
 
     // Use actual query results to define boundaries if dates aren't provided
     const resultDates = games.map((game) => new Date(game.gameDate).getTime());
@@ -3009,12 +3230,7 @@ export class GameService {
       const currentDate = readableDate(date);
       const gamesOfDay = [];
       uniqueTeamSelectedIds.forEach((teamSelectedId) => {
-        const gameOfDay = games.filter(
-          (game) =>
-            game.gameDate === currentDate &&
-            game.teamSelectedId === teamSelectedId &&
-            game.isActive === true,
-        );
+        const gameOfDay = gamesByDateAndTeam.get(`${currentDate}|${teamSelectedId}`) || [];
         if (
           !gameOfDay.length &&
           !league &&

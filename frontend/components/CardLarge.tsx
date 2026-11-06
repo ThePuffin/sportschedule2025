@@ -353,7 +353,7 @@ export default function CardLarge({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [isSelected]);
+  }, [isSelected, selectionPulse]);
 
   const revealScore = useCallback(() => {
     markGameRevealed(gameKey);

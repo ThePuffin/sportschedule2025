@@ -9,7 +9,6 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useFavoriteColor } from '@/hooks/useFavoriteColor';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { yearsBeforeCurrentYear } from '@/utils/date';
 import { syncToFirestore } from '@/utils/syncService';
 import {
   getFilterAccordionLabel,
@@ -74,6 +73,17 @@ const getLeagueTeamOptions = (allTeams: Team[], league: string): Team[] => {
   return groupOlympicTeams(teamsInLeague).sort((a, b) => a.label.localeCompare(b.label));
 };
 
+const createAllTeamOption = (league: string): Team => ({
+  uniqueId: 'all',
+  label: 'All',
+  id: 'all',
+  teamLogo: '',
+  teamCommonName: 'All',
+  league,
+  abbrev: 'ALL',
+  updateDate: '',
+});
+
 export default function Schedule() {
   const { user, firestoreReady } = useAuth();
   const router = useRouter();
@@ -81,6 +91,8 @@ export default function Schedule() {
   const [games, setGames] = useState<FilterGames>({});
   const [results, setResults] = useState<FilterGames>({});
   const [teams, setTeams] = useState<Team[]>([]);
+  const teamsRef = useRef(teams);
+  teamsRef.current = teams;
   const [teamSelected, setTeamSelected] = useState<string>('');
   const [gamesTeamIds, setGamesTeamIds] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string>('');
@@ -103,10 +115,19 @@ export default function Schedule() {
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => getCache<string[]>('favoriteTeams') || []);
   const isSmallDevice = width <= 768;
   const [leaguesAvailable, setLeaguesAvailable] = useState<string[]>([]);
+  const leaguesAvailableRef = useRef(leaguesAvailable);
+  leaguesAvailableRef.current = leaguesAvailable;
   const [leagueOfSelectedTeam, setleagueOfSelectedTeam] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasPreviousHistory, setHasPreviousHistory] = useState(false);
   const closestRequestRef = useRef('');
+  const fetchSequenceRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const getSelectedTeamsRef = useRef<((allTeams: Team[], forcedLeague?: string, forcedTeam?: string) => void) | null>(null);
+  const getStoredDataRef = useRef<(() => void) | null>(null);
+  const getGamesFromApiRef = useRef<((seq?: number, signal?: AbortSignal) => Promise<void>) | null>(null);
+  const handleLeagueSelectionChangeRef = useRef<((leagueSelectedId: string | string[]) => Promise<void>) | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showPreviousScores, setShowPreviousScores] = useState<boolean>(
     () => getCache<boolean>('showPreviousScores') || false,
   );
@@ -155,18 +176,39 @@ export default function Schedule() {
     if (!leagueParam && leagueOfSelectedTeam) {
       router.setParams({ league: leagueOfSelectedTeam, team: teamSelected });
     }
-  }, []);
+  }, [leagueParam, leagueOfSelectedTeam, router, teamSelected]);
 
-  const allOption = {
-    uniqueId: 'all',
-    label: 'All',
-    id: 'all',
-    teamLogo: '',
-    teamCommonName: 'All',
-    league: leagueOfSelectedTeam,
-    abbrev: 'ALL',
-    updateDate: '',
-  } as Team;
+  const allOption = createAllTeamOption(leagueOfSelectedTeam);
+  const storeTeamSelected = useCallback((teamSelection: string, teamsList?: Team[]) => {
+    if (!teamSelection) {
+      setTeamSelected('');
+      localStorage.removeItem('teamSelected');
+      setLeagueTeams([]);
+      setleagueOfSelectedTeam('');
+      return;
+    }
+
+    const list = teamsList ?? teamsRef.current;
+    const normalizedSelection =
+      teamSelection === 'all'
+        ? teamSelection
+        : getCanonicalTeamId(teamSelection, list);
+    let newLeague = '';
+    if (normalizedSelection === 'all') {
+      newLeague = localStorage.getItem('leagueSelected') || '';
+    } else {
+      newLeague = list.find((t) => t.uniqueId === normalizedSelection)?.league ?? '';
+    }
+
+    localStorage.setItem('teamSelected', normalizedSelection);
+    if (newLeague) {
+      localStorage.setItem('leagueSelected', newLeague);
+    }
+
+    setTeamSelected(normalizedSelection);
+    setleagueOfSelectedTeam(newLeague);
+    setLeagueTeams([createAllTeamOption(newLeague), ...getLeagueTeamOptions(list, newLeague)]);
+  }, []);
 
   useEffect(() => {
     const updateLeagues = () => {
@@ -196,13 +238,17 @@ export default function Schedule() {
     if (!firestoreReady) return;
 
     async function fetchTeamsAndRestore() {
+      const restoreSelectedTeams = getSelectedTeamsRef.current;
+      const restoreStoredData = getStoredDataRef.current;
+      if (!restoreSelectedTeams || !restoreStoredData) return;
+
       // try cached teams first
       const cachedTeams = getCache<Team[]>('teams');
 
       if (isInternalChange.current) {
         isInternalChange.current = false;
         // If it was an internal change, we still might need to fetch if teams are empty
-        if (!teams.length && !cachedTeams) {
+        if (!teamsRef.current.length && !cachedTeams) {
           const teamsData: Team[] = await fetchTeams();
           setTeams(teamsData);
         }
@@ -242,14 +288,14 @@ export default function Schedule() {
         if (cachedTeams) {
           setLeaguesAvailable([selectedTeam.league]);
           setTeams([selectedTeam]);
-          getSelectedTeams(cachedTeams, forcedLeague, forcedTeam);
+          restoreSelectedTeams(cachedTeams, forcedLeague, forcedTeam);
         }
         const teamsData: Team[] = await fetchTeams();
         setTeams(teamsData);
         // cache teams for offline/cold-start
         saveCache('teams', teamsData);
         // restore selection using freshly fetched teams
-        getSelectedTeams(teamsData, forcedLeague, forcedTeam);
+        restoreSelectedTeams(teamsData, forcedLeague, forcedTeam);
 
         // The selectable subset is fetched in parallel: it only narrows what the
         // user may pick, never what is displayed (opponents stay unrestricted).
@@ -260,14 +306,14 @@ export default function Schedule() {
         console.error('fetch teams failed, using cached teams if available', err);
         if (cachedTeams) {
           setTeams(cachedTeams);
-          getSelectedTeams(cachedTeams, forcedLeague, forcedTeam);
+          restoreSelectedTeams(cachedTeams, forcedLeague, forcedTeam);
         } else {
           // fallback: try to restore selection from persisted keys (teams unknown)
-          getStoredData();
+          restoreStoredData();
         }
       }
       // optionally fetch leagues
-      if (leaguesAvailable.length === 0) {
+      if (leaguesAvailableRef.current.length === 0) {
         const storedLeagues = getCache<string[]>('leaguesSelected');
         if (storedLeagues && storedLeagues.length > 0) {
           setLeaguesAvailable(storedLeagues);
@@ -308,12 +354,39 @@ export default function Schedule() {
   );
 
   useEffect(() => {
-    if (teamSelected && teamSelected.length > 0 && leagueOfSelectedTeam && leagueOfSelectedTeam.length > 0) {
-      async function fetchGames() {
-        await getGamesFromApi();
-      }
-      fetchGames();
+    // Abort any in-flight request from a previous selection so a quick team
+    // switch does not pile up HTTP calls on the server.
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
+    abortControllerRef.current = new AbortController();
+
+    if (!(teamSelected && teamSelected.length > 0 && leagueOfSelectedTeam && leagueOfSelectedTeam.length > 0)) {
+      return;
+    }
+
+    // Debounce rapid team switches: only the last selection within 300 ms
+    // actually fires the API chain.
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(async () => {
+      const seq = ++fetchSequenceRef.current;
+      try {
+        await getGamesFromApiRef.current?.(seq, abortControllerRef.current!.signal);
+      } catch {
+        // Aborted or failed: ignore stale responses from a superseded selection.
+      }
+    }, 300);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [teamSelected, leagueOfSelectedTeam, teams, showPreviousScores]);
 
   const getSelectedTeams = (allTeams: Team[], forcedLeague?: string, forcedTeam?: string) => {
@@ -348,6 +421,32 @@ export default function Schedule() {
         if (selection === 'all') {
           localStorage.setItem('leagueSelected', forcedLeague);
         }
+      } else {
+        // Unknown or unavailable league: pick a random league
+        // and show "all" instead of a blank screen.
+        const leaguesInTeams = [
+          ...new Set(allTeams.map((t) => t.league).filter(Boolean)),
+        ];
+        if (leaguesInTeams.length > 0) {
+          leagueToSet = leaguesInTeams[randomNumber(leaguesInTeams.length - 1)];
+        }
+        selection = 'all';
+        if (leagueToSet) {
+          localStorage.setItem('leagueSelected', leagueToSet);
+        }
+      }
+    }
+
+    // If a league is targeted but the selected team does not belong to it
+    // (invalid forced id, team removed from the league, …), fall back to "all"
+    // for this league instead of a blank screen.
+    if (leagueToSet && selection !== 'all') {
+      const teamsInLeague = getLeagueTeamOptions(allTeams, leagueToSet);
+      const isValidTeam = teamsInLeague.some((t) =>
+        getTeamIdsForSelection(t.uniqueId).includes(selection),
+      );
+      if (!isValidTeam) {
+        selection = 'all';
       }
     }
 
@@ -370,6 +469,7 @@ export default function Schedule() {
     // pass the freshly fetched teams so we can derive league immediately
     storeTeamSelected(selection, allTeams);
   };
+  getSelectedTeamsRef.current = getSelectedTeams;
 
   const getStoredData = useCallback(() => {
     const leagueSelection = localStorage.getItem('leagueSelected') ?? '';
@@ -377,7 +477,7 @@ export default function Schedule() {
     const teamSelection = localStorage.getItem('teamSelected') ?? '';
     if (teamSelection) {
       // if called when teams are already loaded, pass them to derive league
-      storeTeamSelected(teamSelection, teams);
+      storeTeamSelected(teamSelection, teamsRef.current);
       const scheduleData = getCache<FilterGames>('scheduleData');
       if (scheduleData) {
         const storedGames = scheduleData;
@@ -393,9 +493,10 @@ export default function Schedule() {
     } else {
       setTeamSelected(teamSelection);
     }
-  }, [teams]);
+  }, [storeTeamSelected]);
+  getStoredDataRef.current = getStoredData;
 
-  const persistTeamForLeague = async (league: string, teamSelectedId: string) => {
+  const persistTeamForLeague = useCallback(async (league: string, teamSelectedId: string) => {
     const leaguesTeams = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
     leaguesTeams[league] = teamSelectedId;
     saveCache('teamsSelectedLeagues', leaguesTeams);
@@ -404,7 +505,7 @@ export default function Schedule() {
       // Debounced replication to Firestore; errors are handled gracefully inside syncService
       syncToFirestore(user.uid, { teamsSelectedLeagues: leaguesTeams });
     }
-  };
+  }, [user]);
 
   const scrollToTopIfNeeded = useCallback(() => {
     if (!showPreviousScores) {
@@ -435,7 +536,7 @@ export default function Schedule() {
         syncToFirestore(user.uid, { teamSelected: finalTeamId });
       }
     },
-    [teams, leagueOfSelectedTeam, user, router],
+    [teams, leagueOfSelectedTeam, user, router, scrollToTopIfNeeded, storeTeamSelected, persistTeamForLeague],
   );
 
   const handleTeamFilterChange = (teamSelectedId: string | string[]) => {
@@ -453,8 +554,7 @@ export default function Schedule() {
       router.setParams({ league: finalLeagueId });
       localStorage.setItem('leagueSelected', finalLeagueId);
       const teamsAvailableInLeague = getLeagueTeamOptions(teams, finalLeagueId);
-      allOption.league = finalLeagueId;
-      setLeagueTeams([allOption, ...teamsAvailableInLeague]);
+      setLeagueTeams([createAllTeamOption(finalLeagueId), ...teamsAvailableInLeague]);
       setleagueOfSelectedTeam(finalLeagueId);
       const storedTeamsLeagues = getCache<{ [key: string]: string }>('teamsSelectedLeagues') || {};
       let team = '';
@@ -487,8 +587,9 @@ export default function Schedule() {
         syncToFirestore(user.uid, { leagueSelected: finalLeagueId, teamSelected: team });
       }
     },
-    [teams, user, router],
+    [teams, user, router, scrollToTopIfNeeded],
   );
+  handleLeagueSelectionChangeRef.current = handleLeagueSelectionChange;
 
   useEffect(() => {
     const updateSelection = () => {
@@ -521,7 +622,7 @@ export default function Schedule() {
       if (!nextLeague) {
         nextLeague = leaguesAvailable[randomNumber(leaguesAvailable.length - 1)];
       }
-      handleLeagueSelectionChange(nextLeague);
+      handleLeagueSelectionChangeRef.current?.(nextLeague);
     }
   }, [leaguesAvailable, leagueOfSelectedTeam, teams]);
 
@@ -737,7 +838,7 @@ export default function Schedule() {
       });
     }
     return teamsFromGames.sort((a, b) => a.label.localeCompare(b.label));
-  }, [games, results, teamSelected, monthFilter, teamsForSelector]);
+  }, [games, results, teamSelected, monthFilter, teamsForSelector, showPreviousScores]);
 
   const showTeamFilter = uniqueTeamsFromGames.length > 1;
 
@@ -1045,10 +1146,28 @@ export default function Schedule() {
     return games;
   };
 
-  const getGamesFromApi = async (): Promise<void> => {
+  const getGamesFromApi = async (seq?: number, signal?: AbortSignal): Promise<void> => {
+    const isStale = () => seq !== undefined && fetchSequenceRef.current !== seq;
+
     if (teamSelected && teamSelected.length !== 0) {
       setIsLoading(true);
       try {
+        // --- Stale-while-revalidate: show cached results immediately ---
+        // The cron (fetchAndApplyScores) already keeps backend results fresh.
+        // Display the last known results instantly instead of waiting for the
+        // potentially slow live-score refresh, then update in the background.
+        let resultsCacheKey = '';
+        if (showPreviousScores) {
+          resultsCacheKey = `scheduleResults_${teamSelected === 'all'
+            ? 'league:' + (localStorage.getItem('leagueSelected') || leaguesAvailable[0])
+            : 'team:' + teamSelected}`;
+          const cachedResults = getCache<FilterGames>(resultsCacheKey);
+          if (cachedResults && Object.keys(cachedResults).length > 0) {
+            if (isStale()) return;
+            setResults(cachedResults);
+          }
+        }
+
         let scheduleData: FilterGames;
         const scheduleDataStored = getCache<FilterGames>('scheduleData') || {};
         const scheduleKeys = Object.keys(scheduleDataStored);
@@ -1062,16 +1181,20 @@ export default function Schedule() {
             selectedTeamIds.includes(scheduleTeam) ||
             (teamSelected === 'all' && scheduleLeague?.toUpperCase() === leagueOfSelectedTeam?.toUpperCase())
           ) {
+            if (isStale()) return;
             setGames(removeOldGames(scheduleDataStored));
             setGamesTeamIds(selectedTeamIds);
           } else {
+            if (isStale()) return;
             setGames({});
           }
         }
+        let selectionLeague = '';
         if (teamSelected === 'all') {
           const storedLeague = localStorage.getItem('leagueSelected');
-          const selectionLeague = storedLeague || leaguesAvailable[0];
-          const smallScheduleData = await smallFetchRemainingGamesByLeague(selectionLeague);
+          selectionLeague = storedLeague || leaguesAvailable[0];
+          const smallScheduleData = await smallFetchRemainingGamesByLeague(selectionLeague, signal);
+          if (isStale()) return;
           saveCache('scheduleData', smallScheduleData);
           setGames(removeOldGames(smallScheduleData));
           setGamesTeamIds(['all']);
@@ -1082,30 +1205,13 @@ export default function Schedule() {
             50,
             undefined,
             true,
+            signal,
           );
+          if (isStale()) return;
           scheduleData = mergeGames(smallScheduleData, remainingScheduleData);
-          if (showPreviousScores) {
-            // "All" pulls a whole league's history, which is huge for leagues
-            // with thousands of games per season (mainly the college ones):
-            // only the four years before the current one are requested — "5000
-            // results or 4 years" with the backend cap. A real team selection
-            // (below) keeps its full, unbounded history.
-            const resultsByLeague = await fetchResultsByLeague(
-              selectionLeague,
-              yearsBeforeCurrentYear(4),
-            );
-            setResults(resultsByLeague);
-          } else {
-            setResults({});
-          }
         } else {
-          if (showPreviousScores) {
-            const teamResultsByDay = await fetchResultsByTeam(teamSelected);
-            setResults(teamResultsByDay);
-          } else {
-            setResults({});
-          }
-          scheduleData = await fetchRemainingGamesByTeam(teamSelected);
+          scheduleData = await fetchRemainingGamesByTeam(teamSelected, undefined, signal);
+          if (isStale()) return;
         }
         setLeagueTeams(thisLeagueTeams);
         const storedLeagues = getCache<string[]>('leaguesSelected');
@@ -1121,16 +1227,44 @@ export default function Schedule() {
 
         saveCache('scheduleData', scheduleData);
 
+        if (isStale()) return;
         setGames(removeOldGames(scheduleData));
         setGamesTeamIds(getTeamIdsForSelection(teamSelected));
+
+        // --- Background results refresh (non-blocking) ---
+        // Games are already on screen. Fetch updated scores in the background
+        // and replace the cached results once the refresh completes.
+        if (showPreviousScores && resultsCacheKey) {
+          const refreshResults = async () => {
+            try {
+              let freshResults: FilterGames = {};
+              if (teamSelected === 'all') {
+                freshResults = await fetchResultsByLeague(selectionLeague, undefined, undefined, signal);
+              } else {
+                freshResults = await fetchResultsByTeam(teamSelected, undefined, signal);
+              }
+              if (isStale()) return;
+              setResults(freshResults);
+              saveCache(resultsCacheKey, freshResults);
+            } catch (error) {
+              if (signal?.aborted) return;
+              console.error('Background results refresh failed:', error);
+            }
+          };
+          void refreshResults();
+        }
       } catch (error) {
+        // Aborted requests are expected when the user switches teams quickly.
+        if (signal?.aborted) return;
         console.error('fetch games failed, using cached schedule if available', error);
         const scheduleData = getCache<FilterGames>('scheduleData');
         if (scheduleData) {
+          if (isStale()) return;
           setGames(scheduleData);
           setGamesTeamIds(getTeamIdsForSelection(teamSelected));
         }
       } finally {
+        if (isStale()) return;
         setIsLoading(false);
       }
     } else {
@@ -1138,6 +1272,7 @@ export default function Schedule() {
       const scheduleDataRaw = getCache<FilterGames>('scheduleData');
       if (scheduleDataRaw) {
         try {
+          if (isStale()) return;
           setGames(scheduleDataRaw);
         } catch (e) {
           console.error('cached schedule parse failed', e);
@@ -1145,41 +1280,7 @@ export default function Schedule() {
       }
     }
   };
-
-  const storeTeamSelected = (teamSelection: string, teamsList?: Team[]) => {
-    if (!teamSelection) {
-      setTeamSelected('');
-      localStorage.removeItem('teamSelected');
-      setLeagueTeams([]);
-      setleagueOfSelectedTeam('');
-      return;
-    }
-
-    const list = teamsList ?? teams;
-    const normalizedSelection =
-      teamSelection === 'all'
-        ? teamSelection
-        : getCanonicalTeamId(teamSelection, list);
-    let newLeague = '';
-    if (normalizedSelection === 'all') {
-      newLeague = localStorage.getItem('leagueSelected') || '';
-    } else {
-      newLeague = list.find((t) => t.uniqueId === normalizedSelection)?.league ?? '';
-    }
-
-    // persist immediately
-    localStorage.setItem('teamSelected', normalizedSelection);
-    if (newLeague) {
-      localStorage.setItem('leagueSelected', newLeague);
-    }
-
-    // update state once with derived values
-    setTeamSelected(normalizedSelection);
-    setleagueOfSelectedTeam(newLeague);
-    const leagueFilter = getLeagueTeamOptions(list, newLeague);
-    allOption.league = newLeague;
-    setLeagueTeams([allOption, ...leagueFilter]);
-  };
+  getGamesFromApiRef.current = (seq, signal) => getGamesFromApi(seq, signal);
 
   return (
     <ThemedView style={{ flex: 1 }}>

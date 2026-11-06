@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { GameService } from '../games/games.service';
+import { RefreshTimestampService } from '../games/refresh-timestamps.service';
 import { TeamService } from '../teams/teams.service';
 import { readableDate } from '../utils/date';
 import { League } from '../utils/enum';
@@ -22,6 +23,7 @@ export class CronService implements OnModuleInit {
   constructor(
     private readonly teamService: TeamService,
     private readonly gameService: GameService,
+    private readonly refreshTimestampService: RefreshTimestampService,
   ) {}
 
   private get isHeavyRefreshRunning(): boolean {
@@ -111,21 +113,35 @@ export class CronService implements OnModuleInit {
     await this.gameService.getAllGames();
   }
 
+  @Cron('0 3 * * *', { timeZone: 'UTC' })
+  async pruneRefreshTimestamps() {
+    try {
+      const deletedCount =
+        await this.refreshTimestampService.pruneOldTimestamps();
+      console.info(
+        `[Cron] Refresh timestamp retention complete: deleted ${deletedCount} old record(s); keeping the latest 40.`,
+      );
+    } catch (err) {
+      console.error('[Cron] Error pruning old refresh timestamps:', err);
+    }
+  }
+
   /**
    * League rotation — replaces the former six fixed daily per-league crons
-   * (2 AM-7 AM). A single 10-minute cron refreshes ONE league per tick,
+   * (2 AM-7 AM). A single 3-minute cron refreshes ONE league per tick,
    * walking through the whole `League` enum in order:
    *
-   * - The cycle opens at **4 AM New York** (`America/New_York`) every day and
-   *   ticks only between 4 AM and 11 AM NY; ticks outside the window are no-ops
-   *   (a full list takes ~2 h50, well inside the window).
+   * - The cycle ticks every 3 minutes but is **suspended between 4 AM and
+   *   11 AM New York** (`America/New_York`); ticks inside that window are no-ops.
+   *   This keeps the rotation off the peak morning window while still running
+   *   frequently outside of it.
    * - One league per tick: a slow third-party fetch for one league can no
    *   longer block the others, and `getLeagueGames`'s internal freshness
    *   (1-hour timestamp) / staleness (1/3/7 days) gates keep warm ticks cheap.
    * - Season-gated: `isCurrentSeason` / `isPlayoffsPeriod` (10-day cached
    *   league dates) skip off-season leagues without hitting third-party APIs.
    * - When the list is complete, nothing runs until the **next day** — the
-   *   cursor resets when a new NY calendar day's window opens (2 AM).
+   *   cursor resets when a new NY calendar day starts.
    * - The slot is consumed BEFORE awaiting so a slow refresh never
    *   double-runs the same league; a restart resets the cursor, which just
    *   re-walks the (fresh) leagues skipped by the gates.
@@ -133,7 +149,7 @@ export class CronService implements OnModuleInit {
    *   (`7-59/12`) crons, and those skip while this rotation runs (see
    *   `isHeavyRefreshRunning`) so the cycles never overlap.
    */
-  @Cron('*/10 * * * *') // EVERY 10 MINUTES — one league per tick (window: 4 AM-11 AM NY)
+  @Cron('*/3 * * * *') // EVERY 3 MINUTES — one league per tick (suspended 4 AM-11 AM NY)
   async refreshLeaguesOneByOne() {
     const leagueValues = Object.values(League);
 
@@ -141,7 +157,7 @@ export class CronService implements OnModuleInit {
       new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
     );
     const nyHour = nyNow.getHours();
-    if (nyHour < 4 || nyHour >= 11) return; // window: 4 AM-11 AM New York
+    if (nyHour >= 4 && nyHour < 11) return; // suspended: 4 AM-11 AM New York
 
     const dayKey = nyNow.toISOString().split('T')[0];
     // New NY day (or first tick after a restart) → reset the cycle
@@ -359,6 +375,21 @@ export class CronService implements OnModuleInit {
         }
       } catch (err) {
         console.error('[Cron] Error refreshing undecided playoff series:', err);
+      }
+
+      // Resolve TBD (To Be Determined) placeholders in playoff games. Re-fetches
+      // each league that still has TBD playoff teams so ESPN's resolved team name,
+      // logo, date and venue are written back. Orphaned TBD games whose team does
+      // not exist in the database are deleted.
+      try {
+        const tbdResult = await this.gameService.refreshTbdPlayoffGames();
+        if (tbdResult.updated > 0 || tbdResult.deleted > 0) {
+          console.info(
+            `[Cron] TBD playoff resolution: processed ${tbdResult.updated} TBD game(s) across ${tbdResult.leagues.join(', ')}, deleted ${tbdResult.deleted} orphaned game(s).`,
+          );
+        }
+      } catch (err) {
+        console.error('[Cron] Error resolving TBD playoff games:', err);
       }
     } finally {
       this.isFetchingOldiesInProgress = false;

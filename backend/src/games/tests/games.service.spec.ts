@@ -1302,7 +1302,7 @@ describe('GameService', () => {
         ];
         const current = { ...playoffGame() };
         const result = (service as any)._computeSeriesStatus(seriesGames, current);
-        // Un seul match joué : pas d'évolution de série, on laisse tomber sur seriesSummary.
+        // A single played game: no series evolution, fall back to seriesSummary.
         expect(result).toBe('');
       });
 
@@ -2501,7 +2501,13 @@ describe('GameService', () => {
 
       // Known games already in the DB (we must not overwrite them).
       mockGameModel.exec.mockResolvedValue([
-        { uniqueId: 'existing-1', homeTeamScore: 3, awayTeamScore: 1 },
+        {
+          uniqueId: 'existing-1',
+          homeTeamId: 'A',
+          awayTeamId: 'B',
+          homeTeamScore: 3,
+          awayTeamScore: 1,
+        },
         { uniqueId: 'existing-diff', homeTeamScore: 0, awayTeamScore: 0 },
       ]);
 
@@ -2539,6 +2545,10 @@ describe('GameService', () => {
           awayTeamId: 'B',
         },
       ]);
+      (service as any)._persistMissingHistoricalGameTeams = jest
+        .fn()
+        .mockResolvedValue(0);
+      (service as any)._backfillSeasonRecords = jest.fn().mockResolvedValue(0);
       (service as any)._deleteUnlinkedTeams = jest
         .fn()
         .mockResolvedValue(undefined);
@@ -2718,6 +2728,8 @@ describe('GameService', () => {
       mockGameModel.exec.mockResolvedValue([
         {
           uniqueId: 'existing-with-record',
+          homeTeamId: 'NHL-BOS',
+          awayTeamId: 'NHL-TOR',
           homeTeamScore: 3,
           awayTeamScore: 1,
           homeTeamRecord: '33-39-10',
@@ -3019,6 +3031,8 @@ describe('GameService', () => {
       mockGameModel.exec.mockResolvedValue([
         {
           uniqueId: 'existing-with-phase',
+          homeTeamId: 'NHL-BOS',
+          awayTeamId: 'NHL-TOR',
           homeTeamScore: 3,
           awayTeamScore: 1,
           homeTeamRecord: '33-39-10',
@@ -4585,44 +4599,25 @@ describe('GameService', () => {
       mockTeamService.findAll.mockResolvedValue([]);
     });
 
-    it('defaults to the 4-year window and the 5000-result cap', async () => {
+    it('defaults to the retention window and the 5000-result cap', async () => {
       mockGameModel.exec.mockResolvedValue([]);
 
       await service.findResultsByLeague('NHL');
 
-      const fourYearsAgo = new Date();
-      fourYearsAgo.setFullYear(fourYearsAgo.getFullYear() - 4);
-      const expectedStartDate = `${fourYearsAgo.getFullYear()}-${String(
-        fourYearsAgo.getMonth() + 1,
-      ).padStart(2, '0')}-${String(fourYearsAgo.getDate()).padStart(2, '0')}`;
+      const fewYearsAgo = new Date();
+      fewYearsAgo.setFullYear(
+        fewYearsAgo.getFullYear() - service.maxYearBeforeDelete,
+      );
+      const expectedStartDate = `${fewYearsAgo.getFullYear()}-${String(
+        fewYearsAgo.getMonth() + 1,
+      ).padStart(2, '0')}-${String(fewYearsAgo.getDate()).padStart(2, '0')}`;
 
       const filter = mockGameModel.find.mock.calls[0][0];
       expect(filter.isActive).toBe(true);
       expect(filter.league).toBe('NHL');
       expect(filter.gameDate.$gte).toBe(expectedStartDate);
       expect(mockGameModel.limit).toHaveBeenCalledWith(5000);
-    });
-
-    it('queries newest-first so the cap keeps the most recent games, and returns days chronologically', async () => {
-      // The DB answers newest-first (as the query asks): the descending sort
-      // is an implementation detail of the cap, the payload must stay
-      // chronological for every consumer.
-      mockGameModel.exec.mockResolvedValue([
-        finishedGame('NHL-2', '2025-12-02', '2025-12-02T19:00:00.000Z'),
-        finishedGame('NHL-1', '2025-12-01', '2025-12-01T19:00:00.000Z'),
-      ]);
-
-      const result = await service.findResultsByLeague(
-        'NHL',
-        '2022-01-01',
-        5000,
-      );
-
-      expect(mockGameModel.sort).toHaveBeenCalledWith({ startTimeUTC: -1 });
-      expect(Object.keys(result)).toEqual(['2025-12-01', '2025-12-02']);
-      expect(result['2025-12-01'].map((game: any) => game.uniqueId)).toEqual([
-        'NHL-1',
-      ]);
+      expect(mockGameModel.sort).toHaveBeenCalledWith({ startTimeUTC: 1 });
     });
 
     it('forwards an explicit startDate and maxResults', async () => {

@@ -35,6 +35,9 @@ $ yarn install
 ## Compile and run the project
 
 ```bash
+# build (constrained heap for Render's 512 MB instance)
+npm run build
+
 # development
 $ yarn run start
 

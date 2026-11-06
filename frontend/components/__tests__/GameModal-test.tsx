@@ -313,10 +313,10 @@ describe("GameModal team names and favorite stars", () => {
     }
     expect(awayLayout.props.style).toMatchObject({ alignItems: "center" });
     expect(homeLayout.props.style).toMatchObject({ alignItems: "center" });
-    expect(awayName.parent.props.testID).toBe(awayLayout.props.testID);
-    expect(awayStar.parent.props.testID).toBe(awayLayout.props.testID);
-    expect(homeName.parent.props.testID).toBe(homeLayout.props.testID);
-    expect(homeStar.parent.props.testID).toBe(homeLayout.props.testID);
+    expect(awayName.parent!.props.testID).toBe(awayLayout.props.testID);
+    expect(awayStar.parent!.props.testID).toBe(awayLayout.props.testID);
+    expect(homeName.parent!.props.testID).toBe(homeLayout.props.testID);
+    expect(homeStar.parent!.props.testID).toBe(homeLayout.props.testID);
 
     for (const [layout, name, star] of [
       [awayLayout, awayName, awayStar],

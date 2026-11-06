@@ -87,7 +87,7 @@ function TabLayoutContent() {
       isMounted = false;
       unsubscribe();
     };
-  }, [user]);
+  }, [user, setFirestoreReady]);
 
   return (
     <Tabs

@@ -69,7 +69,7 @@ Fetches all teams from the API and caches them.
 
 Olympic hockey and basketball teams are grouped into one selector option per country/gender, labelled with the country name only.
 
-### `getGamesFromApi(startDate?, endDate?)`
+### `getGamesFromApi(startDate?, endDate?, signal?)`
 
 Fetches games for the selected teams within the date range from the API:
 
@@ -81,9 +81,15 @@ Olympic teams are offered once per country/gender. The request expands each sele
 to its hockey and basketball ids; returned rows are matched to the selected country regardless
 of which sport-specific id the game uses.
 
+Accepts an optional `AbortSignal`. When aborted, the fetch is cancelled and no state update occurs.
+
 ### `handleDateChange(startDate, endDate)`
 
-Called when the user changes the date range. Fetches games, prunes bookmarked games outside the range, syncs to Firestore.
+Called when the user changes the date range. Aborts any in-flight request from the previous date range before starting a new one (via `abortControllerRef`), fetches games, prunes bookmarked games outside the range, syncs to Firestore.
+
+## Request cancellation on navigation / parameter change
+
+When the user changes the date range, any in-flight HTTP request from the previous call is cancelled via `AbortController` (`abortControllerRef`). On component unmount the controller is aborted so no state update can happen after unmount.
 
 ### `handleGamesSelection(game)`
 

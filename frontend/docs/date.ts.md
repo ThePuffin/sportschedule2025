@@ -20,16 +20,6 @@ export const readableDate = (date: string | Date) => {
 };
 ```
 
-### `yearsBeforeCurrentYear(years, now = new Date())`
-
-Formats January 1st of the year `years` calendar years before `now` as `YYYY-MM-DD` (e.g.
-`yearsBeforeCurrentYear(4)` during 2026 → `2022-01-01`), i.e. the `years` years before the current
-one plus the current year itself. Built on `readableDate`. Used by the Schedule screen as the
-`startDate` bound of the league-results request on the "All" pseudo-team (with `years = 4`, pairing
-with the backend's 5000-result cap — "5000 results or 4 years"), to keep the history view of a whole
-league reasonable (college leagues hold thousands of games per season) while a team selection keeps
-its full, unbounded history.
-
 ### `getHourGame(startTimeUTC, venueUTCOffset)`
 
 Converts a UTC start time to the venue's local time, returning `"HH:MM"` format.

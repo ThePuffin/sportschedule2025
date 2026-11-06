@@ -4,7 +4,7 @@
 
 The **Game of the Day** tab (also called "Programme du jour") displays all games for a selected date, grouped by hour. It allows filtering by league, team, favorites, bookmarks, and supports live score updates.
 
-For a date **strictly before today**, the day is no longer grouped by hour but **by league**: the screen fetches `GET /games/league-day/:gameDate`, which returns one section per league. Favorite games are shown through the star **FAVORITES** chip of the league filter, which filters each section client-side. See `getGamesFromApi`, `visibleLeagueGroups` and `visibleSections`.
+For a date **strictly before today**, the day is no longer grouped by hour but **by league**: the screen fetches `GET /games/league-day/:gameDate`, which returns one section per league. Within each league, games involving favorite teams appear first, bookmarked games next, and all remaining games last; each priority group is ordered from oldest to most recent. The star **FAVORITES** chip can still filter each section client-side. See `getGamesFromApi`, `visibleLeagueGroups` and `visibleSections`.
 
 ## Selection stability
 
@@ -21,8 +21,8 @@ The team selector uses the stable callback identifier `teamsOfDay`. `Selector` c
 - **Team filter** via `TeamFilter` (search icon + slider)
 - **Live score updates** every 30 seconds via `fetchLiveScores`
 - **Games grouped by hour** with status sections in a fixed order — **In Progress, Final, Scheduled (by hour), Ended** — for **today and upcoming** dates
-- **Games grouped by league** — for **past** dates (sections come straight from the API; the star FAVORITES chip filters favorite games inside each section)
-- **Favorite teams sorting** — favorite team games appear first
+- **Games grouped by league** — for **past** dates (league sections come from the API; games within each section prioritize favorite teams, then bookmarks, then remaining games, with each group ordered oldest to newest)
+- **Favorite teams sorting** — favorite-team games appear before bookmarked games and remaining games on past dates
 - **Bookmark selection** — select up to 10 games
 - **Retry mechanism** — auto-retries fetching when no games are found
 - **Cache management** — caches games by day and removes persisted entries older than yesterday both when restoring the cache and before saving it
@@ -79,20 +79,26 @@ Removes cached games older than yesterday. The restored `gamesDay` cache is prun
 
 Fetches live scores for games that started within the last 15 minutes and are not final. Chunks requests by 6 game IDs.
 
-### `getGamesFromApi(dateToFetch)`
+### `getGamesFromApi(dateToFetch, signal?)`
 
 Fetches games for a specific date:
 
-- **Past date** (`YYYYMMDD < today`): drops any cached flat games for that day and calls `fetchGamesByLeagueDay(YYYYMMDD, 1000)` (no `favoriteTeams` param: favorites are filtered client-side by the star chip) → sets `leagueDayGroups` from the returned sections and `games` from `dedupeGames(groups.flatMap(g => g.games))`. On failure both are reset to empty.
+- **Past date** (`YYYYMMDD < today`): drops any cached flat games for that day and calls `fetchGamesByLeagueDay(YYYYMMDD, 1000, undefined, signal)` (no `favoriteTeams` param: favorites are filtered client-side by the star chip) → sets `leagueDayGroups` from the returned sections and `games` from `dedupeGames(groups.flatMap(g => g.games))`. On failure both are reset to empty.
 - Checks cache first (`gamesDayCache`)
 - For today: merges recent yesterday games (within 3 hours, no score)
 - Fetches from API if not cached
 - Updates live scores immediately for today's games
 - Prefetches next 5 days for today
 
+Accepts an optional `AbortSignal`. When aborted, all subsequent state updates are skipped so a superseded request cannot overwrite a newer one.
+
 ### `handleDateChange(startDate, endDate)`
 
-Called when the user changes the date. Updates URL params, scrolls to top, fetches games.
+Called when the user changes the date. Aborts any in-flight request from the previous date before starting a new one (via `abortControllerRef`), updates URL params, scrolls to top, fetches games.
+
+## Request cancellation on navigation / parameter change
+
+When the user changes the date, switches tabs, or triggers a retry, any in-flight HTTP request from the previous call is cancelled via `AbortController` (`abortControllerRef`). A `fetchSequenceRef` guard ensures responses from superseded requests are ignored before every state update. On component unmount the controller is aborted so no state update can happen after unmount.
 
 ### `handleFilterChange(filter)`
 
@@ -154,9 +160,15 @@ Olympic favorites match hockey and basketball ids for the same country/gender, s
 
 ### `visibleLeagueGroups`
 
-Filters the **past-day** sections returned by the backend (`leagueDayGroups`) with the client-side filters only (`isActive`, `selectLeagues`, `teamSelectedId`, favorites/bookmarks `activeFilter`), then drops empty sections. The grouping and the section order come from the API.
+Filters the **past-day** sections returned by the backend (`leagueDayGroups`) with the client-side filters (`isActive`, `selectLeagues`, `teamSelectedId`, favorites/bookmarks `activeFilter`), then sorts games inside every league and drops empty sections. The league grouping and league order come from the API; game order within a league is:
 
-When `activeFilter === 'FAVORITES'` (star chip), each league section keeps only favorite-team games (`getFavoriteGameIndex`), so favorites are displayed grouped by league.
+1. Games involving a favorite team
+2. Bookmarked games that do not already match a favorite team
+3. All remaining games
+
+Games within each priority are ordered by `startTimeUTC` from oldest to most recent.
+
+When `activeFilter === 'FAVORITES'` (star chip), each league section keeps only favorite-team games (`getFavoriteGameIndex`), so favorites are displayed grouped by league. When `activeFilter === 'BOOKMARKS'`, each section keeps only bookmarked games; favorite-team games remain first within that subset.
 
 ### `visibleSections`
 

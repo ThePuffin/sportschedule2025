@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GameService } from '../../games/games.service';
+import { RefreshTimestampService } from '../../games/refresh-timestamps.service';
 import { TeamService } from '../../teams/teams.service';
 import { League } from '../../utils/enum';
 import * as utils from '../../utils/utils';
@@ -61,6 +62,10 @@ describe('CronService', () => {
     },
   };
 
+  const mockRefreshTimestampService = {
+    pruneOldTimestamps: jest.fn().mockResolvedValue(0),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -69,10 +74,46 @@ describe('CronService', () => {
         CronService,
         { provide: TeamService, useValue: mockTeamService },
         { provide: GameService, useValue: mockGameService },
+        {
+          provide: RefreshTimestampService,
+          useValue: mockRefreshTimestampService,
+        },
       ],
     }).compile();
 
     service = module.get<CronService>(CronService);
+  });
+
+  describe('refresh timestamp retention', () => {
+    it('prunes old refresh timestamps once called by the daily cron', async () => {
+      mockRefreshTimestampService.pruneOldTimestamps.mockResolvedValueOnce(3);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      await service.pruneRefreshTimestamps();
+
+      expect(
+        mockRefreshTimestampService.pruneOldTimestamps,
+      ).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('deleted 3 old record(s)'),
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('logs pruning failures without rejecting the scheduled job', async () => {
+      mockRefreshTimestampService.pruneOldTimestamps.mockRejectedValueOnce(
+        new Error('database unavailable'),
+      );
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      await expect(service.pruneRefreshTimestamps()).resolves.toBeUndefined();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Cron] Error pruning old refresh timestamps:',
+        expect.any(Error),
+      );
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('getOldGames', () => {
@@ -603,10 +644,10 @@ describe('CronService', () => {
 
       expect(mockGameService.removeDuplicatesAndOlds).toHaveBeenCalledTimes(1);
       // Cleanup runs first: its mock must resolve before the team purge.
-      const cleanupOrder = mockGameService.removeDuplicatesAndOlds.mock
-        .invocationCallOrder[0];
-      const purgeOrder = mockGameService.purgeStaleTeamsWithoutGames.mock
-        .invocationCallOrder[0];
+      const cleanupOrder =
+        mockGameService.removeDuplicatesAndOlds.mock.invocationCallOrder[0];
+      const purgeOrder =
+        mockGameService.purgeStaleTeamsWithoutGames.mock.invocationCallOrder[0];
       expect(cleanupOrder).toBeLessThan(purgeOrder);
       expect(console.info).toHaveBeenCalledWith(
         '[Cron] Running weekly cleanup of duplicates and old games...',

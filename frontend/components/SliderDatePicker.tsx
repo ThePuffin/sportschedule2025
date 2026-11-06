@@ -124,7 +124,7 @@ export default function SliderDatePicker({
       }
       setMonths(newMonths);
     }
-  }, [selectDate, safeMinDate, safeMaxDate]);
+  }, [selectDate, safeMinDate, safeMaxDate, months]);
 
   useEffect(() => {
     // Reset measured month offsets whenever the months list changes (stale offsets would mis-center the scroll)
@@ -176,7 +176,7 @@ export default function SliderDatePicker({
       }
       setDates(newDates);
     }
-  }, [selectDate, safeMinDate, safeMaxDate]);
+  }, [selectDate, safeMinDate, safeMaxDate, dates]);
 
   useEffect(() => {
     if (dates.length > 0 && scrollViewRef.current) {
@@ -187,7 +187,7 @@ export default function SliderDatePicker({
         scrollViewRef.current.scrollTo({ x: x, animated: true });
       }
     }
-  }, [selectDate, dates, windowWidth]);
+  }, [selectDate, dates, windowWidth, TOTAL_ITEM_WIDTH]);
 
   const getDayName = (date: Date) => {
     return date.toLocaleDateString(locale, { weekday: 'short' }).toUpperCase();
@@ -273,7 +273,7 @@ export default function SliderDatePicker({
           };
         }
       }
-    }, [ref, setIsScrollingHorizontally]);
+    }, [ref]);
   };
 
   // Edge-fade state per row: the left fade is ALWAYS applied (from the initial render,
